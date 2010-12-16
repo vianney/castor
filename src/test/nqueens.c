@@ -99,6 +99,7 @@ int main(int argc, const char* argv[]) {
         printf("]\n");
     }
     printf("Found %d solutions.\n", nbSols);
+    solver_print_statistics(solver);
 
     free_solver(solver);
     return 0;

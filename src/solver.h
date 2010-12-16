@@ -242,4 +242,9 @@ bool solver_var_restrict_to_marks(Solver* self, int x);
  */
 void solver_print_domains(Solver* self);
 
+/**
+ * Print statistics of the solver on the standard output
+ */
+void solver_print_statistics(Solver* self);
+
 #endif // SOLVER_H

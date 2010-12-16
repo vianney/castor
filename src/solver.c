@@ -163,6 +163,12 @@ struct TSolver {
      * Trail to backtrack
      */
     Checkpoint* trail;
+
+    // Statistics
+    /**
+     * Number of backtracks so far
+     */
+    int statBacktracks;
 };
 
 
@@ -218,6 +224,8 @@ Solver* new_solver(int nbVars, int nbVals) {
     self->lastOrder = NULL;
     self->closed = false;
     self->trail = NULL;
+
+    self->statBacktracks = 0;
 
     return self;
 }
@@ -429,6 +437,7 @@ int backtrack(Solver* self) {
     int x, v;
     Checkpoint *chkp;
 
+    self->statBacktracks++;
     if(self->trail == NULL)
         return -1;
     // restore domains
@@ -444,8 +453,10 @@ int backtrack(Solver* self) {
     self->propagQueueSize = 0;
     memset(self->cstrQueued, false, self->nbCstrs * sizeof(bool));
     // remove old (failed) choice
-    if(!solver_var_remove(self, x, v))
+    if(!solver_var_remove(self, x, v)) {
+        self->statBacktracks--; // branch finished: does not count as backtrack
         return backtrack(self);
+    }
     if(!propagate(self))
         return backtrack(self);
     return x;
@@ -646,4 +657,8 @@ void solver_print_domains(Solver* self) {
             printf("%s%d", i == 0 ? "" : ", ", dom[i]);
         printf("}\n");
     }
+}
+
+void solver_print_statistics(Solver* self) {
+    printf("Backtracks: %d\n", self->statBacktracks);
 }
