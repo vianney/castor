@@ -138,7 +138,7 @@ bool solver_search(Solver* self);
 ////////////////////////////////////////////////////////////////////////////////
 // Variable domains
 
-// WARNING: no checks are done on the variable number x
+// WARNING: no checks are done on the variable number x, only on value v
 
 /**
  * @param self a solver instance
@@ -163,11 +163,16 @@ bool solver_var_bound(Solver* self, int x);
 int solver_var_value(Solver* self, int x);
 
 /**
+ * Get the domain array. Beware that this is a pointer directly to the internal
+ * structure, so you shouldn't mess with it. Removing a value from the domain
+ * only affects values after itself in the array. Marking a value only affects
+ * values before itself.
+ *
  * @param self a solver instance
  * @param x variable number
  * @return pointer to the domain array
  */
-int* solver_var_domain(Solver* self, int x);
+const int* solver_var_domain(Solver* self, int x);
 
 /**
  * @param self a solver instance

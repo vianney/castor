@@ -548,11 +548,13 @@ int solver_var_value(Solver* self, int x) {
     return self->domain[x][0];
 }
 
-int* solver_var_domain(Solver* self, int x) {
+const int* solver_var_domain(Solver* self, int x) {
     return self->domain[x];
 }
 
 bool solver_var_contains(Solver* self, int x, int v) {
+    if(v < 0 || v >= self->maxVals)
+        return false;
     return self->domMap[x][v] < self->domSize[x];
 }
 
