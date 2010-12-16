@@ -66,6 +66,10 @@ void post_diff(Solver* solver, int x, int y, int d) {
 ////////////////////////////////////////////////////////////////////////////////
 // Program entry point
 
+int comp(const int *a, const int *b) {
+    return *b - *a;
+}
+
 int main(int argc, const char* argv[]) {
     int n, i, j, nbSols;
     Solver *solver;
@@ -82,6 +86,9 @@ int main(int argc, const char* argv[]) {
             post_diff(solver, i, j, i - j);
         }
     }
+
+    for(i = 0; i < n; i++)
+        solver_add_order(solver, i, comp);
 
     nbSols = 0;
     while(solver_search(solver)) {
