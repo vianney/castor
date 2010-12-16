@@ -23,7 +23,7 @@
 /**
  * Opaque structure representing a solver instance
  */
-typedef struct Solver Solver;
+typedef struct TSolver Solver;
 
 /**
  * Structure for defining constraints.

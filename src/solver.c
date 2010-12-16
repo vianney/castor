@@ -25,8 +25,8 @@
 /**
  * Checkpoint structure for backtracking
  */
-typedef struct Checkpoint Checkpoint;
-struct Checkpoint {
+typedef struct TCheckpoint Checkpoint;
+struct TCheckpoint {
     /**
      * Next checkpoint in the trail or NULL if end.
      */
@@ -46,7 +46,7 @@ struct Checkpoint {
     int v;
 };
 
-struct Solver {
+struct TSolver {
     // Domains
     /**
      * Number of variables
