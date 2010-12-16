@@ -304,28 +304,41 @@ void expand_max_constraints(Solver* self) {
     self->cstrQueued = (bool*) calloc(newSize, sizeof(bool));
 }
 
-void solver_post(Solver* self,
-                 bool (*post)(Constraint* self, Solver* solver),
-                 void* userData) {
+/**
+ * Default free callback for new constraints.
+ */
+void default_free_cstr(Solver* solver, void* userData) {
+    if(userData != NULL)
+        free(userData);
+}
+
+Constraint* solver_create_constraint(Solver* self) {
     int id;
     Constraint *c;
 
     if(self->closed)
-        return;
+        return NULL;
     if(self->nbCstrs >= self->maxCstrs)
         expand_max_constraints(self);
     id = self->nbCstrs++;
     c = &self->constraints[id];
     c->id = id;
-    c->userData = userData;
+    c->userData = NULL;
+    c->initPropagate = NULL;
     c->propagate = NULL;
-    c->free = NULL;
-    self->cstrQueued[id] = true; // be sure not to propagate c twice
-    if(!post(c, self)) {
-        self->closed = true;
-        return;
+    c->free = default_free_cstr;
+    return c;
+}
+
+void solver_post(Solver* self, Constraint* c) {
+    if(c->initPropagate != NULL) {
+        self->cstrQueued[c->id] = true; // ignore events during initial propagation
+        if(!c->initPropagate(self, c->userData)) {
+            self->closed = true;
+            return;
+        }
+        self->cstrQueued[c->id] = false;
     }
-    self->cstrQueued[id] = false;
     if(!propagate(self))
         self->closed = true;
 }

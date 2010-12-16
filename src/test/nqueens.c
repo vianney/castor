@@ -42,34 +42,24 @@ bool cstr_diff_propagate(Solver* solver, void* userData) {
                                  solver_var_value(solver, data->y) + data->d);
 }
 
-void cstr_diff_free(Solver* solver, void* userData) {
-    free(userData);
-}
-
-bool cstr_diff_post(Constraint* self, Solver* solver) {
-    DiffConstraint *data;
-
-    data = (DiffConstraint*) self->userData;
-    self->propagate = cstr_diff_propagate;
-    self->free = cstr_diff_free;
-
-    if(solver_var_bound(solver, data->x) || solver_var_bound(solver, data->y)) {
-        return cstr_diff_propagate(solver, data);
-    } else {
-        solver_register_bind(solver, self, data->x);
-        solver_register_bind(solver, self, data->y);
-        return true;
-    }
-}
-
 void post_diff(Solver* solver, int x, int y, int d) {
+    Constraint *c;
     DiffConstraint *data;
 
+    c = solver_create_constraint(solver);
     data = (DiffConstraint*) malloc(sizeof(DiffConstraint));
     data->x = x;
     data->y = y;
     data->d = d;
-    solver_post(solver, cstr_diff_post, data);
+    c->userData = data;
+    if(solver_var_bound(solver, data->x) || solver_var_bound(solver, data->y)) {
+        c->initPropagate = cstr_diff_propagate;
+    } else {
+        c->propagate = cstr_diff_propagate;
+        solver_register_bind(solver, c, data->x);
+        solver_register_bind(solver, c, data->y);
+    }
+    solver_post(solver, c);
 }
 
 

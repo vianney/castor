@@ -39,15 +39,20 @@ typedef struct {
      */
     void* userData;
     /**
+     * Initial propagation callback. It is called during solver_post if it is
+     * not NULL. It should perform the initial propagation and return true if
+     * all went well or false if the propagation failed.
+     */
+    bool (*initPropagate)(Solver* solver, void* userData);
+    /**
      * Propagate callback. It is called when an event this contraint has
      * registered to, has been triggered. It should propagate this event and
      * return true if all went well or false if the propagation failed.
-     * Should be set during the posting if required.
      */
     bool (*propagate)(Solver* solver, void* userData);
     /**
      * Free callback. Clean up your structures (in particular user_data) here.
-     * If nothing to do, leave as NULL.
+     * The default is the free userData if it is not NULL.
      */
     void (*free)(Solver* solver, void* userData);
 } Constraint;
@@ -60,7 +65,6 @@ typedef struct {
  *
  * @param nbVars the number of variables
  * @param nbVals the size of the domains
- * @param maxCstrs indication of the number of constraints that will be posted
  * @return the solver instance
  */
 Solver* new_solver(int nbVars, int nbVals);
@@ -76,20 +80,25 @@ void free_solver(Solver* self);
 // Posting constraints
 
 /**
- * Post a constraint. A new Constraint structure will be initialized and post_cb
- * will be called. This function should initialize whathever structures needed,
- * set the propagate callbacks, register to variable events and perform the
- * initial pruning. If this initial pruning fails, it should return false.
+ * Create a new constraint. After this call, the user should complement the
+ * structure by defining the callbacks and optionnaly setting userData. He
+ * should also register to variable events. Finally, he should call solver_post
+ * before any other constraint creation, posting or searching occurs.
  *
- * No constraints may be posted once the search has begun. They will be ignored.
+ * No constraints may be created once the search has begun.
  *
  * @param self a solver instance
- * @param post the posting callback function
- * @param userData custom data to be set in the Constraint structure
+ * @return constraint structure or NULL if the search has begun
  */
-void solver_post(Solver* self,
-                 bool (*post)(Constraint* self, Solver* solver),
-                 void* userData);
+Constraint* solver_create_constraint(Solver* self);
+
+/**
+ * Post a constraint. This should be called after solver_create_constraint.
+ *
+ * @param self a solver instance
+ * @param c the constraint
+ */
+void solver_post(Solver* self, Constraint* c);
 
 /**
  * Register constraint c to the bind event of constraint x. A constraint must
