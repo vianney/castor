@@ -132,8 +132,9 @@ struct Solver {
 ////////////////////////////////////////////////////////////////////////////////
 // Constructor and destructor
 
-Solver* new_solver(int nbVars, int nbVals, int maxCstrs) {
+Solver* new_solver(int nbVars, int nbVals) {
     int x, v;
+    int maxCstrs;
     Solver *self;
     int *dom, *map;
 
@@ -165,6 +166,7 @@ Solver* new_solver(int nbVars, int nbVals, int maxCstrs) {
     self->domMarked = (int*) calloc(nbVars, sizeof(int));
 
     self->nbCstrs = 0;
+    maxCstrs = nbVars; // reserve nbVars constraints initially
     self->maxCstrs = maxCstrs;
     self->constraints = (Constraint*) malloc(maxCstrs * sizeof(Constraint));
     self->evBindSize = (int*) calloc(nbVars, sizeof(int));

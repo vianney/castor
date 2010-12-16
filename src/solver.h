@@ -63,7 +63,7 @@ typedef struct {
  * @param maxCstrs indication of the number of constraints that will be posted
  * @return the solver instance
  */
-Solver* new_solver(int nbVars, int nbVals, int maxCstrs);
+Solver* new_solver(int nbVars, int nbVals);
 
 /**
  * Free a solver instance.

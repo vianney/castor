@@ -84,7 +84,7 @@ int main(int argc, const char* argv[]) {
     if(argc >= 2)
         n = atoi(argv[1]);
 
-    solver = new_solver(n, n, 3 * n * (n-1) / 2);
+    solver = new_solver(n, n);
     for(i = 0; i < n - 1; i++) {
         for(j = i + 1; j < n; j++) {
             post_diff(solver, i, j, 0);
