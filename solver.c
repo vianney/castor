@@ -361,7 +361,7 @@ void expand_max_constraints(Solver* self) {
 /**
  * Default free callback for new constraints.
  */
-void default_free_cstr(Solver* solver, void* userData) {
+void default_free_cstr(Solver* UNUSED(solver), void* userData) {
     if(userData != NULL)
         free(userData);
 }

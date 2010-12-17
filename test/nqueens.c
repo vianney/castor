@@ -19,7 +19,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "../solver.h"
+#include "solver.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constraint x != y + d
