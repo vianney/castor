@@ -2,7 +2,9 @@
 HEADERS += \
     defs.h \
     solver.h \
-    constraints.h
+    constraints.h \
+    store.h \
+    model.h
 
 SOURCES += \
     castor.c \
@@ -12,4 +14,4 @@ SOURCES += \
 TARGET = castor
 
 CONFIG += link_pkgconfig
-PKGCONFIG += monetdb-mapi raptor rasqal
+PKGCONFIG += raptor rasqal
