@@ -1,4 +1,15 @@
-TEMPLATE = subdirs
-SUBDIRS = bin nqueens
-bin.file = castor-bin.pro
-nqueens.file = test/nqueens.pro
+CONFIG -= QT
+LIBS += -L. -lsolver
+
+CONFIG += link_pkgconfig
+PKGCONFIG += raptor rasqal
+
+HEADERS += \
+    defs.h \
+    constraints.h \
+    store.h \
+    model.h
+
+SOURCES += \
+    castor.c \
+    constraints.c
