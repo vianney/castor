@@ -60,6 +60,34 @@ typedef enum {
 } ValueType;
 
 /**
+ * URIs corresponding to the value types
+ */
+char *VALUETYPE_URIS[] = {
+    NULL,
+    NULL,
+    NULL,
+    "http://www.w3.org/2001/XMLSchema#string",
+    "http://www.w3.org/2001/XMLSchema#boolean",
+    "http://www.w3.org/2001/XMLSchema#integer",
+    "http://www.w3.org/2001/XMLSchema#positiveInteger",
+    "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+    "http://www.w3.org/2001/XMLSchema#negativeInteger",
+    "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+    "http://www.w3.org/2001/XMLSchema#byte",
+    "http://www.w3.org/2001/XMLSchema#short",
+    "http://www.w3.org/2001/XMLSchema#int",
+    "http://www.w3.org/2001/XMLSchema#long",
+    "http://www.w3.org/2001/XMLSchema#unsignedByte",
+    "http://www.w3.org/2001/XMLSchema#unsignedShort",
+    "http://www.w3.org/2001/XMLSchema#unsignedInt",
+    "http://www.w3.org/2001/XMLSchema#unsignedLong",
+    "http://www.w3.org/2001/XMLSchema#float",
+    "http://www.w3.org/2001/XMLSchema#double",
+    "http://www.w3.org/2001/XMLSchema#decimal",
+    "http://www.w3.org/2001/XMLSchema#dateTime"
+};
+
+/**
  * Structure for date and time information, compatible with SQL_TIMESTAMP_STRUCT
  */
 typedef struct {
@@ -88,7 +116,7 @@ typedef struct {
     /**
      * URI of the datatype. NULL if type <= VALUE_TYPE_PLAIN_STRING.
      */
-    char* type_uri;
+    char* typeUri;
     /**
      * Language tag id, starting from 0. Or -1 if unknown.
      */
@@ -97,26 +125,28 @@ typedef struct {
      * String representation of the language tag.
      * NULL if type <= VALUE_TYPE_IRI.
      */
-    char* language_tag;
+    char* languageTag;
     /**
      * Lexical form.
      */
     char* lexical;
-    /**
-     * Integer representation of the lexical. Unspecified if type not in range
-     * VALUE_TYPE_FIRST_INTEGER..VALUE_TYPE_LAST_INTEGER.
-     */
-    long integer;
-    /**
-     * Floating point representation of the lexical. Unspecified if type not in
-     * range VALUE_TYPE_FIRST_FLOATING..VALUE_TYPE_LAST_FLOATING.
-     */
-    double floating;
-    /**
-     * Date and time representation of the lexical. Unspecified if type is not
-     * VALUE_TYPE_DATETIME.
-     */
-    DateTime datetime;
+    union {
+        /**
+         * Integer representation of the lexical. Unspecified if type not in
+         * range VALUE_TYPE_FIRST_INTEGER..VALUE_TYPE_LAST_INTEGER.
+         */
+        long integer;
+        /**
+         * Floating point representation of the lexical. Unspecified if type not
+         * in range VALUE_TYPE_FIRST_FLOATING..VALUE_TYPE_LAST_FLOATING.
+         */
+        double floating;
+        /**
+         * Date and time representation of the lexical. Unspecified if type is
+         * not VALUE_TYPE_DATETIME.
+         */
+        DateTime datetime;
+    };
 } Value;
 
 /**

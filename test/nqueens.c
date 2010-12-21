@@ -30,10 +30,7 @@ typedef struct {
     int d;
 } DiffConstraint;
 
-bool cstr_diff_propagate(Solver* solver, void* userData) {
-    DiffConstraint *data;
-
-    data = (DiffConstraint*) userData;
+bool cstr_diff_propagate(Solver* solver, DiffConstraint* data) {
     if(solver_var_bound(solver, data->x))
         return solver_var_remove(solver, data->y,
                                  solver_var_value(solver, data->x) - data->d);
@@ -52,10 +49,10 @@ void post_diff(Solver* solver, int x, int y, int d) {
     data->y = y;
     data->d = d;
     c->userData = data;
+    c->propagate = (bool (*)(Solver*, void*)) cstr_diff_propagate;
     if(solver_var_bound(solver, data->x) || solver_var_bound(solver, data->y)) {
-        c->initPropagate = cstr_diff_propagate;
+        c->initPropagate = c->propagate;
     } else {
-        c->propagate = cstr_diff_propagate;
         solver_register_bind(solver, c, data->x);
         solver_register_bind(solver, c, data->y);
     }

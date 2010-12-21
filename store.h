@@ -24,7 +24,7 @@
 /**
  * Store interface. Implementations may extend this structure.
  */
-typedef TStore Store;
+typedef struct TStore Store;
 struct TStore {
     /**
      * Destructor
