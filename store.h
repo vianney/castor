@@ -29,7 +29,7 @@ struct TStore {
     /**
      * Destructor
      */
-    void (*free)(Store* self);
+    void (*close)(Store* self);
 
     // Values
     /**
@@ -50,16 +50,18 @@ struct TStore {
     Value* (*value_get)(Store* self, int id);
     /**
      * Get a value from the store. If it does not exist within the store, create
-     * a new one with id -1.
+     * a new one with id -1. Such a value with id -1 should be freed by the
+     * caller when it's not needed anymore.
      *
      * @param self a store instance
      * @param type datatype of the value
+     * @param typeUri URI of the datatype if type is VALUE_TYPE_UNKOWN
      * @param lexical lexical form
-     * @param language language tag
+     * @param language language tag or NULL if none
      * @return the value or NULL if error
      */
-    Value* (*value_create)(Store* self, ValueType type, char* lexical,
-                           char* language);
+    Value* (*value_create)(Store* self, ValueType type, char* typeUri,
+                           char* lexical, char* language);
 
     // Statements
     /**
@@ -106,8 +108,8 @@ struct TStore {
 };
 
 // convenience shortcuts
-inline void free_store(Store* self) {
-    self->free(self);
+inline void store_close(Store* self) {
+    self->close(self);
 }
 inline int store_value_count(Store* self) {
     return self->value_count(self);
@@ -115,9 +117,9 @@ inline int store_value_count(Store* self) {
 inline Value* store_value_get(Store* self, int id) {
     return self->value_get(self, id);
 }
-inline Value* store_value_create(Store* self, ValueType type, char* lexical,
-                                 char* language) {
-    return self->value_create(self, type, lexical, language);
+inline Value* store_value_create(Store* self, ValueType type, char* typeUri,
+                                 char* lexical, char* language) {
+    return self->value_create(self, type, typeUri, lexical, language);
 }
 inline bool store_statement_add(Store* self, Value* source, Value* predicate,
                                 Value* object) {
