@@ -9,3 +9,6 @@ castor.depends = solver
 SUBDIRS += nqueens
 nqueens.file = test/nqueens.pro
 nqueens.depends = solver
+
+SUBDIRS += createsqlite
+createsqlite.file = test/createsqlite.pro

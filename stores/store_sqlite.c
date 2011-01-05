@@ -63,6 +63,8 @@ typedef struct {
 // Implementations
 
 void sqlite_store_close(SqliteStore* self) {
+    int i;
+
     sqlite3_close(self->db);
     if(self->datatypes != NULL) {
         for(i = VALUE_TYPE_FIRST_CUSTOM; i < self->nbDatatypes; i++)
@@ -350,9 +352,11 @@ Store* sqlite_store_open(const char* filename) {
 
     if(sqlite3_prepare_v2(self->db,
                           "SELECT id, uri FROM datatypes "
-                          "WHERE id >= " #VALUE_TYPE_FIRST_CUSTOM,
+                          "WHERE id >= ?",
                           -1, &sql, NULL) != SQLITE_OK)
         goto cleandb;
+    if(sqlite3_bind_int(sql, 1, VALUE_TYPE_FIRST_CUSTOM) != SQLITE_OK)
+        goto cleansql;
     while((rc = sqlite3_step(sql)) != SQLITE_DONE) {
         if(rc != SQLITE_ROW)
             goto cleansql;
