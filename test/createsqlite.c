@@ -26,30 +26,35 @@
 
 #include "../model.h"
 
-#define NODE_SQL "INSERT INTO vals (type, lexical) VALUES (?1, ?2); " \
-                 "SELECT id FROM vals WHERE type = ?1 AND lexical = ?2;"
-#define LITERAL_SQL ""
-#define STATEMENT_SQL "INSERT INTO statements (subject, predicate, object) " \
-                      "  VALUES (?1, ?2, ?3);"
-
 typedef struct {
     sqlite3 *db;
-    sqlite3_stmt *sqlNode;
-    sqlite3_stmt *sqlLiteral;
-    sqlite3_stmt *sqlStatement;
+    sqlite3_stmt *sqlInsertDatatype;
+    sqlite3_stmt *sqlInsertLanguage;
+    sqlite3_stmt *sqlInsertVal;
+    sqlite3_stmt *sqlInsertValUnkLang;
+    sqlite3_stmt *sqlInsertValUnkTypeLang;
+    sqlite3_stmt *sqlInsertStmt;
+    sqlite3_stmt *sqlInsertStmtUnkLang;
+    sqlite3_stmt *sqlInsertStmtUnkTypeLang;
 
     raptor_parser *parser;
     unsigned char *fileURIstr;
     raptor_uri *fileURI;
+
+    int count;
 } Data;
 
 void cleanup(Data *d) {
-    if(d->sqlNode != NULL)
-        sqlite3_finalize(d->sqlNode);
-    if(d->sqlLiteral != NULL)
-        sqlite3_finalize(d->sqlLiteral);
-    if(d->sqlStatement != NULL)
-        sqlite3_finalize(d->sqlStatement);
+#define CLEAN(sql) if(d->sql != NULL) sqlite3_finalize(d->sql);
+    CLEAN(sqlInsertDatatype);
+    CLEAN(sqlInsertLanguage);
+    CLEAN(sqlInsertVal);
+    CLEAN(sqlInsertValUnkLang);
+    CLEAN(sqlInsertValUnkTypeLang);
+    CLEAN(sqlInsertStmt);
+    CLEAN(sqlInsertStmtUnkLang);
+    CLEAN(sqlInsertStmtUnkTypeLang);
+#undef CLEAN
     if(d->db != NULL)
         sqlite3_close(d->db);
 
@@ -68,251 +73,178 @@ void sqlerror(Data* d) {
     exit(2);
 }
 
-int get_node_id(Data* d, char* uri, bool blank) {
-    sqlite3_stmt *sql;
-    ValueType type;
-    int id;
+#define XSD_PREFIX "http://www.w3.org/2001/XMLSchema#"
+#define XSD_PREFIX_LEN (sizeof(XSD_PREFIX) - 1)
 
-    type = blank ? VALUE_TYPE_BLANK : VALUE_TYPE_IRI;
+ValueType get_type(char *uri) {
+    ValueType t;
+    char *fragment;
 
-    if(sqlite3_prepare_v2(d->db,
-                          "SELECT id FROM vals "
-                          "WHERE type = ? AND lexical = ?",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto error;
-    if(sqlite3_bind_int(sql, 1, type) != SQLITE_OK)
-        goto cleansql;
-    if(sqlite3_bind_text(sql, 2, uri, -1, SQLITE_STATIC) != SQLITE_OK)
-        goto cleansql;
-    switch(sqlite3_step(sql)) {
-    case SQLITE_ROW:
-        id = sqlite3_column_int(sql, 0);
-        break;
-    case SQLITE_DONE:
-        id = -1;
-        break;
-    default:
-        goto cleansql;
+    if(uri == NULL || uri[0] == '\0')
+        return VALUE_TYPE_PLAIN_STRING;
+
+    if(strncmp(uri, XSD_PREFIX, XSD_PREFIX_LEN) != 0)
+        return VALUE_TYPE_UNKOWN;
+
+    fragment = &uri[XSD_PREFIX_LEN];
+    for(t = VALUE_TYPE_FIRST_XSD; t <= VALUE_TYPE_LAST_XSD; t++) {
+        if(strcmp(fragment, &VALUETYPE_URIS[t][XSD_PREFIX_LEN]) == 0)
+            return t;
     }
-    sqlite3_finalize(sql);
-
-    if(id == -1) {
-        if(sqlite3_prepare_v2(d->db,
-                              "INSERT INTO vals (type, lexical) VALUES (?, ?)",
-                              -1, &sql, NULL) != SQLITE_OK)
-            goto error;
-        if(sqlite3_bind_int(sql, 1, type) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_text(sql, 2, uri, -1, SQLITE_STATIC) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_step(sql) != SQLITE_DONE)
-            goto cleansql;
-        sqlite3_finalize(sql);
-        id = sqlite3_last_insert_rowid(d->db);
-    }
-
-    return id;
-
-cleansql:
-    sqlite3_finalize(sql);
-error:
-    sqlerror(d);
-    return 2;
-}
-
-int get_literal_id(Data* d, char* lexical, char* typeUri, char* language) {
-    sqlite3_stmt *sql;
-    ValueType type;
-    int lang;
-    bool doCreate;
-    int id;
-
-    doCreate = false;
-
-    // type
-    if(typeUri == NULL) {
-        type = VALUE_TYPE_PLAIN_STRING;
-    } else {
-        if(sqlite3_prepare_v2(d->db,
-                              "SELECT id FROM datatypes WHERE uri = ?",
-                              -1, &sql, NULL) != SQLITE_OK)
-            goto error;
-        if(sqlite3_bind_text(sql, 1, typeUri, -1, SQLITE_STATIC) != SQLITE_OK)
-            goto cleansql;
-        switch(sqlite3_step(sql)) {
-        case SQLITE_ROW:
-            type = sqlite3_column_int(sql, 0);
-            break;
-        case SQLITE_DONE:
-            type = VALUE_TYPE_UNKOWN;
-            break;
-        default:
-            goto cleansql;
-        }
-        sqlite3_finalize(sql);
-        if(type == VALUE_TYPE_UNKOWN) {
-            if(sqlite3_prepare_v2(d->db,
-                                  "INSERT INTO datatypes (uri) VALUES (?)",
-                                  -1, &sql, NULL) != SQLITE_OK)
-                goto error;
-            if(sqlite3_bind_text(sql, 1, typeUri, -1, SQLITE_STATIC) != SQLITE_OK)
-                goto cleansql;
-            if(sqlite3_step(sql) != SQLITE_DONE)
-                goto cleansql;
-            sqlite3_finalize(sql);
-            type = sqlite3_last_insert_rowid(d->db);
-            doCreate = true;
-        }
-    }
-
-    // language
-    if(sqlite3_prepare_v2(d->db,
-                          "SELECT id FROM languages WHERE tag = ?",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto error;
-    if(sqlite3_bind_text(sql, 1, language, -1, SQLITE_STATIC) != SQLITE_OK)
-        goto cleansql;
-    switch(sqlite3_step(sql)) {
-    case SQLITE_ROW:
-        lang = sqlite3_column_int(sql, 0);
-        break;
-    case SQLITE_DONE:
-        lang = -1;
-        break;
-    default:
-        goto cleansql;
-    }
-    sqlite3_finalize(sql);
-    if(lang == -1) {
-        if(sqlite3_prepare_v2(d->db,
-                              "INSERT INTO languages (tag) VALUES (?)",
-                              -1, &sql, NULL) != SQLITE_OK)
-            goto error;
-        if(sqlite3_bind_text(sql, 1, language, -1, SQLITE_STATIC) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_step(sql) != SQLITE_DONE)
-            goto cleansql;
-        sqlite3_finalize(sql);
-        lang = sqlite3_last_insert_rowid(d->db);
-        doCreate = true;
-    }
-
-    // get value
-    if(!doCreate) {
-        if(sqlite3_prepare_v2(d->db,
-                              "SELECT id FROM vals "
-                              "WHERE type = ? AND lexical = ? AND language = ?",
-                              -1, &sql, NULL) != SQLITE_OK)
-            goto error;
-        if(sqlite3_bind_int(sql, 1, type) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_text(sql, 2, lexical, -1, SQLITE_STATIC) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_int(sql, 3, lang) != SQLITE_OK)
-            goto cleansql;
-        switch(sqlite3_step(sql)) {
-        case SQLITE_ROW:
-            id = sqlite3_column_int(sql, 0);
-            break;
-        case SQLITE_DONE:
-            doCreate = true;
-            break;
-        default:
-            goto cleansql;
-        }
-        sqlite3_finalize(sql);
-    }
-
-    // create value if needed
-    if(doCreate) {
-        if(sqlite3_prepare_v2(d->db,
-                              "INSERT INTO vals"
-                              "  (type, lexical, language, value)"
-                              "  VALUES (?, ?, ?, ?)",
-                              -1, &sql, NULL) != SQLITE_OK)
-            goto error;
-        if(sqlite3_bind_int(sql, 1, type) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_text(sql, 2, lexical, -1, SQLITE_STATIC) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_int(sql, 3, lang) != SQLITE_OK)
-            goto cleansql;
-        if(type >= VALUE_TYPE_FIRST_INTEGER && type <= VALUE_TYPE_LAST_INTEGER) {
-            if(sqlite3_bind_int(sql, 4, atoi(lexical)) != SQLITE_OK)
-                goto cleansql;
-        } else if(type >= VALUE_TYPE_FIRST_FLOATING && type <= VALUE_TYPE_LAST_FLOATING) {
-            if(sqlite3_bind_double(sql, 4, atof(lexical)) != SQLITE_OK)
-                goto cleansql;
-        } else {
-            if(sqlite3_bind_null(sql, 4) != SQLITE_OK)
-                goto cleansql;
-        }
-        if(sqlite3_step(sql) != SQLITE_DONE)
-            goto cleansql;
-        sqlite3_finalize(sql);
-        id = sqlite3_last_insert_rowid(d->db);
-    }
-
-    return id;
-
-cleansql:
-    sqlite3_finalize(sql);
-error:
-    sqlerror(d);
-    return 2;
+    return VALUE_TYPE_UNKOWN;
 }
 
 void add_triple(void* user_data, const raptor_statement* triple) {
     Data *d;
-    int s, p, o;
-    unsigned char *typeUri;
     sqlite3_stmt *sql;
+    ValueType ts, tp, to;
+    char *typeUri;
+    int lang;
 
     d = (Data*) user_data;
+    d->count++;
+    if(d->count % 10000 == 0)
+        printf(".");
 
-    s = get_node_id(d, (char*) triple->subject,
-                    triple->subject_type == RAPTOR_IDENTIFIER_TYPE_ANONYMOUS);
-    p = get_node_id(d, (char*) triple->predicate,
-                    triple->predicate_type == RAPTOR_IDENTIFIER_TYPE_ANONYMOUS);
+#define START_SQL(stmt) \
+    sql = stmt; \
+    if(sqlite3_reset(sql) != SQLITE_OK) goto error;
+#define STOP_SQL \
+    if(sqlite3_step(sql) != SQLITE_DONE) goto error;
+#define BIND_STR(col, s) \
+    if(sqlite3_bind_text(sql, (col), (s), -1, SQLITE_STATIC) != SQLITE_OK) goto error;
+#define BIND_INT(col, i) \
+    if(sqlite3_bind_int(sql, (col), (i)) != SQLITE_OK) goto error;
+#define BIND_DOUBLE(col, f) \
+    if(sqlite3_bind_double(sql, (col), (f)) != SQLITE_OK) goto error;
+#define BIND_NULL(col) \
+    if(sqlite3_bind_null(sql, (col)) != SQLITE_OK) goto error;
+
+#define BIND_VALUE(col, type, lex) \
+    if((type) >= VALUE_TYPE_FIRST_INTEGER && \
+       (type) <= VALUE_TYPE_LAST_INTEGER) { \
+        BIND_INT(col, atoi(lex)); \
+    } else if((type) >= VALUE_TYPE_FIRST_FLOATING && \
+              (type) <= VALUE_TYPE_LAST_FLOATING) { \
+        BIND_DOUBLE(col, atof(lex)); \
+    } else { \
+        BIND_NULL(col); \
+    }
+
+    ts = triple->subject_type == RAPTOR_IDENTIFIER_TYPE_ANONYMOUS
+         ? VALUE_TYPE_BLANK : VALUE_TYPE_IRI;
+    START_SQL(d->sqlInsertVal);
+    BIND_INT(1, ts);
+    BIND_STR(2, (char*) triple->subject);
+    BIND_INT(3, 0);
+    BIND_NULL(4);
+    STOP_SQL;
+
+    tp = triple->predicate_type == RAPTOR_IDENTIFIER_TYPE_ANONYMOUS
+         ? VALUE_TYPE_BLANK : VALUE_TYPE_IRI;
+    START_SQL(d->sqlInsertVal);
+    BIND_INT(1, tp);
+    BIND_STR(2, (char*) triple->predicate);
+    BIND_INT(3, 0);
+    BIND_NULL(4);
+    STOP_SQL;
+
     switch(triple->object_type) {
     case RAPTOR_IDENTIFIER_TYPE_ANONYMOUS:
-        o = get_node_id(d, (char*) triple->object, true);
+        to = VALUE_TYPE_BLANK;
+        lang = 0;
         break;
     case RAPTOR_IDENTIFIER_TYPE_RESOURCE:
-        o = get_node_id(d, (char*) triple->object, false);
+        to = VALUE_TYPE_IRI;
+        lang = 0;
         break;
     case RAPTOR_IDENTIFIER_TYPE_LITERAL:
         if(triple->object_literal_datatype == NULL)
             typeUri = NULL;
         else
-            typeUri = raptor_uri_as_string(triple->object_literal_datatype);
-        o = get_literal_id(d, (char*) triple->object, (char*) typeUri,
-                           (char*) triple->object_literal_language);
+            typeUri = (char*) raptor_uri_as_string(triple->object_literal_datatype);
+        to = get_type(typeUri);
+        if(triple->object_literal_language == NULL ||
+           triple->object_literal_language[0] == '\0')
+            lang = 0;
+        else
+            lang = -1;
         break;
     default:
         fprintf(stderr, "Unknown object type %d\n", triple->object_type);
         goto error;
     }
 
-    if(sqlite3_prepare_v2(d->db,
-                          "INSERT INTO statements (subject, predicate, object)"
-                          "  VALUES (?, ?, ?)",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto error;
-    if(sqlite3_bind_int(sql, 1, s) != SQLITE_OK)
-        goto cleansql;
-    if(sqlite3_bind_int(sql, 2, p) != SQLITE_OK)
-        goto cleansql;
-    if(sqlite3_bind_int(sql, 3, o) != SQLITE_OK)
-        goto cleansql;
-    if(sqlite3_step(sql) != SQLITE_DONE)
-        goto cleansql;
-    sqlite3_finalize(sql);
+    if(to == VALUE_TYPE_UNKOWN) {
+        START_SQL(d->sqlInsertDatatype);
+        BIND_STR(1, typeUri);
+        STOP_SQL;
+    }
+
+    if(lang == -1) {
+        START_SQL(d->sqlInsertLanguage);
+        BIND_STR(1, (char*) triple->object_literal_language);
+        STOP_SQL;
+    }
+
+    if(to == VALUE_TYPE_UNKOWN) {
+        START_SQL(d->sqlInsertValUnkTypeLang);
+        BIND_STR(1, typeUri);
+        BIND_STR(2, (char*) triple->object);
+        BIND_STR(3, (char*) triple->object_literal_language);
+        STOP_SQL;
+        START_SQL(d->sqlInsertStmtUnkTypeLang);
+        BIND_STR(1, (char*) triple->subject);
+        BIND_INT(2, ts);
+        BIND_STR(3, (char*) triple->predicate);
+        BIND_INT(4, tp);
+        BIND_STR(5, (char*) triple->object);
+        BIND_STR(6, typeUri);
+        BIND_STR(7, (char*) triple->object_literal_language);
+        STOP_SQL;
+    } else if(lang == 0) {
+        START_SQL(d->sqlInsertVal);
+        BIND_INT(1, to);
+        BIND_STR(2, (char*) triple->object);
+        BIND_INT(3, lang);
+        BIND_VALUE(4, to, (char*) triple->object);
+        STOP_SQL;
+        START_SQL(d->sqlInsertStmt);
+        BIND_STR(1, (char*) triple->subject);
+        BIND_INT(2, ts);
+        BIND_STR(3, (char*) triple->predicate);
+        BIND_INT(4, tp);
+        BIND_STR(5, (char*) triple->object);
+        BIND_INT(6, to);
+        BIND_INT(7, lang);
+        STOP_SQL;
+    } else {
+        START_SQL(d->sqlInsertValUnkLang);
+        BIND_INT(1, to);
+        BIND_STR(2, (char*) triple->object);
+        BIND_STR(3, (char*) triple->object_literal_language);
+        BIND_VALUE(4, to, (char*) triple->object);
+        STOP_SQL;
+        START_SQL(d->sqlInsertStmtUnkLang);
+        BIND_STR(1, (char*) triple->subject);
+        BIND_INT(2, ts);
+        BIND_STR(3, (char*) triple->predicate);
+        BIND_INT(4, tp);
+        BIND_STR(5, (char*) triple->object);
+        BIND_INT(6, to);
+        BIND_STR(7, (char*) triple->object_literal_language);
+        STOP_SQL;
+    }
+
+#undef START_SQL
+#undef STOP_SQL
+#undef BIND_STR
+#undef BIND_INT
+#undef BIND_DOUBLE
+#undef BIND_NULL
 
     return;
 
-cleansql:
-    sqlite3_finalize(sql);
 error:
     sqlerror(d);
 }
@@ -338,7 +270,8 @@ int main(int argc, char* argv[]) {
     memset(&d, 0, sizeof(Data));
 
     if(sqlite3_open_v2(dbpath, &d.db,
-                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK) {
+                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
+                       NULL) != SQLITE_OK) {
         fprintf(stderr, "Unable to create database.\n");
         return 2;
     }
@@ -347,15 +280,15 @@ int main(int argc, char* argv[]) {
 
     if(sqlite3_exec(d.db,
                     "CREATE TABLE datatypes ("
-                    "  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
+                    "  id INTEGER PRIMARY KEY NOT NULL,"
                     "  uri TEXT UNIQUE ON CONFLICT IGNORE"
                     ");"
                     "CREATE TABLE languages ("
-                    "  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
+                    "  id INTEGER PRIMARY KEY NOT NULL,"
                     "  tag TEXT UNIQUE ON CONFLICT IGNORE"
                     ");"
                     "CREATE TABLE vals ("
-                    "  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
+                    "  id INTEGER PRIMARY KEY NOT NULL,"
                     "  type INTEGER NOT NULL REFERENCES datatypes(id),"
                     "  lexical TEXT,"
                     "  language INTEGER REFERENCES languages(id) DEFAULT 0,"
@@ -368,6 +301,7 @@ int main(int argc, char* argv[]) {
                     "  object INTEGER NOT NULL REFERENCES vals(id),"
                     "  PRIMARY KEY (predicate, subject, object) ON CONFLICT IGNORE"
                     ");"
+                    "BEGIN TRANSACTION;"
                     "INSERT INTO languages (id, tag) VALUES (0, '');",
                     NULL, NULL, NULL) != SQLITE_OK)
         goto cleandb;
@@ -393,11 +327,61 @@ int main(int argc, char* argv[]) {
     }
     sqlite3_finalize(sql);
 
-//    d.parser = raptor_new_parser("turtle");
-//    raptor_set_statement_handler(d.parser, &d, add_triple);
-//    d.fileURIstr = raptor_uri_filename_to_uri_string(rdfpath);
-//    d.fileURI = raptor_new_uri(d.fileURIstr);
-//    raptor_parse_file(d.parser, d.fileURI, NULL);
+#define SQL(var, sql) \
+    if(sqlite3_prepare_v2(d.db, sql, -1, &d.var, NULL) != SQLITE_OK) \
+        goto cleandb;
+
+    SQL(sqlInsertDatatype, "INSERT INTO datatypes (uri) VALUES (?1)");
+    SQL(sqlInsertLanguage, "INSERT INTO languages (tag) VALUES (?1)");
+    SQL(sqlInsertVal,
+        "INSERT INTO vals (type, lexical, language, value) "
+        "    VALUES (?1, ?2, ?3, ?4)");
+    SQL(sqlInsertValUnkLang,
+        "INSERT INTO vals (type, lexical, language, value) "
+        "    SELECT ?1, ?2, id, ?4 FROM languages WHERE tag = ?3");
+    SQL(sqlInsertValUnkTypeLang,
+        "INSERT INTO vals (type, lexical, language)"
+        "    SELECT datatypes.id, ?2, languages.id"
+        "    FROM datatypes, languages"
+        "    WHERE datatypes.uri = ?1 AND languages.tag = ?3");
+    SQL(sqlInsertStmt,
+        "INSERT INTO statements (subject, predicate, object)"
+        "    SELECT s.id, p.id, o.id"
+        "    FROM vals AS s, vals AS p, vals AS o"
+        "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
+        "          p.lexical = ?3 AND p.type = ?4 AND"
+        "          o.lexical = ?5 AND o.type = ?6 AND o.language = ?7");
+    SQL(sqlInsertStmtUnkLang,
+        "INSERT INTO statements (subject, predicate, object)"
+        "    SELECT s.id, p.id, o.id"
+        "    FROM vals AS s, vals AS p, vals AS o,"
+        "         languages ON languages.id = o.language"
+        "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
+        "          p.lexical = ?3 AND p.type = ?4 AND"
+        "          o.lexical = ?5 AND o.type = ?6 AND languages.tag = ?7;");
+    SQL(sqlInsertStmtUnkTypeLang,
+        "INSERT INTO statements (subject, predicate, object)"
+        "    SELECT s.id, p.id, o.id"
+        "    FROM vals AS s, vals AS p, vals AS o,"
+        "         datatypes ON datatypes.id = o.type,"
+        "         languages ON languages.id = o.language"
+        "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
+        "          p.lexical = ?3 AND p.type = ?4 AND"
+        "          o.lexical = ?5 AND datatypes.uri = ?6 AND languages.tag = ?7;");
+#undef SQL
+
+    d.parser = raptor_new_parser("rdfxml");
+    raptor_set_statement_handler(d.parser, &d, add_triple);
+    d.fileURIstr = raptor_uri_filename_to_uri_string(rdfpath);
+    d.fileURI = raptor_new_uri(d.fileURIstr);
+    raptor_parse_file(d.parser, d.fileURI, NULL);
+
+    if(d.count >= 10000)
+        printf("\n");
+    printf("Imported %d triples.\n", d.count);
+
+    if(sqlite3_exec(d.db, "COMMIT;", NULL, NULL, NULL) != SQLITE_OK)
+        goto cleandb;
 
     cleanup(&d);
     return 0;
