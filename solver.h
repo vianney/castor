@@ -34,8 +34,7 @@ typedef struct {
      */
     int id;
     /**
-     * User data associated to this constraint. This is set by solver_post to
-     * the data that has been passed.
+     * User data associated to this constraint.
      */
     void* userData;
     /**

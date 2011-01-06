@@ -57,6 +57,15 @@ typedef struct {
      * Languages cache
      */
     char** languages;
+
+    /**
+     * SQL statement currently executed
+     */
+    sqlite3_stmt* sql;
+    /**
+     * SQL statements for rdf statement queries
+     */
+    sqlite3_stmt* sqlStmt[8];
 } SqliteStore;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -64,6 +73,9 @@ typedef struct {
 
 void sqlite_store_close(SqliteStore* self) {
     int i;
+
+    for(i = 0; i < 8; i++)
+        sqlite3_finalize(self->sqlStmt[i]);
 
     sqlite3_close(self->db);
     if(self->datatypes != NULL) {
@@ -94,140 +106,64 @@ Value* sqlite_store_value_get(SqliteStore* self, int id) {
     return &self->values[id];
 }
 
-Value* sqlite_store_value_create(SqliteStore* self, ValueType type,
-                                 char* typeUri, char* lexical, char* language) {
-    sqlite3_stmt *sql;
-    int lang;
-    Value* v;
-
-    if(type == VALUE_TYPE_UNKOWN) {
-        if(sqlite3_prepare_v2(self->db,
-                              "SELECT id FROM datatypes WHERE uri = ?",
-                              -1, &sql, NULL) != SQLITE_OK)
-            return NULL;
-        if(sqlite3_bind_text(sql, 1, typeUri, -1, SQLITE_STATIC) != SQLITE_OK)
-            goto cleansql;
-        switch(sqlite3_step(sql)) {
-        case SQLITE_ROW:
-            type = sqlite3_column_int(sql, 0);
-            typeUri = self->datatypes[type];
-            break;
-        case SQLITE_DONE:
-            break;
-        default:
-            goto cleansql;
-        }
-        sqlite3_finalize(sql);
-    }
-
-    lang = -1;
-    if(language != NULL) {
-        if(sqlite3_prepare_v2(self->db,
-                              "SELECT id FROM languages WHERE tag = ?",
-                              -1, &sql, NULL) != SQLITE_OK)
-            return NULL;
-        if(sqlite3_bind_text(sql, 1, language, -1, SQLITE_STATIC) != SQLITE_OK)
-            goto cleansql;
-        switch(sqlite3_step(sql)) {
-        case SQLITE_ROW:
-            lang = sqlite3_column_int(sql, 0);
-            language = self->languages[lang];
-            break;
-        case SQLITE_DONE:
-            break;
-        default:
-            goto cleansql;
-        }
-        sqlite3_finalize(sql);
-    }
-
-    v = NULL;
-
-    if(type != VALUE_TYPE_UNKOWN && lang != -1) {
-        if(sqlite3_prepare_v2(self->db,
-                              "SELECT id FROM values"
-                              "WHERE type = ? AND lexical = ? AND language = ?",
-                              -1, &sql, NULL) != SQLITE_OK)
-            return NULL;
-        if(sqlite3_bind_int(sql, 1, type) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_text(sql, 2, lexical, -1, SQLITE_STATIC) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_int(sql, 3, lang) != SQLITE_OK)
-            goto cleansql;
-        switch(sqlite3_step(sql)) {
-        case SQLITE_ROW:
-            v = &self->values[sqlite3_column_int(sql, 0)];
-            break;
-        case SQLITE_DONE:
-            break;
-        default:
-            goto cleansql;
-        }
-        sqlite3_finalize(sql);
-    }
-
-    if(v == NULL) {
-        v = (Value*) malloc(sizeof(Value));
-        v->id = -1;
-        v->type = type;
-        v->typeUri = typeUri;
-        v->lexical = lexical;
-        v->language = lang;
-        v->languageTag = language;
-        if(type >= VALUE_TYPE_FIRST_INTEGER && type <= VALUE_TYPE_LAST_INTEGER)
-            v->integer = atoi(lexical);
-        else if(type >= VALUE_TYPE_FIRST_FLOATING &&
-                type <= VALUE_TYPE_LAST_FLOATING)
-            v->floating = atof(lexical);
-        //else if   TODO: datetime
-    }
-
-    return v;
-
-cleansql:
-    sqlite3_finalize(sql);
-    return NULL;
-}
-
-bool sqlite_store_statement_add(SqliteStore* self, Value* source,
-                                Value* predicate, Value* object) {
-    // TODO
-}
-
-bool sqlite_store_statement_query(SqliteStore* self, int source, int predicate,
+bool sqlite_store_statement_query(SqliteStore* self, int subject, int predicate,
                                   int object) {
-    // TODO
+    self->sql = self->sqlStmt[ (subject >= 0) |
+                               (predicate >= 0) << 1 |
+                               (object >= 0) << 2 ];
+    if(sqlite3_reset(self->sql) != SQLITE_OK)
+        goto error;
+
+#define BIND(col, var) \
+    if(var >= 0 && sqlite3_bind_int(self->sql, col, var+1) != SQLITE_OK) \
+        goto error;
+
+    BIND(1, subject)
+    BIND(2, predicate)
+    BIND(3, object)
+
+#undef BIND
+
+    return true;
+
+error:
+    self->sql = NULL;
+    return false;
 }
 
 bool sqlite_store_statement_fetch(SqliteStore* self, Statement* stmt) {
-    // TODO
+    if(self->sql == NULL)
+        return false;
+    if(sqlite3_step(self->sql) != SQLITE_ROW)
+        return false;
+    if(stmt != NULL) {
+        stmt->subject = sqlite3_column_int(self->sql, 0) - 1;
+        stmt->predicate = sqlite3_column_int(self->sql, 1) - 1;
+        stmt->object = sqlite3_column_int(self->sql, 2) - 1;
+    }
+    return true;
 }
 
 bool sqlite_store_statement_finalize(SqliteStore* self) {
-    // TODO
+    self->sql = NULL;
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constructors
 
-/**
- * Create a new Store structure and fill in the public interface
- *
- * @return the new store structure
- */
-SqliteStore* sqlite_store_new() {
-    SqliteStore* self;
+Store* sqlite_store_open(const char* filename) {
+    SqliteStore *self;
+    sqlite3_stmt *sql;
+    int i, rc;
+    const char *str;
+    Value *v;
 
     self = (SqliteStore*) malloc(sizeof(SqliteStore));
 
     self->pub.close = (void (*)(Store*)) sqlite_store_close;
     self->pub.value_count = (int (*)(Store*)) sqlite_store_value_count;
     self->pub.value_get = (Value* (*)(Store*, int)) sqlite_store_value_get;
-    self->pub.value_create = (Value* (*)(Store*, ValueType, char*, char*, char*))
-                             sqlite_store_value_create;
-    self->pub.statement_add = (bool (*)(Store*, Value*, Value*, Value*))
-                              sqlite_store_statement_add;
     self->pub.statement_query = (bool (*)(Store*, int, int, int))
                                 sqlite_store_statement_query;
     self->pub.statement_fetch = (bool (*)(Store*, Statement*))
@@ -241,98 +177,9 @@ SqliteStore* sqlite_store_new() {
     self->datatypes = NULL;
     self->nbLanguages = 0;
     self->languages = NULL;
+    for(i = 0; i < 8; i++)
+        self->sqlStmt[i] = NULL;
 
-    return self;
-}
-
-/**
- * Common initialization of the store structure after the database connection
- * has been initialized.
- *
- * @param self the store instance
- * @return true if all went well, false if error
- */
-bool sqlite_store_common_init(SqliteStore *self) {
-    // TODO
-    return true;
-}
-
-Store* sqlite_store_create(const char* filename) {
-    SqliteStore* self;
-    ValueType t;
-    sqlite3_stmt *sql;
-
-    self = sqlite_store_new();
-    if(sqlite3_open_v2(filename, &self->db,
-                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, NULL) != SQLITE_OK)
-        goto cleanself;
-
-    if(sqlite3_exec(self->db,
-                    "CREATE TABLE datatypes ("
-                    "  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
-                    "  uri TEXT UNIQUE,"
-                    ");"
-                    "CREATE TABLE languages ("
-                    "  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
-                    "  tag TEXT UNIQUE"
-                    ");"
-                    "CREATE TABLE values ("
-                    "  id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,"
-                    "  type INTEGER NOT NULL REFERENCES datatypes(id),"
-                    "  lexical TEXT,"
-                    "  language INTEGER REFERENCES languages(id),"
-                    "  value,"
-                    "  UNIQUE (type, lexical, language)"
-                    ");"
-                    "CREATE TABLE statements ("
-                    "  subject INTEGER NOT NULL REFERENCES values(id),"
-                    "  predicate INTEGER NOT NULL REFERENCES values(id),"
-                    "  object INTEGER NOT NULL REFERENCES values(id),"
-                    "  PRIMARY KEY (predicate, subject, object)"
-                    ");"
-                    "INSERT INTO languages (id, tag) VALUES (0, '');",
-                    NULL, NULL, NULL) != SQLITE_OK)
-        goto cleandb;
-
-    if(sqlite3_prepare_v2(self->db,
-                          "INSERT INTO datatypes (id, uri) VALUES (?, ?)",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto cleandb;
-    for(t = VALUE_TYPE_BLANK; t < VALUE_TYPE_FIRST_CUSTOM; t++) {
-        if(sqlite3_reset(sql) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_int(sql, 1, t) != SQLITE_OK)
-            goto cleansql;
-        if(VALUETYPE_URIS[t] == NULL)
-            if(sqlite3_bind_null(sql, 2) != SQLITE_OK)
-                goto cleansql;
-        else
-            if(sqlite3_bind_text(sql, 2, VALUETYPE_URIS[t], -1, SQLITE_STATIC) != SQLITE_OK)
-                goto cleansql;
-        if(sqlite3_step(sql) != SQLITE_DONE)
-            goto cleansql;
-    }
-    sqlite3_finalize(sql);
-
-    return self;
-
-cleansql:
-    sqlite3_finalize(sql);
-cleandb:
-    sqlite3_close(self->db);
-cleanself:
-    free(self);
-    return NULL;
-}
-
-Store* sqlite_store_open(const char* filename) {
-    SqliteStore *self;
-    sqlite3_stmt *sql;
-    int i, rc;
-    char *str;
-    Value *v;
-
-    self = sqlite_store_new();
     if(sqlite3_open_v2(filename, &self->db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK)
         goto cleanself;
 
@@ -361,7 +208,7 @@ Store* sqlite_store_open(const char* filename) {
         if(rc != SQLITE_ROW)
             goto cleansql;
         i = sqlite3_column_int(sql, 0);
-        str = sqlite3_column_text(sql, 1);
+        str = (const char*) sqlite3_column_text(sql, 1);
         self->datatypes[i] = (char*) malloc((strlen(str)+1) * sizeof(char));
         strcpy(self->datatypes[i], str);
     }
@@ -387,7 +234,7 @@ Store* sqlite_store_open(const char* filename) {
         if(rc != SQLITE_ROW)
             goto cleansql;
         i = sqlite3_column_int(sql, 0);
-        str = sqlite3_column_text(sql, 1);
+        str = (const char*) sqlite3_column_text(sql, 1);
         self->languages[i] = (char*) malloc((strlen(str)+1) * sizeof(char));
         strcpy(self->languages[i], str);
     }
@@ -395,7 +242,7 @@ Store* sqlite_store_open(const char* filename) {
 
     // Populate values
     if(sqlite3_prepare_v2(self->db,
-                          "SELECT COUNT(*) FROM values",
+                          "SELECT COUNT(*) FROM vals",
                           -1, &sql, NULL) != SQLITE_OK)
         goto cleandb;
     if(sqlite3_step(sql) != SQLITE_ROW)
@@ -406,18 +253,18 @@ Store* sqlite_store_open(const char* filename) {
     self->values = (Value*) calloc(self->nbValues, sizeof(Value));
 
     if(sqlite3_prepare_v2(self->db,
-                          "SELECT id, type, lexical, language, value FROM values",
+                          "SELECT id, type, lexical, language, value FROM vals",
                           -1, &sql, NULL) != SQLITE_OK)
         goto cleandb;
     while((rc = sqlite3_step(sql)) != SQLITE_DONE) {
         if(rc != SQLITE_ROW)
             goto cleansql;
-        i = sqlite3_column_int(sql, 0);
+        i = sqlite3_column_int(sql, 0) - 1;
         v = &self->values[i];
         v->id = i;
         v->type = sqlite3_column_int(sql, 1);
         v->typeUri = self->datatypes[v->type];
-        str = sqlite3_column_text(sql, 2);
+        str = (const char*) sqlite3_column_text(sql, 2);
         v->lexical = (char*) malloc((strlen(str)+1) * sizeof(char));
         strcpy(v->lexical, str);
         v->language = sqlite3_column_int(sql, 3);
@@ -433,11 +280,35 @@ Store* sqlite_store_open(const char* filename) {
     }
     sqlite3_finalize(sql);
 
-    return self;
+#define SQL(num, where) \
+    if(sqlite3_prepare_v2(self->db, \
+                          "SELECT subject, predicate, object FROM statements " \
+                          where, \
+                          -1, &self->sqlStmt[num], NULL) != SQLITE_OK) \
+        goto cleandb;
+
+    SQL(0, "")
+    SQL(1, "WHERE subject = ?1")
+    SQL(2, "WHERE predicate = ?2")
+    SQL(3, "WHERE subject = ?1 AND predicate = ?2")
+    SQL(4, "WHERE object = ?3")
+    SQL(5, "WHERE subject = ?1 AND object = ?3")
+    SQL(6, "WHERE predicate = ?2 AND object = ?3")
+    SQL(7, "WHERE subject = ?1 AND predicate = ?2 AND object = ?3")
+
+#undef SQL
+
+    self->sql = NULL;
+
+    return (Store*) self;
 
 cleansql:
     sqlite3_finalize(sql);
 cleandb:
+    for(i = 0; i < 8; i++) {
+        if(self->sqlStmt[i] != NULL)
+            sqlite3_finalize(self->sqlStmt[i]);
+    }
     sqlite3_close(self->db);
 cleanself:
     if(self->datatypes != NULL) {

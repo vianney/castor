@@ -7,4 +7,5 @@ PKGCONFIG += sqlite3 raptor
 HEADERS += ../model.h
 
 SOURCES += \
-    createsqlite.c
+    createsqlite.c \
+    ../model.c

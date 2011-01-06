@@ -48,45 +48,45 @@ struct TStore {
      * @return the value corresponding to id or NULL if error
      */
     Value* (*value_get)(Store* self, int id);
-    /**
-     * Get a value from the store. If it does not exist within the store, create
-     * a new one with id -1. Such a value with id -1 should be freed by the
-     * caller when it's not needed anymore.
-     *
-     * @param self a store instance
-     * @param type datatype of the value
-     * @param typeUri URI of the datatype if type is VALUE_TYPE_UNKOWN
-     * @param lexical lexical form
-     * @param language language tag or NULL if none
-     * @return the value or NULL if error
-     */
-    Value* (*value_create)(Store* self, ValueType type, char* typeUri,
-                           char* lexical, char* language);
+//    /**
+//     * Get a value from the store. If it does not exist within the store, create
+//     * a new one with id -1. Such a value with id -1 should be freed by the
+//     * caller when it's not needed anymore.
+//     *
+//     * @param self a store instance
+//     * @param type datatype of the value
+//     * @param typeUri URI of the datatype if type is VALUE_TYPE_UNKOWN
+//     * @param lexical lexical form
+//     * @param language language tag or NULL if none
+//     * @return the value or NULL if error
+//     */
+//    Value* (*value_create)(Store* self, ValueType type, char* typeUri,
+//                           char* lexical, char* language);
 
     // Statements
-    /**
-     * Add a statement to the store
-     *
-     * @param self a store instance
-     * @param source source URI (or blank node)
-     * @param predicate predicate URI
-     * @param object object value
-     * @return true if all went well, false if error
-     */
-    bool (*statement_add)(Store* self,
-                          Value* source, Value* predicate, Value* object);
+//    /**
+//     * Add a statement to the store
+//     *
+//     * @param self a store instance
+//     * @param source source URI (or blank node)
+//     * @param predicate predicate URI
+//     * @param object object value
+//     * @return true if all went well, false if error
+//     */
+//    bool (*statement_add)(Store* self,
+//                          Value* source, Value* predicate, Value* object);
     /**
      * Query the store for statements. Use statement_fetch to get the results.
      * Once the results are not needed anymore, statement_finalize should be
      * called.
      *
      * @param self a store instance
-     * @param source source id or -1 for wildcard
+     * @param subject subject id or -1 for wildcard
      * @param predicate predicate id or -1 for wildcard
      * @param object object id or -1 for wildcard
      * @return true if all went well, false if error
      */
-    bool (*statement_query)(Store* self, int source, int predicate, int object);
+    bool (*statement_query)(Store* self, int subject, int predicate, int object);
     /**
      * Fetch the next result statement from the query initiated by
      * statement_query.
@@ -108,32 +108,16 @@ struct TStore {
 };
 
 // convenience shortcuts
-inline void store_close(Store* self) {
-    self->close(self);
-}
-inline int store_value_count(Store* self) {
-    return self->value_count(self);
-}
-inline Value* store_value_get(Store* self, int id) {
-    return self->value_get(self, id);
-}
-inline Value* store_value_create(Store* self, ValueType type, char* typeUri,
-                                 char* lexical, char* language) {
-    return self->value_create(self, type, typeUri, lexical, language);
-}
-inline bool store_statement_add(Store* self, Value* source, Value* predicate,
-                                Value* object) {
-    return self->statement_add(self, source, predicate, object);
-}
+inline void store_close(Store* self);
+inline int store_value_count(Store* self);
+inline Value* store_value_get(Store* self, int id);
+//inline Value* store_value_create(Store* self, ValueType type, char* typeUri,
+//                                 char* lexical, char* language);
+//inline bool store_statement_add(Store* self, Value* source, Value* predicate,
+//                                Value* object);
 inline bool store_statement_query(Store* self, int source, int predicate,
-                                  int object) {
-    return self->statement_query(self, source, predicate, object);
-}
-inline bool store_statement_fetch(Store* self, Statement* stmt) {
-    return self->statement_fetch(self, stmt);
-}
-inline bool store_statement_finalize(Store* self) {
-    return self->statement_finalize(self);
-}
+                                  int object);
+inline bool store_statement_fetch(Store* self, Statement* stmt);
+inline bool store_statement_finalize(Store* self);
 
 #endif // STORE_H

@@ -10,9 +10,13 @@ HEADERS += \
     constraints.h \
     store.h \
     model.h \
-    stores/store_sqlite.h
+    stores/store_sqlite.h \
+    query.h
 
 SOURCES += \
     castor.c \
     constraints.c \
-    stores/store_sqlite.c
+    stores/store_sqlite.c \
+    model.c \
+    store.c \
+    query.c
