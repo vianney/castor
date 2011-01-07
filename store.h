@@ -48,6 +48,18 @@ struct TStore {
      * @return the value corresponding to id or NULL if error
      */
     Value* (*value_get)(Store* self, int id);
+    /**
+     * Get the id of a value from the store.
+     *
+     * @param self a store instance
+     * @param type datatype of the value
+     * @param typeUri URI of the datatype if type is VALUE_TYPE_UNKOWN
+     * @param lexical lexical form
+     * @param language language tag or NULL if none
+     * @return the id of the value or -1 if not found
+     */
+    int (*value_get_id)(Store* self, const ValueType type, const char* typeUri,
+                        const char* lexical, const char* language);
 //    /**
 //     * Get a value from the store. If it does not exist within the store, create
 //     * a new one with id -1. Such a value with id -1 should be freed by the
@@ -111,6 +123,9 @@ struct TStore {
 inline void store_close(Store* self);
 inline int store_value_count(Store* self);
 inline Value* store_value_get(Store* self, int id);
+inline int store_value_get_id(Store* self, const ValueType type,
+                              const char* typeUri, const char* lexical,
+                              const char* language);
 //inline Value* store_value_create(Store* self, ValueType type, char* typeUri,
 //                                 char* lexical, char* language);
 //inline bool store_statement_add(Store* self, Value* source, Value* predicate,

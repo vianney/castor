@@ -301,6 +301,16 @@ int main(int argc, char* argv[]) {
                     "  object INTEGER NOT NULL REFERENCES vals(id),"
                     "  PRIMARY KEY (predicate, subject, object) ON CONFLICT IGNORE"
                     ");"
+                    "CREATE INDEX statements_spo"
+                    "    ON statements (subject, predicate, object);"
+                    "CREATE INDEX statements_sop"
+                    "    ON statements (subject, object, predicate);"
+                    "CREATE INDEX statements_pos"
+                    "    ON statements (predicate, object, subject);"
+                    "CREATE INDEX statements_osp"
+                    "    ON statements (object, subject, predicate);"
+                    "CREATE INDEX statements_ops"
+                    "    ON statements (object, predicate, subject);"
                     "BEGIN TRANSACTION;"
                     "INSERT INTO languages (id, tag) VALUES (0, '');",
                     NULL, NULL, NULL) != SQLITE_OK)

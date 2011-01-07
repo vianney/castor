@@ -1,6 +1,10 @@
 CONFIG -= QT
 LIBS += -L. -lsolver
 
+CONFIG(debug) {
+    LIBS += -lprofiler
+}
+
 CONFIG += link_pkgconfig
 PKGCONFIG += raptor rasqal
 PKGCONFIG += sqlite3

@@ -27,6 +27,12 @@ inline int store_value_count(Store* self) {
 inline Value* store_value_get(Store* self, int id) {
     return self->value_get(self, id);
 }
+inline int store_value_get_id(Store* self, const ValueType type,
+                              const char* typeUri, const char* lexical,
+                              const char* language) {
+    return self->value_get_id(self, type, typeUri, lexical, language);
+}
+
 //inline Value* store_value_create(Store* self, ValueType type, char* typeUri,
 //                                 char* lexical, char* language) {
 //    return self->value_create(self, type, typeUri, lexical, language);

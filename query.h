@@ -20,6 +20,7 @@
 
 #include "defs.h"
 #include "model.h"
+#include "store.h"
 
 /**
  * Opaque structure representing a query
@@ -37,10 +38,11 @@ typedef void* Filter;
 /**
  * Initialize a new query.
  *
+ * @param store a store instance containing the values
  * @param queryString SPARQL query
  * @return the query instance or NULL if error
  */
-Query* new_query(char* queryString);
+Query* new_query(Store* store, char* queryString);
 
 /**
  * Free a query instance
@@ -85,13 +87,15 @@ void query_variable_set(Query* self, int x, Value* v);
 typedef void (*query_triple_pattern_visit_fn)(Statement stmt, void* userData);
 
 /**
- * Visit all the triple patterns in the query.
+ * Visit all the triple patterns in the query. Stops when a triple refers to
+ * an unknown value.
  *
  * @param self a query instance
  * @param fn callback function to be called for each triple pattern
  * @param userData custom data to pass on to the callback function
+ * @return false if a triple refers to an unknown value, true otherwise
  */
-void query_visit_triple_patterns(Query* self, query_triple_pattern_visit_fn fn,
+bool query_visit_triple_patterns(Query* self, query_triple_pattern_visit_fn fn,
                                  void* userData);
 
 ////////////////////////////////////////////////////////////////////////////////

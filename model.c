@@ -16,6 +16,9 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "model.h"
 
 char *VALUETYPE_URIS[] = {
@@ -42,3 +45,50 @@ char *VALUETYPE_URIS[] = {
     "http://www.w3.org/2001/XMLSchema#decimal",
     "http://www.w3.org/2001/XMLSchema#dateTime"
 };
+
+char* model_value_string(Value* val) {
+    char *result;
+    int lexlen, typelen, langlen, len;
+
+    lexlen = strlen(val->lexical);
+    typelen = val->typeUri == NULL ? 0 : strlen(val->typeUri);
+    langlen = val->language == 0 ? 0 : strlen(val->languageTag);
+
+    switch(val->type) {
+    case VALUE_TYPE_BLANK:
+        len = lexlen + 1;
+        result = (char*) malloc(len * sizeof(char));
+        strcpy(result, val->lexical);
+        return result;
+    case VALUE_TYPE_IRI:
+        len = lexlen + 3;
+        result = (char*) malloc(len * sizeof(char));
+        result[0] = '<';
+        strcpy(result+1, val->lexical);
+        result[lexlen+1] = '>';
+        result[lexlen+2] = '\0';
+        return result;
+    default:
+        len = lexlen + 3;
+        if(langlen > 0) len += langlen + 1;
+        if(typelen > 0) len += typelen + 2;
+        result = (char*) malloc(len * sizeof(char));
+        result[0] = '"';
+        strcpy(result+1, val->lexical);
+        result[lexlen+1] = '"';
+        len = lexlen + 2;
+        if(langlen > 0) {
+            result[len++] = '@';
+            strcpy(result+len, val->languageTag);
+            len += langlen;
+        }
+        if(typelen > 0) {
+            result[len++] = '^';
+            result[len++] = '^';
+            strcpy(result+len, val->typeUri);
+            len += typelen;
+        }
+        result[len] = '\0';
+        return result;
+    }
+}

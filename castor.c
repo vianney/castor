@@ -24,10 +24,26 @@
 #include "model.h"
 #include "store.h"
 #include "query.h"
+#include "solver.h"
+#include "constraints.h"
 
 #include "stores/store_sqlite.h"
 
 #define BUFFER_SIZE 1024
+
+typedef struct {
+    Solver *solver;
+    Store *store;
+    Query *query;
+} PostData;
+
+void stmt_visitor(Statement stmt, PostData* data) {
+    post_statement(data->solver, data->store, stmt);
+}
+
+void filter_visitor(Filter filter, int nbVars, int vars[], PostData* data) {
+    post_filter(data->solver, data->store, data->query, filter, nbVars, vars);
+}
 
 int main(int argc, char* argv[]) {
     char *dbpath, *rqpath;
@@ -37,6 +53,10 @@ int main(int argc, char* argv[]) {
     int queryLen;
     Store *store;
     Query *query;
+    Solver *solver;
+    PostData data;
+    int nbSols, i, n;
+    char *str;
 
     if(argc < 2 || argc > 3) {
         printf("Usage: %s DB [QUERY]\n", argv[0]);
@@ -69,29 +89,56 @@ int main(int argc, char* argv[]) {
     }
     queryString[queryLen] = '\0';
 
-    printf("Query: %s\n", queryString);
-
     store = sqlite_store_open(dbpath);
     if(store == NULL) {
         fprintf(stderr, "Unable to open %s\n", dbpath);
         goto error;
     }
 
-    query = new_query(queryString);
+    query = new_query(store, queryString);
     if(query == NULL) {
         fprintf(stderr, "Unable to parse query\n");
         goto cleanstore;
     }
 
-    printf("vars: %d\nrequested: %d\n", query_variables_count(query),
-           query_variables_requested(query));
+    solver = new_solver(query_variables_count(query), store_value_count(store));
+    if(solver == NULL) {
+        fprintf(stderr, "Unable to initialize solver\n");
+        goto cleanquery;
+    }
 
+    data.solver = solver;
+    data.store = store;
+    data.query = query;
+
+    query_visit_triple_patterns(query,
+                                (query_triple_pattern_visit_fn) stmt_visitor,
+                                &data);
+    query_visit_filters(query, (query_filter_visit_fn) filter_visitor, &data);
+
+    nbSols = 0;
+    while(solver_search(solver)) {
+        nbSols++;
+        n = query_variables_requested(query);
+        for(i = 0; i < n; i++) {
+            str = model_value_string(
+                    store_value_get(store, solver_var_value(solver, i)));
+            printf("%s ", str);
+            free(str);
+        }
+        printf("\n");
+    }
+    printf("Found %d solutions\n", nbSols);
+    solver_print_statistics(solver);
+
+    free_solver(solver);
     free_query(query);
-
     store_close(store);
     free(queryString);
     return 0;
 
+cleanquery:
+    free_query(query);
 cleanstore:
     store_close(store);
 error:

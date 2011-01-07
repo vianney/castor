@@ -137,4 +137,11 @@ typedef struct {
     int object;
 } Statement;
 
+/**
+ * @param val a value
+ * @return a string representation of the value; it is the caller's
+ *         responsability to free it
+ */
+char* model_value_string(Value* val);
+
 #endif // MODEL_H
