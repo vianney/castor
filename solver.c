@@ -401,6 +401,16 @@ void solver_register_bind(Solver* self, Constraint* c, int x) {
     self->evBind[x*self->maxCstrs + self->evBindSize[x]++] = c->id;
 }
 
+void solver_label(Solver* self, int x, int v) {
+    if(!solver_var_bind(self, x, v) || !propagate(self))
+        self->closed = true;
+}
+
+void solver_diff(Solver* self, int x, int v) {
+    if(!solver_var_remove(self, x, v) || !propagate(self))
+        self->closed = true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Searching
 

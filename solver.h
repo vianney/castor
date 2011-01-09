@@ -110,6 +110,30 @@ void solver_post(Solver* self, Constraint* c);
  */
 void solver_register_bind(Solver* self, Constraint* c, int x);
 
+/**
+ * Post the constraint x == v.
+ * This has no effect once the search has begun.
+ * Note that propagators have other means of manipulating the variables and
+ * should not use this method.
+ *
+ * @param self a solver instance
+ * @param x variable number
+ * @param v value
+ */
+void solver_label(Solver* self, int x, int v);
+
+/**
+ * Post the constraint x != v.
+ * This has no effect once the search has begun.
+ * Note that propagators have other means of manipulating the variables and
+ * should not use this method.
+ *
+ * @param self a solver instance
+ * @param x variable number
+ * @param v value
+ */
+void solver_diff(Solver* self, int x, int v);
+
 ////////////////////////////////////////////////////////////////////////////////
 // Searching
 

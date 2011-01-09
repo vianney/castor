@@ -28,9 +28,9 @@
  *
  * @param solver a solver instance
  * @param store a store instance
- * @param stmt the statement to match
+ * @param stmt the statement pattern to match
  */
-void post_statement(Solver* solver, Store* store, Statement stmt);
+void post_statement(Solver* solver, Store* store, StatementPattern* stmt);
 
 /**
  * Post a generic filter constraint
@@ -38,11 +38,18 @@ void post_statement(Solver* solver, Store* store, Statement stmt);
  * @param solver a solver instance
  * @param store a store instance
  * @param query a query instance
- * @param filter the filter
- * @param nbVars number of variables occuring in filter
- * @param vars the variable numbers occuring in filter
+ * @param expr the filter expression
  */
-void post_filter(Solver* solver, Store* store, Query* query, Filter filter,
-                 int nbVars, int vars[]);
+void post_filter(Solver* solver, Store* store, Query* query, Expression* expr);
+
+/**
+ * Post the constraint x1 != x2
+ *
+ * @param solver a solver instance
+ * @param store a store instance
+ * @param x1 first variable
+ * @param x2 second variable
+ */
+void post_diff(Solver* solver, Store* store, int x1, int x2);
 
 #endif // CONSTRAINTS_H

@@ -1,10 +1,6 @@
 CONFIG -= QT
 LIBS += -L. -lsolver
 
-CONFIG(debug) {
-    LIBS += -lprofiler
-}
-
 CONFIG += link_pkgconfig
 PKGCONFIG += raptor rasqal
 PKGCONFIG += sqlite3
@@ -15,7 +11,8 @@ HEADERS += \
     store.h \
     model.h \
     stores/store_sqlite.h \
-    query.h
+    query.h \
+    expression.h
 
 SOURCES += \
     castor.c \
@@ -23,4 +20,5 @@ SOURCES += \
     stores/store_sqlite.c \
     model.c \
     store.c \
-    query.c
+    query.c \
+    expression.c

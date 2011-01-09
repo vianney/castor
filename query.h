@@ -18,19 +18,22 @@
 #ifndef QUERY_H
 #define QUERY_H
 
-#include "defs.h"
-#include "model.h"
-#include "store.h"
-
 /**
  * Opaque structure representing a query
  */
 typedef struct TQuery Query;
 
+#include "defs.h"
+#include "model.h"
+#include "expression.h"
+#include "store.h"
+
 /**
- * Opaque pointer to a filter
+ * A statement pattern has the same structure as a statement, but allows
+ * negative ids for designing variables. The variable number is retrieved with
+ * -id - 1.
  */
-typedef void* Filter;
+typedef Statement StatementPattern;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constructor and destructor
@@ -58,78 +61,60 @@ void free_query(Query* self);
  * @param self a query instance
  * @return number of variables in this query
  */
-int query_variables_count(Query* self);
+int query_variable_count(Query* self);
 
 /**
  * @param self a query instance
  * @return number of requested variables in this query
  */
-int query_variables_requested(Query* self);
+int query_variable_requested(Query* self);
 
 /**
- * Bind a variable to a value for a filter evaluation.
+ * @param self a query instance
+ * @param x variable number starting from 0
+ * @return the value bound to variable x or NULL if unbound
+ */
+Value* query_variable_get(Query* self, int x);
+
+/**
+ * Bind a variable to a value for an expression evaluation.
  *
  * @param self a query instance
  * @param x variable number starting from 0
  * @param v value
  */
-void query_variable_set(Query* self, int x, Value* v);
+void query_variable_bind(Query* self, int x, Value* v);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Triple patterns
 
 /**
- * Triple pattern visit callback.
- *
- * @param stmt statement, variables have negative indices
- * @param userData custom data passed to query_visit_triple_patterns
+ * @param self a query instance
+ * @return number of triple patterns in the query
  */
-typedef void (*query_triple_pattern_visit_fn)(Statement stmt, void* userData);
+int query_triple_pattern_count(Query* self);
 
 /**
- * Visit all the triple patterns in the query. Stops when a triple refers to
- * an unknown value.
- *
  * @param self a query instance
- * @param fn callback function to be called for each triple pattern
- * @param userData custom data to pass on to the callback function
- * @return false if a triple refers to an unknown value, true otherwise
+ * @param i number of a pattern within 0..query_triple_pattern_count(self)-1
+ * @return the requested triple pattern
  */
-bool query_visit_triple_patterns(Query* self, query_triple_pattern_visit_fn fn,
-                                 void* userData);
+StatementPattern* query_triple_pattern_get(Query* self, int i);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Filters
 
 /**
- * Filter visit callback.
- *
- * @param filter pointer to the current filter
- * @param nbVars number of variables the filter uses
- * @param vars array of nbVars elements with the indices of the variables the
- *             filter uses
- * @param userData custom data passed to query_visit_filters
+ * @param self a query instance
+ * @return number of filters in the query
  */
-typedef void (*query_filter_visit_fn)(Filter filter, int nbVars, int vars[],
-                                      void* userData);
+int query_filter_count(Query* self);
 
 /**
- * Visit all the filters in the query.
- *
  * @param self a query instance
- * @param fn callback function to be called for each filter
- * @param userData custom data to pass on to the callback function
+ * @param i number of a pattern within 0..query_filter_count(self)-1
+ * @return the requested filter
  */
-void query_visit_filters(Query* self, query_filter_visit_fn fn, void* userData);
-
-/**
- * Evaluate a filter with the current variable bindings.
- *
- * @param self a query instance
- * @param filter pointer to the filter to evaluate
- * @return the result of the filter evaluation
- */
-bool query_filter_evaluate(Query* self, Filter filter);
-
+Expression* query_filter_get(Query* self, int i);
 
 #endif // QUERY_H

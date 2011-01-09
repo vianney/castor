@@ -17,6 +17,7 @@
  */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "model.h"
@@ -46,49 +47,177 @@ char *VALUETYPE_URIS[] = {
     "http://www.w3.org/2001/XMLSchema#dateTime"
 };
 
+void model_value_clean(Value* val) {
+    if(val->cleanup & VALUE_CLEAN_TYPE_URI) {
+        free(val->typeUri);
+        val->typeUri = NULL;
+    }
+    if(val->cleanup & VALUE_CLEAN_LANGUAGE_TAG) {
+        free(val->languageTag);
+        val->languageTag = NULL;
+    }
+    if(val->cleanup & VALUE_CLEAN_LEXICAL) {
+        free(val->lexical);
+        val->lexical = NULL;
+    }
+    val->cleanup = VALUE_CLEAN_NOTHING;
+}
+
+int model_value_compare(Value* arg1, Value* arg2) {
+    register int i;
+    register double d, d1, d2;
+
+    if(IS_VALUE_TYPE_NUMERIC(arg1->type) && IS_VALUE_TYPE_NUMERIC(arg2->type)) {
+        if(IS_VALUE_TYPE_INTEGER(arg1->type) &&
+           IS_VALUE_TYPE_INTEGER(arg2->type)) {
+            i = arg1->integer - arg2->integer;
+            if(i < 0) return -1;
+            else if(i > 0) return 1;
+            else return 0;
+        } else {
+            d1 = IS_VALUE_TYPE_FLOATING(arg1->type) ?
+                 arg1->floating : (double) arg1->integer;
+            d2 = IS_VALUE_TYPE_FLOATING(arg2->type) ?
+                 arg2->floating : (double) arg2->integer;
+            d = d1 - d2;
+            if(d < .0) return -1;
+            else if(d > .0) return 1;
+            else return 0;
+        }
+    } else if((arg1->type == VALUE_TYPE_PLAIN_STRING && arg1->language == 0 &&
+               arg2->type == VALUE_TYPE_PLAIN_STRING && arg2->language == 0) ||
+              (arg1->type == VALUE_TYPE_TYPED_STRING &&
+               arg2->type == VALUE_TYPE_TYPED_STRING)) {
+        i = strcmp(arg1->lexical, arg2->lexical);
+        if(i < 0) return -1;
+        else if(i > 0) return 1;
+        else return 0;
+    } else if(arg1->type == VALUE_TYPE_BOOLEAN &&
+              arg2->type == VALUE_TYPE_BOOLEAN) {
+        return (arg1->boolean ? 1 : 0) - (arg2->boolean ? 1 : 0);
+    } else {
+        return -2; // TODO datetime
+    }
+}
+
+int model_value_equal(Value* arg1, Value* arg2) {
+    if(arg1->id == arg2->id)
+        return 1;
+    if(arg1->type == VALUE_TYPE_UNKOWN || arg2->type == VALUE_TYPE_UNKOWN) {
+        if(arg1->typeUri == NULL || arg2->typeUri == NULL)
+            return 0; // FIXME not sure
+        if(strcmp(arg1->typeUri, arg2->typeUri) != 0)
+            return -1;
+    } else if(arg1->type != arg2->type) {
+        if(arg1->type >= VALUE_TYPE_PLAIN_STRING ||
+           arg2->type >= VALUE_TYPE_PLAIN_STRING)
+            return -1;
+        else
+            return 0;
+    }
+    if(arg1->language < 0 || arg2->language < 0) {
+        if(strcmp(arg1->languageTag, arg2->languageTag) != 0)
+            return 0;
+    } else if(arg1->language != arg2->language) {
+        return 0;
+    }
+    if(strcmp(arg1->lexical, arg2->lexical) != 0)
+        return arg1->typeUri == NULL ? 0 : -1;
+
+    return 1;
+}
+
+void model_value_ensure_lexical(Value* val) {
+    int len;
+
+    if(val->lexical == NULL) {
+        if(val->type == VALUE_TYPE_BOOLEAN) {
+            val->lexical = val->integer ? "true" : "false";
+        } else if(val->type >= VALUE_TYPE_FIRST_INTEGER &&
+                  val->type <= VALUE_TYPE_LAST_INTEGER) {
+            len = snprintf(NULL, 0, "%ld", val->integer);
+            val->lexical = (char*) malloc(len * sizeof(char));
+            sprintf(val->lexical, "%ld", val->integer);
+            val->cleanup |= VALUE_CLEAN_LEXICAL;
+        } else if(val->type >= VALUE_TYPE_FIRST_FLOATING &&
+                  val->type <= VALUE_TYPE_LAST_FLOATING) {
+            len = snprintf(NULL, 0, "%f", val->floating);
+            val->lexical = (char*) malloc(len * sizeof(char));
+            sprintf(val->lexical, "%f", val->floating);
+            val->cleanup |= VALUE_CLEAN_LEXICAL;
+        } else if(val->type == VALUE_TYPE_DATETIME) {
+            // TODO
+            val->lexical = "";
+        } else {
+            val->lexical = "";
+        }
+    }
+}
+
 char* model_value_string(Value* val) {
     char *result;
-    int lexlen, typelen, langlen, len;
+    int lexlen, len;
 
-    lexlen = strlen(val->lexical);
-    typelen = val->typeUri == NULL ? 0 : strlen(val->typeUri);
-    langlen = val->language == 0 ? 0 : strlen(val->languageTag);
+    lexlen = val->lexical == NULL ? 0 : strlen(val->lexical);
 
     switch(val->type) {
     case VALUE_TYPE_BLANK:
         len = lexlen + 1;
         result = (char*) malloc(len * sizeof(char));
-        strcpy(result, val->lexical);
+        strcpy(result, val->lexical == NULL ? "" : val->lexical);
         return result;
     case VALUE_TYPE_IRI:
         len = lexlen + 3;
         result = (char*) malloc(len * sizeof(char));
         result[0] = '<';
-        strcpy(result+1, val->lexical);
+        strcpy(result+1, val->lexical == NULL ? "" : val->lexical);
         result[lexlen+1] = '>';
         result[lexlen+2] = '\0';
         return result;
-    default:
+    case VALUE_TYPE_PLAIN_STRING:
         len = lexlen + 3;
-        if(langlen > 0) len += langlen + 1;
-        if(typelen > 0) len += typelen + 2;
+        if(val->language > 0) len += strlen(val->languageTag) + 1;
         result = (char*) malloc(len * sizeof(char));
         result[0] = '"';
-        strcpy(result+1, val->lexical);
+        strcpy(result+1, val->lexical == NULL ? "" : val->lexical);
         result[lexlen+1] = '"';
-        len = lexlen + 2;
-        if(langlen > 0) {
-            result[len++] = '@';
-            strcpy(result+len, val->languageTag);
-            len += langlen;
+        if(val->language > 0) {
+            result[lexlen+2] = '@';
+            strcpy(result+lexlen+3, val->languageTag);
         }
-        if(typelen > 0) {
-            result[len++] = '^';
-            result[len++] = '^';
-            strcpy(result+len, val->typeUri);
-            len += typelen;
+        result[len-1] = '\0';
+        return result;
+    default:
+        if(val->lexical == NULL) {
+            if(val->type == VALUE_TYPE_BOOLEAN)
+                lexlen = val->integer ? 4 : 5;
+            else if(val->type >= VALUE_TYPE_FIRST_INTEGER &&
+                    val->type <= VALUE_TYPE_LAST_INTEGER)
+                lexlen = snprintf(NULL, 0, "%ld", val->integer);
+            else if(val->type >= VALUE_TYPE_FIRST_FLOATING &&
+                    val->type <= VALUE_TYPE_LAST_FLOATING)
+                lexlen = snprintf(NULL, 0, "%f", val->floating);
+            // TODO datetime
         }
-        result[len] = '\0';
+        len = lexlen + strlen(val->typeUri) + 5;
+        result = (char*) malloc(len * sizeof(char));
+        result[0] = '"';
+        if(val->lexical == NULL) {
+            if(val->type == VALUE_TYPE_BOOLEAN)
+                strcpy(result+1, val->integer ? "true" : "false");
+            else if(val->type >= VALUE_TYPE_FIRST_INTEGER &&
+                    val->type <= VALUE_TYPE_LAST_INTEGER)
+                sprintf(result+1, "%ld", val->integer);
+            else if(val->type >= VALUE_TYPE_FIRST_FLOATING &&
+                    val->type <= VALUE_TYPE_LAST_FLOATING)
+                sprintf(result+1, "%f", val->floating);
+            // TODO datetime
+        } else {
+            strcpy(result+1, val->lexical);
+        }
+        strcpy(result+lexlen+1, "\"^^");
+        strcpy(result+lexlen+4, val->typeUri);
+        result[len-1] = '\0';
         return result;
     }
 }

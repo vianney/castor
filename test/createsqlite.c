@@ -103,8 +103,10 @@ void add_triple(void* user_data, const raptor_statement* triple) {
 
     d = (Data*) user_data;
     d->count++;
-    if(d->count % 10000 == 0)
-        printf(".");
+    if(d->count % 10000 == 0) {
+        putchar('.');
+        fflush(stdout);
+    }
 
 #define START_SQL(stmt) \
     sql = stmt; \
@@ -121,8 +123,10 @@ void add_triple(void* user_data, const raptor_statement* triple) {
     if(sqlite3_bind_null(sql, (col)) != SQLITE_OK) goto error;
 
 #define BIND_VALUE(col, type, lex) \
-    if((type) >= VALUE_TYPE_FIRST_INTEGER && \
-       (type) <= VALUE_TYPE_LAST_INTEGER) { \
+    if((type) == VALUE_TYPE_BOOLEAN) { \
+        BIND_INT(col, strcmp(lex, "true") == 0 || strcmp(lex, "1") == 0 ? 1 : 0); \
+    } else if((type) >= VALUE_TYPE_FIRST_INTEGER && \
+              (type) <= VALUE_TYPE_LAST_INTEGER) { \
         BIND_INT(col, atoi(lex)); \
     } else if((type) >= VALUE_TYPE_FIRST_FLOATING && \
               (type) <= VALUE_TYPE_LAST_FLOATING) { \

@@ -61,6 +61,15 @@ typedef enum {
     VALUE_TYPE_LAST_FLOATING = VALUE_TYPE_DECIMAL
 } ValueType;
 
+#define IS_VALUE_TYPE_XSD(type) \
+    ((type) >= VALUE_TYPE_FIRST_XSD && (type) <= VALUE_TYPE_LAST_XSD)
+#define IS_VALUE_TYPE_NUMERIC(type) \
+    ((type) >= VALUE_TYPE_FIRST_NUMERIC && (type) <= VALUE_TYPE_LAST_NUMERIC)
+#define IS_VALUE_TYPE_INTEGER(type) \
+    ((type) >= VALUE_TYPE_FIRST_INTEGER && (type) <= VALUE_TYPE_LAST_INTEGER)
+#define IS_VALUE_TYPE_FLOATING(type) \
+    ((type) >= VALUE_TYPE_FIRST_FLOATING && (type) <= VALUE_TYPE_LAST_FLOATING)
+
 /**
  * URIs corresponding to the value types
  */
@@ -80,16 +89,37 @@ typedef struct {
 } DateTime;
 
 /**
+ * Value cleanup flags
+ */
+typedef enum {
+    /**
+     * The caller has nothing to do
+     */
+    VALUE_CLEAN_NOTHING = 0,
+    /**
+     * The caller should free the datatype URI
+     */
+    VALUE_CLEAN_TYPE_URI = 1,
+    /**
+     * The caller should free the language tag
+     */
+    VALUE_CLEAN_LANGUAGE_TAG = 2,
+    /**
+     * The caller should free the lexical form
+     */
+    VALUE_CLEAN_LEXICAL = 4
+} ValueCleanFlags;
+
+/**
  * Structure defining a value
  */
 typedef struct {
     /**
-     * ID of the value, starting from 0. Or -1 if unknown.
+     * ID of the value, starting from 0. Or -1 if not part of a store.
      */
     int id;
     /**
      * Datatype of the value. May be higher than the enumeration.
-     * Or -1 if unknown.
      */
     ValueType type;
     /**
@@ -106,10 +136,19 @@ typedef struct {
      */
     char* languageTag;
     /**
-     * Lexical form.
+     * Lexical form. May be NULL if there is a native representation.
      */
     char* lexical;
+    /**
+     * Cleanup flags
+     */
+    ValueCleanFlags cleanup;
     union {
+        /**
+         * Boolean representation of the lexical. Unspecified if type is not
+         * VALUE_TYPE_BOOLEAN.
+         */
+        bool boolean;
         /**
          * Integer representation of the lexical. Unspecified if type not in
          * range VALUE_TYPE_FIRST_INTEGER..VALUE_TYPE_LAST_INTEGER.
@@ -138,9 +177,42 @@ typedef struct {
 } Statement;
 
 /**
+ * Clean a value according to its cleanup flags. This does not free the value
+ * object itself.
+ *
+ * @param val the value to clean
+ */
+void model_value_clean(Value* val);
+
+/**
+ * Compare two values.
+ *
+ * @param arg1 first value
+ * @param arg2 second value
+ * @return 0 if arg1 == arg2, -1 if arg1 < arg2, 1 if arg1 > arg2,
+ *         -2 if a type error occured
+ */
+int model_value_compare(Value* arg1, Value* arg2);
+
+/**
+ * Test the RDFterm-equality as defined in SPARQL 1.0, section 11.4.10.
+ *
+ * @param arg1 first value
+ * @param arg2 second value
+ * @return 1 if arg1 == arg2, 0 if arg1 != arg2, -1 if a type error occured
+ */
+int model_value_equal(Value* arg1, Value* arg2);
+
+/**
+ * Ensure val has a non-null lexical. If a new lexical is created, freeLexical
+ * can be true and the caller should free it accordingly.
+ */
+void model_value_ensure_lexical(Value* val);
+
+/**
  * @param val a value
  * @return a string representation of the value; it is the caller's
- *         responsability to free it
+ *         responsibility to free it
  */
 char* model_value_string(Value* val);
 

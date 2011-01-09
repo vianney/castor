@@ -31,18 +31,25 @@
 
 #define BUFFER_SIZE 1024
 
-typedef struct {
-    Solver *solver;
-    Store *store;
-    Query *query;
-} PostData;
-
-void stmt_visitor(Statement stmt, PostData* data) {
-    post_statement(data->solver, data->store, stmt);
-}
-
-void filter_visitor(Filter filter, int nbVars, int vars[], PostData* data) {
-    post_filter(data->solver, data->store, data->query, filter, nbVars, vars);
+/**
+ * Visit a filter, break top-level AND-clauses down and post filter constraints.
+ *
+ * @param solver the solver
+ * @param store the store
+ * @param query the query
+ * @param expr the filter expression
+ */
+void visit_filter(Solver* solver, Store* store, Query* query, Expression* expr) {
+    if(expr->op == EXPR_OP_AND) {
+        visit_filter(solver, store, query, expr->arg1);
+        visit_filter(solver, store, query, expr->arg2);
+    } else if(expr->op == EXPR_OP_NEQ &&
+              expr->arg1->op == EXPR_OP_VARIABLE &&
+              expr->arg2->op == EXPR_OP_VARIABLE) {
+        post_diff(solver, store, expr->arg1->variable, expr->arg2->variable);
+    } else {
+        post_filter(solver, store, query, expr);
+    }
 }
 
 int main(int argc, char* argv[]) {
@@ -54,7 +61,6 @@ int main(int argc, char* argv[]) {
     Store *store;
     Query *query;
     Solver *solver;
-    PostData data;
     int nbSols, i, n;
     char *str;
 
@@ -101,25 +107,26 @@ int main(int argc, char* argv[]) {
         goto cleanstore;
     }
 
-    solver = new_solver(query_variables_count(query), store_value_count(store));
+    solver = new_solver(query_variable_count(query), store_value_count(store));
     if(solver == NULL) {
         fprintf(stderr, "Unable to initialize solver\n");
         goto cleanquery;
     }
 
-    data.solver = solver;
-    data.store = store;
-    data.query = query;
+    n = query_triple_pattern_count(query);
+    for(i = 0; i < n; i++) {
+        post_statement(solver, store, query_triple_pattern_get(query, i));
+    }
 
-    query_visit_triple_patterns(query,
-                                (query_triple_pattern_visit_fn) stmt_visitor,
-                                &data);
-    query_visit_filters(query, (query_filter_visit_fn) filter_visitor, &data);
+    n = query_filter_count(query);
+    for(i = 0; i < n; i++) {
+        visit_filter(solver, store, query, query_filter_get(query, i));
+    }
 
     nbSols = 0;
     while(solver_search(solver)) {
         nbSols++;
-        n = query_variables_requested(query);
+        n = query_variable_requested(query);
         for(i = 0; i < n; i++) {
             str = model_value_string(
                     store_value_get(store, solver_var_value(solver, i)));

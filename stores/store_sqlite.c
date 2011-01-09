@@ -345,10 +345,13 @@ Store* sqlite_store_open(const char* filename) {
         str = (const char*) sqlite3_column_text(sql, 2);
         v->lexical = (char*) malloc((strlen(str)+1) * sizeof(char));
         strcpy(v->lexical, str);
+        v->cleanup = VALUE_CLEAN_NOTHING;
         v->language = sqlite3_column_int(sql, 3);
         v->languageTag = self->languages[v->language];
-        if(v->type >= VALUE_TYPE_FIRST_INTEGER &&
-           v->type <= VALUE_TYPE_LAST_INTEGER)
+        if(v->type == VALUE_TYPE_BOOLEAN)
+            v->boolean = sqlite3_column_int(sql, 4);
+        else if(v->type >= VALUE_TYPE_FIRST_INTEGER &&
+                v->type <= VALUE_TYPE_LAST_INTEGER)
             v->integer = sqlite3_column_int(sql, 4);
         else if(v->type >= VALUE_TYPE_FIRST_FLOATING &&
                 v->type <= VALUE_TYPE_LAST_FLOATING)
