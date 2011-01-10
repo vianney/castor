@@ -254,21 +254,45 @@ error:
 }
 
 int main(int argc, char* argv[]) {
-    char *rdfpath, *dbpath;
+    int c;
+    bool force;
+    char *syntax, *rdfpath, *dbpath;
     Data d;
     sqlite3_stmt *sql;
     ValueType t;
 
-    if(argc != 3) {
-        printf("Usage: %s RDF DB\n", argv[0]);
+    force = false;
+    syntax = "rdfxml";
+    while((c = getopt(argc, argv, "s:f")) != -1) {
+        switch(c) {
+        case 's':
+            syntax = optarg;
+            break;
+        case 'f':
+            force = true;
+            break;
+        default:
+            return 1;
+        }
+    }
+
+    if(argc - optind < 1) {
+        printf("Usage: %s [options] DB [RDF]\n", argv[0]);
         return 1;
     }
-    rdfpath = argv[1];
-    dbpath = argv[2];
+    dbpath = argv[optind++];
+    rdfpath = optind < argc ? argv[optind++] : NULL;
 
-    if(access(argv[2], F_OK) == 0) {
-        fprintf(stderr, "Database already exists. Exiting.\n");
-        return 1;
+    if(access(dbpath, F_OK) == 0) {
+        if(force) {
+            if(unlink(dbpath)) {
+                perror("createsqlite");
+                return 2;
+            }
+        } else {
+            fprintf(stderr, "Database already exists. Exiting.\n");
+            return 1;
+        }
     }
 
     memset(&d, 0, sizeof(Data));
@@ -384,11 +408,20 @@ int main(int argc, char* argv[]) {
         "          o.lexical = ?5 AND datatypes.uri = ?6 AND languages.tag = ?7;");
 #undef SQL
 
-    d.parser = raptor_new_parser("rdfxml");
+    d.parser = raptor_new_parser(syntax);
+    if(d.parser == NULL) {
+        fprintf(stderr, "Unable to create parser\n");
+        goto cleandb;
+    }
     raptor_set_statement_handler(d.parser, &d, add_triple);
-    d.fileURIstr = raptor_uri_filename_to_uri_string(rdfpath);
-    d.fileURI = raptor_new_uri(d.fileURIstr);
-    raptor_parse_file(d.parser, d.fileURI, NULL);
+    if(rdfpath == NULL) {
+        d.fileURI = raptor_new_uri((unsigned char*) "http://www.example.org/");
+        raptor_parse_file_stream(d.parser, stdin, NULL, d.fileURI);
+    } else {
+        d.fileURIstr = raptor_uri_filename_to_uri_string(rdfpath);
+        d.fileURI = raptor_new_uri(d.fileURIstr);
+        raptor_parse_file(d.parser, d.fileURI, NULL);
+    }
 
     if(d.count >= 10000)
         printf("\n");
