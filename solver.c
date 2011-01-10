@@ -334,16 +334,13 @@ void expand_max_constraints(Solver* self) {
     int x;
     int oldSize, newSize;
     int *evBind;
-    Constraint *constraints;
 
     oldSize = self->maxCstrs;
     newSize = oldSize * 2;
     self->maxCstrs = newSize;
 
-    constraints = (Constraint*) malloc(newSize * sizeof(Constraint));
-    memcpy(constraints, self->constraints, oldSize * sizeof(Constraint));
-    free(self->constraints);
-    self->constraints = constraints;
+    self->constraints = (Constraint*) realloc(self->constraints,
+                                              newSize * sizeof(Constraint));
 
     evBind = (int*) malloc(newSize * self->nbVars * sizeof(int));
     for(x = 0; x < self->nbVars; x++)
