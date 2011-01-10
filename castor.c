@@ -19,6 +19,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #include "defs.h"
 #include "model.h"
@@ -63,6 +65,7 @@ int main(int argc, char* argv[]) {
     Solver *solver;
     int nbSols, i, n;
     char *str;
+    struct rusage ru[6];
 
     if(argc < 2 || argc > 3) {
         printf("Usage: %s DB [QUERY]\n", argv[0]);
@@ -95,11 +98,15 @@ int main(int argc, char* argv[]) {
     }
     queryString[queryLen] = '\0';
 
+    getrusage(RUSAGE_SELF, &ru[0]);
+
     store = sqlite_store_open(dbpath);
     if(store == NULL) {
         fprintf(stderr, "Unable to open %s\n", dbpath);
         goto error;
     }
+
+    getrusage(RUSAGE_SELF, &ru[1]);
 
     query = new_query(store, queryString);
     if(query == NULL) {
@@ -107,11 +114,15 @@ int main(int argc, char* argv[]) {
         goto cleanstore;
     }
 
+    getrusage(RUSAGE_SELF, &ru[2]);
+
     solver = new_solver(query_variable_count(query), store_value_count(store));
     if(solver == NULL) {
         fprintf(stderr, "Unable to initialize solver\n");
         goto cleanquery;
     }
+
+    getrusage(RUSAGE_SELF, &ru[3]);
 
     n = query_triple_pattern_count(query);
     for(i = 0; i < n; i++) {
@@ -122,6 +133,8 @@ int main(int argc, char* argv[]) {
     for(i = 0; i < n; i++) {
         visit_filter(solver, store, query, query_filter_get(query, i));
     }
+
+    getrusage(RUSAGE_SELF, &ru[4]);
 
     nbSols = 0;
     while(solver_search(solver)) {
@@ -135,8 +148,25 @@ int main(int argc, char* argv[]) {
         }
         printf("\n");
     }
+
+    getrusage(RUSAGE_SELF, &ru[5]);
+
     printf("Found %d solutions\n", nbSols);
     solver_print_statistics(solver);
+
+#define PRINT_TIME(msg, start, stop) \
+    printf(msg ": %d.%03d s\n", \
+           (int)(stop.ru_utime.tv_sec + stop.ru_stime.tv_sec - \
+                 start.ru_utime.tv_sec - start.ru_stime.tv_sec), \
+           (int)(stop.ru_utime.tv_usec + stop.ru_stime.tv_usec - \
+                 start.ru_utime.tv_usec - start.ru_stime.tv_usec) / 1000)
+
+    PRINT_TIME("Store open", ru[0], ru[1]);
+    PRINT_TIME("Query parse", ru[1], ru[2]);
+    PRINT_TIME("Solver init", ru[2], ru[3]);
+    PRINT_TIME("Solver post", ru[3], ru[4]);
+    PRINT_TIME("Solver search", ru[4], ru[5]);
+#undef PRINT_TIME
 
     free_solver(solver);
     free_query(query);
