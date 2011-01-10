@@ -432,21 +432,28 @@ Query* new_query(Store* store, char* queryString) {
 
     // filters
     seq = rasqal_query_get_graph_pattern_sequence(query);
-    n = raptor_sequence_size(seq);
     self->nbFilters = 0;
-    for(i = 0; i < n; i++) {
-        gp = (rasqal_graph_pattern*) raptor_sequence_get_at(seq, i);
-        if(rasqal_graph_pattern_get_filter_expression(gp) != NULL)
-            self->nbFilters++;
+    if(seq != NULL) {
+        n = raptor_sequence_size(seq);
+        self->nbFilters = 0;
+        for(i = 0; i < n; i++) {
+            gp = (rasqal_graph_pattern*) raptor_sequence_get_at(seq, i);
+            if(rasqal_graph_pattern_get_filter_expression(gp) != NULL)
+                self->nbFilters++;
+        }
     }
-    self->filters = (Expression**) malloc(self->nbFilters *
-                                          sizeof(Expression*));
-    x = 0;
-    for(i = 0; i < n; i++) {
-        gp = (rasqal_graph_pattern*) raptor_sequence_get_at(seq, i);
-        expr = rasqal_graph_pattern_get_filter_expression(gp);
-        if(expr != NULL)
-            self->filters[x++] = convert_expression(self, expr);
+    if(self->nbFilters > 0) {
+        self->filters = (Expression**) malloc(self->nbFilters *
+                                              sizeof(Expression*));
+        x = 0;
+        for(i = 0; i < n; i++) {
+            gp = (rasqal_graph_pattern*) raptor_sequence_get_at(seq, i);
+            expr = rasqal_graph_pattern_get_filter_expression(gp);
+            if(expr != NULL)
+                self->filters[x++] = convert_expression(self, expr);
+        }
+    } else {
+        self->filters = NULL;
     }
 
     rasqal_free_query(query);
@@ -468,7 +475,8 @@ void free_query(Query* self) {
 
     for(i = 0; i < self->nbFilters; i++)
         free_expression(self->filters[i]);
-    free(self->filters);
+    if(self->filters != NULL)
+        free(self->filters);
     free(self->patterns);
     free(self->vars);
     free(self);
