@@ -408,6 +408,10 @@ void solver_diff(Solver* self, int x, int v) {
         self->closed = true;
 }
 
+void solver_fail(Solver* self) {
+    self->closed = true;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Searching
 

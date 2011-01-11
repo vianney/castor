@@ -186,7 +186,7 @@ void free_expression(Expression* expr);
  * @param query a query instance
  * @param expr an expression
  * @param vars output array, should be able to contain at least
- *             query_variable_count(query) elements
+ *             query_variable_count(query) elements; NULL if not needed
  * @return the number of unique variables in expr
  */
 int expression_get_variables(Query* query, Expression* expr, int* vars);

@@ -51,6 +51,11 @@ bool cstr_statement_propagate(Solver* solver, StatementConstraint* data) {
     INIT(o, object)
 #undef INIT
 
+    if(vs < 0 && vp < 0 && vo < 0) {
+        // nothing bound, we do not want to check all triples
+        return true;
+    }
+
     if(!store_statement_query(data->store, vs, vp, vo)) goto error;
 
     if(vs >= 0 && vp >= 0 && vo >= 0) {
@@ -186,21 +191,15 @@ typedef struct {
 } DiffConstraint;
 
 bool cstr_diff_propagate(Solver* solver, DiffConstraint* data) {
-    register int x1, x2, v1, v2;
+    register int x1, x2;
 
     x1 = data->x1;
     x2 = data->x2;
-    v1 = solver_var_bound(solver, x1) ? solver_var_value(solver, x1) : -1;
-    v2 = solver_var_bound(solver, x2) ? solver_var_value(solver, x2) : -1;
-    if(v1 >= 0 && v2 >= 0) {
-        if(model_value_equal(store_value_get(data->store, v1),
-                             store_value_get(data->store, v2)) == 1)
+    if(solver_var_bound(solver, x1)) {
+        if(!solver_var_remove(solver, x2, solver_var_value(solver, x1)))
             return false;
-    } else if(v1 >= 0) {
-        if(!solver_var_remove(solver, x2, v1))
-            return false;
-    } else if(v2 >= 0) {
-        if(!solver_var_remove(solver, x1, v2))
+    } else {
+        if(!solver_var_remove(solver, x1, solver_var_value(solver, x2)))
             return false;
     }
     return true;
@@ -210,15 +209,66 @@ void post_diff(Solver* solver, Store* store, int x1, int x2) {
     Constraint *c;
     DiffConstraint *data;
 
-    c = solver_create_constraint(solver);
-    data = (DiffConstraint*) malloc(sizeof(DiffConstraint));
-    data->store = store;
-    data->x1 = x1;
-    data->x2 = x2;
-    c->userData = data;
-    c->propagate = (bool (*)(Solver*, void*)) cstr_diff_propagate;
-    c->initPropagate = c->propagate;
-    solver_register_bind(solver, c, x1);
-    solver_register_bind(solver, c, x2);
-    solver_post(solver, c);
+    if(solver_var_bound(solver, x1)) {
+        solver_diff(solver, x2, solver_var_value(solver, x1));
+    } else if(solver_var_bound(solver, x2)) {
+        solver_diff(solver, x1, solver_var_value(solver, x2));
+    } else {
+        c = solver_create_constraint(solver);
+        data = (DiffConstraint*) malloc(sizeof(DiffConstraint));
+        data->store = store;
+        data->x1 = x1;
+        data->x2 = x2;
+        c->userData = data;
+        c->propagate = (bool (*)(Solver*, void*)) cstr_diff_propagate;
+        solver_register_bind(solver, c, x1);
+        solver_register_bind(solver, c, x2);
+        solver_post(solver, c);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Eq constraint
+
+typedef struct {
+    Store *store;
+    int x1;
+    int x2;
+} EqConstraint;
+
+bool cstr_eq_propagate(Solver* solver, EqConstraint* data) {
+    register int x1, x2;
+
+    x1 = data->x1;
+    x2 = data->x2;
+    if(solver_var_bound(solver, x1)) {
+        if(!solver_var_bind(solver, x2, solver_var_value(solver, x1)))
+            return false;
+    } else {
+        if(!solver_var_bind(solver, x1, solver_var_value(solver, x2)))
+            return false;
+    }
+    return true;
+}
+
+void post_eq(Solver* solver, Store* store, int x1, int x2) {
+    Constraint *c;
+    EqConstraint *data;
+
+    if(solver_var_bound(solver, x1)) {
+        solver_label(solver, x2, solver_var_value(solver, x1));
+    } else if(solver_var_bound(solver, x2)) {
+        solver_label(solver, x1, solver_var_value(solver, x2));
+    } else {
+        c = solver_create_constraint(solver);
+        data = (EqConstraint*) malloc(sizeof(EqConstraint));
+        data->store = store;
+        data->x1 = x1;
+        data->x2 = x2;
+        c->userData = data;
+        c->propagate = (bool (*)(Solver*, void*)) cstr_eq_propagate;
+        solver_register_bind(solver, c, x1);
+        solver_register_bind(solver, c, x2);
+        solver_post(solver, c);
+    }
 }

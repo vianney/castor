@@ -42,16 +42,88 @@
  * @param expr the filter expression
  */
 void visit_filter(Solver* solver, Store* store, Query* query, Expression* expr) {
+    int i;
+    Value v;
+
     if(expr->op == EXPR_OP_AND) {
         visit_filter(solver, store, query, expr->arg1);
         visit_filter(solver, store, query, expr->arg2);
-    } else if(expr->op == EXPR_OP_NEQ &&
-              expr->arg1->op == EXPR_OP_VARIABLE &&
-              expr->arg2->op == EXPR_OP_VARIABLE) {
-        post_diff(solver, store, expr->arg1->variable, expr->arg2->variable);
-    } else {
-        post_filter(solver, store, query, expr);
+        return;
+    } else if(expr->op == EXPR_OP_EQ) {
+        if(expr->arg1->op == EXPR_OP_VARIABLE &&
+           expr->arg2->op == EXPR_OP_VARIABLE) {
+            post_eq(solver, store, expr->arg1->variable, expr->arg2->variable);
+            return;
+        } else if(expr->arg1->op == EXPR_OP_VARIABLE &&
+                  expression_get_variables(query, expr->arg2, NULL) == 0) {
+            if(!expression_evaluate(query, expr->arg2, &v)) {
+                solver_fail(solver);
+                return;
+            }
+            i = v.id >= 0 ? v.id :
+                store_value_get_id(store, v.type, v.typeUri, v.lexical,
+                                   v.languageTag);
+            if(i < 0) {
+                solver_fail(solver);
+                return;
+            }
+            solver_label(solver, expr->arg1->variable, i);
+            return;
+        } else if(expr->arg2->op == EXPR_OP_VARIABLE &&
+                  expression_get_variables(query, expr->arg1, NULL) == 0) {
+            if(!expression_evaluate(query, expr->arg1, &v)) {
+                solver_fail(solver);
+                return;
+            }
+            i = v.id >= 0 ? v.id :
+                store_value_get_id(store, v.type, v.typeUri, v.lexical,
+                                   v.languageTag);
+            if(i < 0) {
+                solver_fail(solver);
+                return;
+            }
+            solver_label(solver, expr->arg2->variable, i);
+            return;
+        }
+    } else if(expr->op == EXPR_OP_NEQ) {
+        if(expr->arg1->op == EXPR_OP_VARIABLE &&
+           expr->arg2->op == EXPR_OP_VARIABLE) {
+            post_diff(solver, store, expr->arg1->variable, expr->arg2->variable);
+            return;
+        } else if(expr->arg1->op == EXPR_OP_VARIABLE &&
+                  expression_get_variables(query, expr->arg2, NULL) == 0) {
+            if(!expression_evaluate(query, expr->arg2, &v)) {
+                solver_fail(solver);
+                return;
+            }
+            i = v.id >= 0 ? v.id :
+                store_value_get_id(store, v.type, v.typeUri, v.lexical,
+                                   v.languageTag);
+            if(i < 0) {
+                solver_fail(solver);
+                return;
+            }
+            solver_diff(solver, expr->arg1->variable, i);
+            return;
+        } else if(expr->arg2->op == EXPR_OP_VARIABLE &&
+                  expression_get_variables(query, expr->arg1, NULL) == 0) {
+            if(!expression_evaluate(query, expr->arg1, &v)) {
+                solver_fail(solver);
+                return;
+            }
+            i = v.id >= 0 ? v.id :
+                store_value_get_id(store, v.type, v.typeUri, v.lexical,
+                                   v.languageTag);
+            if(i < 0) {
+                solver_fail(solver);
+                return;
+            }
+            solver_diff(solver, expr->arg2->variable, i);
+            return;
+        }
     }
+    // fallback generic implementation
+    post_filter(solver, store, query, expr);
 }
 
 int main(int argc, char* argv[]) {
@@ -66,6 +138,7 @@ int main(int argc, char* argv[]) {
     int nbSols, i, n;
     char *str;
     struct rusage ru[6];
+    long diff;
 
     if(argc < 2 || argc > 3) {
         printf("Usage: %s DB [QUERY]\n", argv[0]);
@@ -155,17 +228,17 @@ int main(int argc, char* argv[]) {
     solver_print_statistics(solver);
 
 #define PRINT_TIME(msg, start, stop) \
-    printf(msg ": %d.%03d s\n", \
-           (int)(stop.ru_utime.tv_sec + stop.ru_stime.tv_sec - \
-                 start.ru_utime.tv_sec - start.ru_stime.tv_sec), \
-           (int)(stop.ru_utime.tv_usec + stop.ru_stime.tv_usec - \
-                 start.ru_utime.tv_usec - start.ru_stime.tv_usec) / 1000)
+    diff = (long)(stop.ru_utime.tv_sec + stop.ru_stime.tv_sec - \
+                  start.ru_utime.tv_sec - start.ru_stime.tv_sec) * 1000L + \
+           (long)(stop.ru_utime.tv_usec + stop.ru_stime.tv_usec - \
+                  start.ru_utime.tv_usec - start.ru_stime.tv_usec) / 1000L; \
+    printf(msg ": %ld.%03ld s\n", diff / 1000, diff % 1000);
 
-    PRINT_TIME("Store open", ru[0], ru[1]);
-    PRINT_TIME("Query parse", ru[1], ru[2]);
-    PRINT_TIME("Solver init", ru[2], ru[3]);
-    PRINT_TIME("Solver post", ru[3], ru[4]);
-    PRINT_TIME("Solver search", ru[4], ru[5]);
+    PRINT_TIME("Store open", ru[0], ru[1])
+    PRINT_TIME("Query parse", ru[1], ru[2])
+    PRINT_TIME("Solver init", ru[2], ru[3])
+    PRINT_TIME("Solver post", ru[3], ru[4])
+    PRINT_TIME("Solver search", ru[4], ru[5])
 #undef PRINT_TIME
 
     free_solver(solver);

@@ -52,4 +52,14 @@ void post_filter(Solver* solver, Store* store, Query* query, Expression* expr);
  */
 void post_diff(Solver* solver, Store* store, int x1, int x2);
 
+/**
+ * Post the constraint x1 = x2
+ *
+ * @param solver a solver instance
+ * @param store a store instance
+ * @param x1 first variable
+ * @param x2 second variable
+ */
+void post_eq(Solver* solver, Store* store, int x1, int x2);
+
 #endif // CONSTRAINTS_H

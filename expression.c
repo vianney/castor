@@ -135,44 +135,42 @@ void free_expression(Expression* expr) {
 /**
  * Recursive function to gather all unique variables of an expression.
  *
- * @param query a query instance
  * @param expr the expression
- * @param vars output array
+ * @param vars output array or NULL if not needed
  * @param varIncluded is a variable already included in vars
  * @return the number of unique variables in expr that were not already
  *         included (varIncluded was false) and that have been added to vars.
  *         varIncluded is updated accordingly.
  */
-int visit_get_variables(Query* query, Expression* expr, int* vars,
-                        bool* varIncluded) {
-    int i;
-    int *initVars;
+int visit_get_variables(Expression* expr, int* vars, bool* varIncluded) {
+    int i, count;
 
-    initVars = vars;
+    count = 0;
     switch(expr->op) {
     case EXPR_OP_VALUE:
         return 0;
     case EXPR_OP_VARIABLE:
         if(varIncluded[expr->variable])
             return 0;
-        vars[0] = expr->variable;
+        if(vars != NULL)
+            vars[0] = expr->variable;
         varIncluded[expr->variable] = true;
         return 1;
     case EXPR_OP_CAST:
-        return visit_get_variables(query, expr->castArg, vars, varIncluded);
+        return visit_get_variables(expr->castArg, vars, varIncluded);
     case EXPR_OP_CALL:
         for(i = 0; i < expr->nbArgs; i++)
-            vars += visit_get_variables(query, expr->args[i], vars, varIncluded);
+            count += visit_get_variables(expr->args[i], vars, varIncluded);
         break;
     default:
         if(expr->arg1 != NULL)
-            vars += visit_get_variables(query, expr->arg1, vars, varIncluded);
+            count += visit_get_variables(expr->arg1, vars, varIncluded);
         if(expr->arg2 != NULL)
-            vars += visit_get_variables(query, expr->arg2, vars, varIncluded);
+            count += visit_get_variables(expr->arg2, vars, varIncluded);
         if(expr->arg3 != NULL)
-            vars += visit_get_variables(query, expr->arg3, vars, varIncluded);
+            count += visit_get_variables(expr->arg3, vars, varIncluded);
     }
-    return vars - initVars;
+    return count;
 }
 
 int expression_get_variables(Query* query, Expression* expr, int* vars) {
@@ -180,7 +178,7 @@ int expression_get_variables(Query* query, Expression* expr, int* vars) {
     int* varIncluded;
 
     varIncluded = (int*) calloc(query_variable_count(query), sizeof(int));
-    result = visit_get_variables(query, expr, vars, varIncluded);
+    result = visit_get_variables(expr, vars, varIncluded);
     free(varIncluded);
     return result;
 }

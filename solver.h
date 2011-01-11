@@ -134,6 +134,16 @@ void solver_label(Solver* self, int x, int v);
  */
 void solver_diff(Solver* self, int x, int v);
 
+/**
+ * Post an always-inconsistent constraint.
+ * This has no effect once the search has begun.
+ * Note that propagators have other means of manipulating the variables and
+ * should not use this method.
+ *
+ * @param self a solver instance
+ */
+void solver_fail(Solver* self);
+
 ////////////////////////////////////////////////////////////////////////////////
 // Searching
 
