@@ -255,21 +255,25 @@ error:
 
 int main(int argc, char* argv[]) {
     int c;
-    bool force;
+    bool force, append;
     char *syntax, *rdfpath, *dbpath;
     Data d;
     sqlite3_stmt *sql;
     ValueType t;
 
     force = false;
+    append = false;
     syntax = "rdfxml";
-    while((c = getopt(argc, argv, "s:f")) != -1) {
+    while((c = getopt(argc, argv, "s:fa")) != -1) {
         switch(c) {
         case 's':
             syntax = optarg;
             break;
         case 'f':
             force = true;
+            break;
+        case 'a':
+            append = true;
             break;
         default:
             return 1;
@@ -283,7 +287,7 @@ int main(int argc, char* argv[]) {
     dbpath = argv[optind++];
     rdfpath = optind < argc ? argv[optind++] : NULL;
 
-    if(access(dbpath, F_OK) == 0) {
+    if(!append && access(dbpath, F_OK) == 0) {
         if(force) {
             if(unlink(dbpath)) {
                 perror("createsqlite");
@@ -298,7 +302,7 @@ int main(int argc, char* argv[]) {
     memset(&d, 0, sizeof(Data));
 
     if(sqlite3_open_v2(dbpath, &d.db,
-                       SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE,
+                       SQLITE_OPEN_READWRITE | (append ? 0 : SQLITE_OPEN_CREATE),
                        NULL) != SQLITE_OK) {
         fprintf(stderr, "Unable to create database.\n");
         return 2;
@@ -306,64 +310,71 @@ int main(int argc, char* argv[]) {
 
     raptor_init();
 
-    if(sqlite3_exec(d.db,
-                    "CREATE TABLE datatypes ("
-                    "  id INTEGER PRIMARY KEY NOT NULL,"
-                    "  uri TEXT UNIQUE ON CONFLICT IGNORE"
-                    ");"
-                    "CREATE TABLE languages ("
-                    "  id INTEGER PRIMARY KEY NOT NULL,"
-                    "  tag TEXT UNIQUE ON CONFLICT IGNORE"
-                    ");"
-                    "CREATE TABLE vals ("
-                    "  id INTEGER PRIMARY KEY NOT NULL,"
-                    "  type INTEGER NOT NULL REFERENCES datatypes(id),"
-                    "  lexical TEXT,"
-                    "  language INTEGER REFERENCES languages(id) DEFAULT 0,"
-                    "  value,"
-                    "  UNIQUE (type, lexical, language) ON CONFLICT IGNORE"
-                    ");"
-                    "CREATE TABLE statements ("
-                    "  subject INTEGER NOT NULL REFERENCES vals(id),"
-                    "  predicate INTEGER NOT NULL REFERENCES vals(id),"
-                    "  object INTEGER NOT NULL REFERENCES vals(id),"
-                    "  PRIMARY KEY (predicate, subject, object) ON CONFLICT IGNORE"
-                    ");"
-                    "CREATE INDEX statements_spo"
-                    "    ON statements (subject, predicate, object);"
-                    "CREATE INDEX statements_sop"
-                    "    ON statements (subject, object, predicate);"
-                    "CREATE INDEX statements_pos"
-                    "    ON statements (predicate, object, subject);"
-                    "CREATE INDEX statements_osp"
-                    "    ON statements (object, subject, predicate);"
-                    "CREATE INDEX statements_ops"
-                    "    ON statements (object, predicate, subject);"
-                    "BEGIN TRANSACTION;"
-                    "INSERT INTO languages (id, tag) VALUES (0, '');",
-                    NULL, NULL, NULL) != SQLITE_OK)
-        goto cleandb;
+    if(!append) {
+        if(sqlite3_exec(d.db,
+                        "CREATE TABLE datatypes ("
+                        "  id INTEGER PRIMARY KEY NOT NULL,"
+                        "  uri TEXT UNIQUE ON CONFLICT IGNORE"
+                        ");"
+                        "CREATE TABLE languages ("
+                        "  id INTEGER PRIMARY KEY NOT NULL,"
+                        "  tag TEXT UNIQUE ON CONFLICT IGNORE"
+                        ");"
+                        "CREATE TABLE vals ("
+                        "  id INTEGER PRIMARY KEY NOT NULL,"
+                        "  type INTEGER NOT NULL REFERENCES datatypes(id),"
+                        "  lexical TEXT,"
+                        "  language INTEGER REFERENCES languages(id) DEFAULT 0,"
+                        "  value,"
+                        "  UNIQUE (type, lexical, language) ON CONFLICT IGNORE"
+                        ");"
+                        "CREATE TABLE statements ("
+                        "  subject INTEGER NOT NULL REFERENCES vals(id),"
+                        "  predicate INTEGER NOT NULL REFERENCES vals(id),"
+                        "  object INTEGER NOT NULL REFERENCES vals(id),"
+                        "  PRIMARY KEY (predicate, subject, object) ON CONFLICT IGNORE"
+                        ");"
+                        "CREATE INDEX statements_spo"
+                        "    ON statements (subject, predicate, object);"
+                        "CREATE INDEX statements_sop"
+                        "    ON statements (subject, object, predicate);"
+                        "CREATE INDEX statements_pos"
+                        "    ON statements (predicate, object, subject);"
+                        "CREATE INDEX statements_osp"
+                        "    ON statements (object, subject, predicate);"
+                        "CREATE INDEX statements_ops"
+                        "    ON statements (object, predicate, subject);"
+                        "BEGIN TRANSACTION;"
+                        "INSERT INTO languages (id, tag) VALUES (0, '');",
+                        NULL, NULL, NULL) != SQLITE_OK)
+            goto cleandb;
 
-    if(sqlite3_prepare_v2(d.db,
-                          "INSERT INTO datatypes (id, uri) VALUES (?, ?)",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto cleandb;
-    for(t = VALUE_TYPE_BLANK; t < VALUE_TYPE_FIRST_CUSTOM; t++) {
-        if(sqlite3_reset(sql) != SQLITE_OK)
-            goto cleansql;
-        if(sqlite3_bind_int(sql, 1, t) != SQLITE_OK)
-            goto cleansql;
-        if(VALUETYPE_URIS[t] == NULL) {
-            if(sqlite3_bind_null(sql, 2) != SQLITE_OK)
+        if(sqlite3_prepare_v2(d.db,
+                              "INSERT INTO datatypes (id, uri) VALUES (?, ?)",
+                              -1, &sql, NULL) != SQLITE_OK)
+            goto cleandb;
+        for(t = VALUE_TYPE_BLANK; t < VALUE_TYPE_FIRST_CUSTOM; t++) {
+            if(sqlite3_reset(sql) != SQLITE_OK)
                 goto cleansql;
-        } else {
-            if(sqlite3_bind_text(sql, 2, VALUETYPE_URIS[t], -1, SQLITE_STATIC) != SQLITE_OK)
+            if(sqlite3_bind_int(sql, 1, t) != SQLITE_OK)
+                goto cleansql;
+            if(VALUETYPE_URIS[t] == NULL) {
+                if(sqlite3_bind_null(sql, 2) != SQLITE_OK)
+                    goto cleansql;
+            } else {
+                if(sqlite3_bind_text(sql, 2, VALUETYPE_URIS[t], -1, SQLITE_STATIC) != SQLITE_OK)
+                    goto cleansql;
+            }
+            if(sqlite3_step(sql) != SQLITE_DONE)
                 goto cleansql;
         }
-        if(sqlite3_step(sql) != SQLITE_DONE)
-            goto cleansql;
+        sqlite3_finalize(sql);
+    } else {
+        if(sqlite3_exec(d.db,
+                        "BEGIN TRANSACTION;",
+                        NULL, NULL, NULL) != SQLITE_OK)
+            goto cleandb;
     }
-    sqlite3_finalize(sql);
 
 #define SQL(var, sql) \
     if(sqlite3_prepare_v2(d.db, sql, -1, &d.var, NULL) != SQLITE_OK) \

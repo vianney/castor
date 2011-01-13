@@ -103,8 +103,11 @@ void sqlite_store_close(SqliteStore* self) {
         free(self->languages);
     }
     if(self->values != NULL) {
-        for(i = 0; i < self->nbValues; i++)
+        for(i = 0; i < self->nbValues; i++) {
             free(self->values[i].lexical);
+            if(self->values[i].type == VALUE_TYPE_DECIMAL)
+                free_xsddecimal(self->values[i].decimal);
+        }
         free(self->values);
     }
     free(self);
@@ -350,12 +353,14 @@ Store* sqlite_store_open(const char* filename) {
         v->languageTag = self->languages[v->language];
         if(v->type == VALUE_TYPE_BOOLEAN)
             v->boolean = sqlite3_column_int(sql, 4);
-        else if(v->type >= VALUE_TYPE_FIRST_INTEGER &&
-                v->type <= VALUE_TYPE_LAST_INTEGER)
+        else if(IS_VALUE_TYPE_INTEGER(v->type))
             v->integer = sqlite3_column_int(sql, 4);
-        else if(v->type >= VALUE_TYPE_FIRST_FLOATING &&
-                v->type <= VALUE_TYPE_LAST_FLOATING)
+        else if(IS_VALUE_TYPE_FLOATING(v->type))
             v->floating = sqlite3_column_double(sql, 4);
+        else if(v->type == VALUE_TYPE_DECIMAL) {
+            v->decimal = new_xsddecimal();
+            xsddecimal_set_string(v->decimal, v->lexical);
+        }
         //else if(v->type == VALUE_TYPE_DATETIME)
         // TODO: v->datetime
     }
@@ -429,9 +434,12 @@ cleanself:
         free(self->languages);
     }
     if(self->values != NULL) {
-        for(i = 0; i < self->nbValues; i++)
+        for(i = 0; i < self->nbValues; i++) {
             if(self->values[i].lexical != NULL)
                 free(self->values[i].lexical);
+            if(self->values[i].type == VALUE_TYPE_DECIMAL)
+                free_xsddecimal(self->values[i].decimal);
+        }
         free(self->values);
     }
     free(self);

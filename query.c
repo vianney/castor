@@ -230,8 +230,9 @@ Expression* convert_expression(Query* self, rasqal_expression* expr) {
                 break;
             case RASQAL_LITERAL_DECIMAL:
                 val->type = VALUE_TYPE_DECIMAL;
-                val->floating = 0; // FIXME implement decimal
-                fprintf(stderr, "castor query: decimal unimplemented\n");
+                val->decimal = new_xsddecimal();
+                xsddecimal_set_string(val->decimal, (const char*) lit->string);
+                val->cleanup |= VALUE_CLEAN_DECIMAL;
                 break;
             case RASQAL_LITERAL_DATETIME:
                 val->type = VALUE_TYPE_DATETIME;

@@ -69,6 +69,21 @@ struct TCheckpoint {
     SearchOrder* nextOrder;
 };
 
+/**
+ * Node of a linked list of constraints
+ */
+typedef struct TConstraintList ConstraintList;
+struct TConstraintList {
+    /**
+     * The constraint
+     */
+    Constraint* cstr;
+    /**
+     * Next node or NULL if end of the list
+     */
+    ConstraintList* next;
+};
+
 struct TSolver {
     // Domains
     /**
@@ -101,43 +116,20 @@ struct TSolver {
 
     // Constraints
     /**
-     * Number of constraints posted
-     */
-    int nbCstrs;
-    /**
-     * Maximum number of constraints that the current structures may hold.
-     * Posting more constraints require expanding them.
-     */
-    int maxCstrs;
-    /**
-     * Array of posted constraints (size: maxCstr).
+     * Linked list of posted constraints (using next field)
      */
     Constraint* constraints;
     /**
-     * evBind[x] = number of constraints registered to the bind event of
+     * evBind[x] = linked list of constraints registered to the bind event of
      *     variable x
      */
-    int* evBindSize;
-    /**
-     * evBind[x*maxCstrs..x*maxCstrs+evBind[x]] = constraints registered to the
-     *     bind event of variable x
-     */
-    int* evBind;
+    ConstraintList** evBind;
 
     // Propagation
     /**
-     * Size of the propagation queue.
+     * Propagation stack (linked list using nextPropag field)
      */
-    int propagQueueSize;
-    /**
-     * propagQueue[0..propagQueueSize-1] = propagation queue
-     */
-    int* propagQueue;
-    /**
-     * cstrQueued[c] = is constraint c queued for propagation
-     * cstrQueued[c] = true <=> ∃ i ∈ 0..propagQueueSize-1 : propagQueue[i] = c
-     */
-    bool* cstrQueued;
+    Constraint* propagQueue;
 
     // Search
     /**
@@ -208,16 +200,10 @@ Solver* new_solver(int nbVars, int nbVals) {
     }
     self->domMarked = (int*) calloc(nbVars, sizeof(int));
 
-    self->nbCstrs = 0;
-    maxCstrs = nbVars; // reserve nbVars constraints initially
-    self->maxCstrs = maxCstrs;
-    self->constraints = (Constraint*) malloc(maxCstrs * sizeof(Constraint));
-    self->evBindSize = (int*) calloc(nbVars, sizeof(int));
-    self->evBind = (int*) malloc(maxCstrs * nbVars * sizeof(int));
+    self->constraints = NULL;
+    self->evBind = (ConstraintList**) calloc(nbVars, sizeof(ConstraintList*));
 
-    self->propagQueueSize = 0;
-    self->propagQueue = (int*) malloc(maxCstrs * sizeof(int));
-    self->cstrQueued = (bool*) calloc(maxCstrs, sizeof(bool));
+    self->propagQueue = NULL;
 
     self->nextOrder = NULL;
     self->firstOrder = NULL;
@@ -231,10 +217,11 @@ Solver* new_solver(int nbVars, int nbVals) {
 }
 
 void free_solver(Solver* self) {
-    int i;
+    int x;
     Constraint *c;
     Checkpoint *chkp;
     SearchOrder *order;
+    ConstraintList *cl;
 
     while(self->trail != NULL) {
         chkp = self->trail;
@@ -247,16 +234,21 @@ void free_solver(Solver* self) {
         self->firstOrder = order->next;
         free(order);
     }
-    for(i = 0; i < self->nbCstrs; i++) {
-        c = &self->constraints[i];
-        if(c->free != NULL)
-            c->free(self, c->userData);
+    for(x = 0; x < self->nbVars; x++) {
+        while(self->evBind[x] != NULL) {
+            cl = self->evBind[x];
+            self->evBind[x] = cl->next;
+            free(cl);
+        }
     }
-    free(self->cstrQueued);
-    free(self->propagQueue);
     free(self->evBind);
-    free(self->evBindSize);
-    free(self->constraints);
+    while(self->constraints != NULL) {
+        c = self->constraints;
+        self->constraints = c->next;
+        if(c->free != NULL)
+            c->free(self, c);
+        free(c);
+    }
     free(self->domMarked);
     free(self->domMap[0]);
     free(self->domMap);
@@ -270,6 +262,11 @@ void free_solver(Solver* self) {
 // Propagating
 
 /**
+ * Dummy non-null pointer to indicate a constraint is currently propagating.
+ */
+#define CSTR_PROPAGATING ((Constraint*) 1)
+
+/**
  * Perform propagation of the constraints in the queue. After this call, either
  * the queue is empty and we have reached the fixpoint, or a failure has been
  * detected.
@@ -278,16 +275,17 @@ void free_solver(Solver* self) {
  * @return false if there is a failure, true otherwise
  */
 bool propagate(Solver* self) {
-    int cid;
     Constraint *c;
 
-    while(self->propagQueueSize > 0) {
-        self->propagQueueSize--;
-        cid = self->propagQueue[self->propagQueueSize];
-        c = &self->constraints[cid];
-        if(!c->propagate(self, c->userData))
+    while(self->propagQueue != NULL) {
+        c = self->propagQueue;
+        self->propagQueue = c->nextPropag;
+        c->nextPropag = CSTR_PROPAGATING;
+        if(!c->propagate(self, c)) {
+            c->nextPropag = NULL;
             return false;
-        self->cstrQueued[cid] = false;
+        }
+        c->nextPropag = NULL;
     }
     return true;
 }
@@ -296,13 +294,12 @@ bool propagate(Solver* self) {
  * Queue a constraint for propagation if it is not yet in the queue.
  *
  * @param self a solver instance
- * @param cid constraint id
+ * @param c the constraint
  */
-void queue_constraint(Solver* self, int cid) {
-    if(!self->cstrQueued[cid]) {
-        self->cstrQueued[cid] = true;
-        self->propagQueue[self->propagQueueSize] = cid;
-        self->propagQueueSize++;
+void queue_constraint(Solver* self, Constraint* c) {
+    if(c->nextPropag == NULL) {
+        c->nextPropag = self->propagQueue;
+        self->propagQueue = c;
     }
 }
 
@@ -313,89 +310,48 @@ void queue_constraint(Solver* self, int cid) {
  * @param x variable number
  */
 void queue_bind_event(Solver* self, int x) {
-    int i;
-    int *cstrs;
+    ConstraintList *cl;
 
-    cstrs = &self->evBind[x*self->maxCstrs];
-    for(i = 0; i < self->evBindSize[x]; i++)
-        queue_constraint(self, cstrs[i]);
+    cl = self->evBind[x];
+    while(cl != NULL) {
+        queue_constraint(self, cl->cstr);
+        cl = cl->next;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Posting constraints
 
-/**
- * Expand the structures to be able to hold more constraints.
- * This assumes the propagation queue is empty.
- *
- * @param self a solver instance
- */
-void expand_max_constraints(Solver* self) {
-    int x;
-    int oldSize, newSize;
-    int *evBind;
-
-    oldSize = self->maxCstrs;
-    newSize = oldSize * 2;
-    self->maxCstrs = newSize;
-
-    self->constraints = (Constraint*) realloc(self->constraints,
-                                              newSize * sizeof(Constraint));
-
-    evBind = (int*) malloc(newSize * self->nbVars * sizeof(int));
-    for(x = 0; x < self->nbVars; x++)
-        memcpy(&evBind[x*newSize], &self->evBind[x*oldSize],
-               self->evBindSize[x] * sizeof(int));
-    free(self->evBind);
-    self->evBind = evBind;
-
-    free(self->propagQueue);
-    self->propagQueue = (int*) malloc(newSize * sizeof(int));
-    free(self->cstrQueued);
-    self->cstrQueued = (bool*) calloc(newSize, sizeof(bool));
-}
-
-/**
- * Default free callback for new constraints.
- */
-void default_free_cstr(Solver* UNUSED(solver), void* userData) {
-    if(userData != NULL)
-        free(userData);
-}
-
-Constraint* solver_create_constraint(Solver* self) {
-    int id;
-    Constraint *c;
-
-    if(self->closed)
-        return NULL;
-    if(self->nbCstrs >= self->maxCstrs)
-        expand_max_constraints(self);
-    id = self->nbCstrs++;
-    c = &self->constraints[id];
-    c->id = id;
-    c->userData = NULL;
-    c->initPropagate = NULL;
-    c->propagate = NULL;
-    c->free = default_free_cstr;
-    return c;
-}
-
 void solver_post(Solver* self, Constraint* c) {
+    if(self->closed) {
+        if(c->free != NULL)
+            c->free(self, c);
+        free(c);
+        return;
+    }
+    c->next = self->constraints;
+    c->nextPropag = NULL;
+    self->constraints = c;
     if(c->initPropagate != NULL) {
-        self->cstrQueued[c->id] = true; // ignore events during initial propagation
-        if(!c->initPropagate(self, c->userData)) {
+        c->nextPropag = CSTR_PROPAGATING; // ignore events during initial propagation
+        if(!c->initPropagate(self, c)) {
+            c->nextPropag = NULL;
             self->closed = true;
             return;
         }
-        self->cstrQueued[c->id] = false;
+        c->nextPropag = NULL;
     }
     if(!propagate(self))
         self->closed = true;
 }
 
 void solver_register_bind(Solver* self, Constraint* c, int x) {
-    self->evBind[x*self->maxCstrs + self->evBindSize[x]++] = c->id;
+    ConstraintList *cl;
+
+    cl = (ConstraintList*) malloc(sizeof(ConstraintList));
+    cl->cstr = c;
+    cl->next = self->evBind[x];
+    self->evBind[x] = cl;
 }
 
 void solver_label(Solver* self, int x, int v) {
@@ -447,6 +403,7 @@ void solver_add_order(Solver* self, int x,
 int backtrack(Solver* self) {
     int x, v;
     Checkpoint *chkp;
+    Constraint *c;
 
     self->statBacktracks++;
     if(self->trail == NULL)
@@ -461,8 +418,11 @@ int backtrack(Solver* self) {
     self->nextOrder = chkp->nextOrder;
     free(chkp);
     // clear propagation queue
-    self->propagQueueSize = 0;
-    memset(self->cstrQueued, false, self->nbCstrs * sizeof(bool));
+    while(self->propagQueue != NULL) {
+        c = self->propagQueue;
+        self->propagQueue = c->nextPropag;
+        c->nextPropag = NULL;
+    }
     // remove old (failed) choice
     if(!solver_var_remove(self, x, v)) {
         self->statBacktracks--; // branch finished: does not count as backtrack

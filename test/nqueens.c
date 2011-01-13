@@ -25,38 +25,36 @@
 // Constraint x != y + d
 
 typedef struct {
+    Constraint cstr;
     int x;
     int y;
     int d;
 } DiffConstraint;
 
-bool cstr_diff_propagate(Solver* solver, DiffConstraint* data) {
-    if(solver_var_bound(solver, data->x))
-        return solver_var_remove(solver, data->y,
-                                 solver_var_value(solver, data->x) - data->d);
+bool cstr_diff_propagate(Solver* solver, DiffConstraint* c) {
+    if(solver_var_bound(solver, c->x))
+        return solver_var_remove(solver, c->y,
+                                 solver_var_value(solver, c->x) - c->d);
     else
-        return solver_var_remove(solver, data->x,
-                                 solver_var_value(solver, data->y) + data->d);
+        return solver_var_remove(solver, c->x,
+                                 solver_var_value(solver, c->y) + c->d);
 }
 
 void post_diff(Solver* solver, int x, int y, int d) {
-    Constraint *c;
-    DiffConstraint *data;
+    DiffConstraint *c;
 
-    c = solver_create_constraint(solver);
-    data = (DiffConstraint*) malloc(sizeof(DiffConstraint));
-    data->x = x;
-    data->y = y;
-    data->d = d;
-    c->userData = data;
-    c->propagate = (bool (*)(Solver*, void*)) cstr_diff_propagate;
-    if(solver_var_bound(solver, data->x) || solver_var_bound(solver, data->y)) {
-        c->initPropagate = c->propagate;
+    CREATE_CONSTRAINT(c, DiffConstraint);
+    c->x = x;
+    c->y = y;
+    c->d = d;
+    c->cstr.propagate = (bool (*)(Solver*, Constraint*)) cstr_diff_propagate;
+    if(solver_var_bound(solver, x) || solver_var_bound(solver, y)) {
+        c->cstr.initPropagate = c->cstr.propagate;
     } else {
-        solver_register_bind(solver, c, data->x);
-        solver_register_bind(solver, c, data->y);
+        solver_register_bind(solver, (Constraint*) c, x);
+        solver_register_bind(solver, (Constraint*) c, y);
     }
-    solver_post(solver, c);
+    solver_post(solver, (Constraint*) c);
 }
 
 

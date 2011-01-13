@@ -12,7 +12,8 @@ HEADERS += \
     model.h \
     stores/store_sqlite.h \
     query.h \
-    expression.h
+    expression.h \
+    xsddecimal.h
 
 SOURCES += \
     castor.c \
@@ -21,4 +22,5 @@ SOURCES += \
     model.c \
     store.c \
     query.c \
-    expression.c
+    expression.c \
+    xsddecimal.c

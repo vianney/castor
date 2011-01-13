@@ -160,15 +160,15 @@ int visit_get_variables(Expression* expr, int* vars, bool* varIncluded) {
         return visit_get_variables(expr->castArg, vars, varIncluded);
     case EXPR_OP_CALL:
         for(i = 0; i < expr->nbArgs; i++)
-            count += visit_get_variables(expr->args[i], vars, varIncluded);
+            count += visit_get_variables(expr->args[i], vars+count, varIncluded);
         break;
     default:
         if(expr->arg1 != NULL)
-            count += visit_get_variables(expr->arg1, vars, varIncluded);
+            count += visit_get_variables(expr->arg1, vars+count, varIncluded);
         if(expr->arg2 != NULL)
-            count += visit_get_variables(expr->arg2, vars, varIncluded);
+            count += visit_get_variables(expr->arg2, vars+count, varIncluded);
         if(expr->arg3 != NULL)
-            count += visit_get_variables(expr->arg3, vars, varIncluded);
+            count += visit_get_variables(expr->arg3, vars+count, varIncluded);
     }
     return count;
 }
@@ -201,12 +201,12 @@ int eval_ebv(Query* query, Expression* expr, Value* val) {
         return -1;
     if(val->type == VALUE_TYPE_BOOLEAN)
         result = val->boolean ? 1 : 0;
-    else if (val->type >= VALUE_TYPE_FIRST_INTEGER &&
-             val->type <= VALUE_TYPE_LAST_INTEGER)
+    else if (IS_VALUE_TYPE_INTEGER(val->type))
         result = val->integer ? 1 : 0;
-    else if(val->type >= VALUE_TYPE_FIRST_FLOATING &&
-            val->type <= VALUE_TYPE_LAST_FLOATING)
+    else if(IS_VALUE_TYPE_FLOATING(val->type))
         result = isnan(val->floating) || val->floating == .0 ? 0 : 1;
+    else if(val->type == VALUE_TYPE_DECIMAL)
+        result = xsddecimal_iszero(val->decimal) ? 0 : 1;
     else if(val->type == VALUE_TYPE_PLAIN_STRING ||
             val->type == VALUE_TYPE_TYPED_STRING)
         result = val->lexical[0] == '\0' ? 0 : 1;
@@ -269,6 +269,23 @@ void eval_make_double(double value, Value* result) {
 }
 
 /**
+ * Make a xsd:decimal
+ *
+ * @param value the value (ownership taken)
+ * @param result value to create
+ */
+void eval_make_decimal(XSDDecimal* value, Value* result) {
+    result->id = -1;
+    result->type = VALUE_TYPE_DECIMAL;
+    result->typeUri = VALUETYPE_URIS[VALUE_TYPE_DECIMAL];
+    result->language = 0;
+    result->languageTag = NULL;
+    result->lexical = NULL;
+    result->cleanup = VALUE_CLEAN_DECIMAL;
+    result->decimal = value;
+}
+
+/**
  * Make a simple literal
  *
  * @param lexical the lexical form
@@ -300,6 +317,49 @@ void eval_make_iri(char* lexical, bool freeLexical, Value* result) {
     result->languageTag = NULL;
     result->lexical = lexical;
     result->cleanup = freeLexical ? VALUE_CLEAN_LEXICAL : VALUE_CLEAN_NOTHING;
+}
+
+/**
+ * Apply numeric type promotion rules to make arg1 and arg2 the same type to
+ * evaluate arithmetic operators.
+ *
+ * @param arg1 first numeric value
+ * @param arg2 second numeric value
+ */
+void eval_numeric_type_promotion(Value* arg1, Value* arg2) {
+    if(arg1->type == VALUE_TYPE_DECIMAL && IS_VALUE_TYPE_INTEGER(arg2->type)) {
+        // convert arg2 to xsd:decimal
+        XSDDecimal *d;
+        d = new_xsddecimal();
+        xsddecimal_set_integer(d, arg2->integer);
+        model_value_clean(arg2);
+        eval_make_decimal(d, arg2);
+    } else if(arg2->type == VALUE_TYPE_DECIMAL && IS_VALUE_TYPE_INTEGER(arg1->type)) {
+        // convert arg1 to xsd:decimal
+        XSDDecimal *d;
+        d = new_xsddecimal();
+        xsddecimal_set_integer(d, arg1->integer);
+        model_value_clean(arg1);
+        eval_make_decimal(d, arg1);
+    } else if(IS_VALUE_TYPE_FLOATING(arg1->type) && !IS_VALUE_TYPE_FLOATING(arg2->type)) {
+        // convert arg2 to xsd:double
+        double d;
+        if(arg1->type == VALUE_TYPE_DECIMAL)
+            d = xsddecimal_get_floating(arg1->decimal);
+        else // integer
+            d = (double) arg1->integer;
+        model_value_clean(arg1);
+        eval_make_double(d, arg1);
+    } else if(IS_VALUE_TYPE_FLOATING(arg2->type) && !IS_VALUE_TYPE_FLOATING(arg1->type)) {
+        // convert arg1 to xsd:double
+        double d;
+        if(arg2->type == VALUE_TYPE_DECIMAL)
+            d = xsddecimal_get_floating(arg2->decimal);
+        else // integer
+            d = (double) arg2->integer;
+        model_value_clean(arg2);
+        eval_make_double(d, arg2);
+    }
 }
 
 typedef bool (*eval_fn)(Query* query, Expression* expr, Value* result);
@@ -334,8 +394,7 @@ bool eval_bang(Query* query, Expression* expr, Value* result) {
 bool eval_uplus(Query* query, Expression* expr, Value* result) {
     if(!expression_evaluate(query, expr->arg1, result))
         return false;
-    if(result->type < VALUE_TYPE_FIRST_NUMERIC ||
-       result->type > VALUE_TYPE_LAST_NUMERIC) {
+    if(!IS_VALUE_TYPE_NUMERIC(result->type)) {
         model_value_clean(result);
         return false;
     }
@@ -343,23 +402,32 @@ bool eval_uplus(Query* query, Expression* expr, Value* result) {
 }
 
 bool eval_uminus(Query* query, Expression* expr, Value* result) {
-    long i;
-    double d;
-
     if(!expression_evaluate(query, expr->arg1, result))
         return false;
 
-    if(result->type >= VALUE_TYPE_FIRST_INTEGER &&
-       result->type <= VALUE_TYPE_LAST_INTEGER) {
+    if(IS_VALUE_TYPE_INTEGER(result->type)) {
+        long i;
         i = -result->integer;
         model_value_clean(result);
         eval_make_integer(i, result);
         result->integer = -result->integer;
-    } else if(result->type >= VALUE_TYPE_FIRST_FLOATING &&
-            result->type <= VALUE_TYPE_LAST_FLOATING) {
+    } else if(IS_VALUE_TYPE_FLOATING(result->type)) {
+        double d;
         d = -result->floating;
         model_value_clean(result);
         eval_make_double(d, result);
+    } else if(result->type == VALUE_TYPE_DECIMAL) {
+        XSDDecimal *d;
+        if(result->cleanup & VALUE_CLEAN_DECIMAL) {
+            d = result->decimal;
+            result->cleanup &= ~VALUE_TYPE_DECIMAL;
+        } else {
+            d = new_xsddecimal();
+            xsddecimal_copy(d, result->decimal);
+        }
+        xsddecimal_negate(d);
+        model_value_clean(result);
+        eval_make_decimal(d, result);
     } else {
         model_value_clean(result);
         return false;
@@ -418,6 +486,7 @@ bool eval_str(Query* query, Expression* expr, Value* result) {
         model_value_clean(result);
         return false;
     }
+    model_value_ensure_lexical(result);
     lex = result->lexical;
     freeLex = result->cleanup & VALUE_CLEAN_LEXICAL,
     result->cleanup &= ~VALUE_CLEAN_LEXICAL;
@@ -437,6 +506,8 @@ bool eval_lang(Query* query, Expression* expr, Value* result) {
         return false;
     }
     lang = result->languageTag;
+    if(lang == NULL)
+        lang = "";
     freeLang = result->cleanup & VALUE_CLEAN_LANGUAGE_TAG;
     result->cleanup &= ~VALUE_CLEAN_LANGUAGE_TAG;
     model_value_clean(result);
@@ -558,11 +629,9 @@ EVAL_CMP(le, <=)
 EVAL_CMP(ge, >=)
 #undef EVAL_CMP
 
-#define EVAL_ARITHMETIC(fn, op) \
+#define EVAL_ARITHMETIC(fn, op, opdec) \
     bool eval_ ## fn (Query* query, Expression* expr, Value* result) { \
         Value right; \
-        long i1, i2; \
-        double d1, d2; \
          \
         if(!expression_evaluate(query, expr->arg1, result)) \
             return false; \
@@ -577,34 +646,44 @@ EVAL_CMP(ge, >=)
             return false; \
         } \
          \
-        if(IS_VALUE_TYPE_INTEGER(result->type) && \
-           IS_VALUE_TYPE_INTEGER(right.type)) { \
-            i1 = result->integer; \
-            i2 = right.integer; \
+        eval_numeric_type_promotion(result, &right); \
+         \
+        if(IS_VALUE_TYPE_INTEGER(right.type)) { \
+            long i; \
+            i = result->integer op right.integer; \
             model_value_clean(result); \
             model_value_clean(&right); \
-            eval_make_integer(i1 op i2, result); \
+            eval_make_integer(i, result); \
+        } else if(right.type == VALUE_TYPE_DECIMAL) { \
+            XSDDecimal *d; \
+            if(result->cleanup & VALUE_CLEAN_DECIMAL) { \
+                d = result->decimal; \
+                result->cleanup &= ~VALUE_TYPE_DECIMAL; \
+            } else { \
+                d = new_xsddecimal(); \
+                xsddecimal_copy(d, result->decimal); \
+            } \
+            xsddecimal_ ## opdec(d, right.decimal); \
+            model_value_clean(result); \
+            model_value_clean(&right); \
+            eval_make_decimal(d, result); \
         } else { \
-            d1 = IS_VALUE_TYPE_FLOATING(result->type) ? \
-                 result->floating : (double) result->integer; \
-            d2 = IS_VALUE_TYPE_FLOATING(right.type) ? \
-                 right.floating : (double) right.integer; \
+            double d; \
+            d = result->floating op right.floating; \
             model_value_clean(result); \
             model_value_clean(&right); \
-            eval_make_double(d1 op d2, result); \
+            eval_make_double(d, result); \
         } \
         return true; \
     }
 
-EVAL_ARITHMETIC(star, *)
-EVAL_ARITHMETIC(plus, +)
-EVAL_ARITHMETIC(minus, -)
+EVAL_ARITHMETIC(star, *, multiply)
+EVAL_ARITHMETIC(plus, +, add)
+EVAL_ARITHMETIC(minus, -, substract)
 #undef EVAL_ARITHMETIC
 
 bool eval_slash(Query* query, Expression* expr, Value* result) {
     Value right;
-    long i1, i2;
-    double d1, d2;
 
     if(!expression_evaluate(query, expr->arg1, result))
         return false;
@@ -619,23 +698,38 @@ bool eval_slash(Query* query, Expression* expr, Value* result) {
         return false;
     }
 
-    if(IS_VALUE_TYPE_INTEGER(result->type) &&
-       IS_VALUE_TYPE_INTEGER(right.type)) {
-        i1 = result->integer;
-        i2 = right.integer;
+    eval_numeric_type_promotion(result, &right);
+
+    if(IS_VALUE_TYPE_INTEGER(right.type)) {
+        XSDDecimal *d1, *d2;
+        d1 = new_xsddecimal();
+        xsddecimal_set_integer(d1, result->integer);
+        d2 = new_xsddecimal();
+        xsddecimal_set_integer(d2, right.integer);
+        xsddecimal_divide(d1, d2);
+        free_xsddecimal(d2);
         model_value_clean(result);
         model_value_clean(&right);
-        if(i2 == 0)
-            return false;
-        eval_make_double((double) i1 / (double) i2, result); // FIXME should be decimal
+        eval_make_decimal(d1, result);
+    } else if(right.type == VALUE_TYPE_DECIMAL) {
+        XSDDecimal *d;
+        if(result->cleanup & VALUE_CLEAN_DECIMAL) {
+            d = result->decimal;
+            result->cleanup &= ~VALUE_TYPE_DECIMAL;
+        } else {
+            d = new_xsddecimal();
+            xsddecimal_copy(d, result->decimal);
+        }
+        xsddecimal_divide(d, right.decimal);
+        model_value_clean(result);
+        model_value_clean(&right);
+        eval_make_decimal(d, result);
     } else {
-        d1 = IS_VALUE_TYPE_FLOATING(result->type) ?
-             result->floating : (double) result->integer;
-        d2 = IS_VALUE_TYPE_FLOATING(right.type) ?
-             right.floating : (double) right.integer;
+        double d;
+        d = result->floating / right.floating;
         model_value_clean(result);
         model_value_clean(&right);
-        eval_make_double(d1 / d2, result);
+        eval_make_double(d, result);
     }
     return true;
 }

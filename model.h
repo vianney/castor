@@ -19,6 +19,7 @@
 #define MODEL_H
 
 #include "defs.h"
+#include "xsddecimal.h"
 
 /**
  * Standard value type ids. Higher ids means custom URI.
@@ -58,7 +59,7 @@ typedef enum {
     VALUE_TYPE_FIRST_INTEGER = VALUE_TYPE_INTEGER,
     VALUE_TYPE_LAST_INTEGER = VALUE_TYPE_UNSIGNEDLONG,
     VALUE_TYPE_FIRST_FLOATING = VALUE_TYPE_FLOAT,
-    VALUE_TYPE_LAST_FLOATING = VALUE_TYPE_DECIMAL
+    VALUE_TYPE_LAST_FLOATING = VALUE_TYPE_DOUBLE
 } ValueType;
 
 #define IS_VALUE_TYPE_XSD(type) \
@@ -107,7 +108,11 @@ typedef enum {
     /**
      * The caller should free the lexical form
      */
-    VALUE_CLEAN_LEXICAL = 4
+    VALUE_CLEAN_LEXICAL = 4,
+    /**
+     * The caller should free the xsd:decimal representation
+     */
+    VALUE_CLEAN_DECIMAL = 8
 } ValueCleanFlags;
 
 /**
@@ -160,10 +165,15 @@ typedef struct {
          */
         double floating;
         /**
+         * xsd:decimal representation of the lexical. Unspecified if type is not
+         * VALUE_TYPE_DECIMAL.
+         */
+        XSDDecimal* decimal;
+        /**
          * Date and time representation of the lexical. Unspecified if type is
          * not VALUE_TYPE_DATETIME.
          */
-        DateTime datetime;
+        DateTime* datetime;
     };
 } Value;
 

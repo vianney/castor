@@ -26,35 +26,50 @@
 typedef struct TSolver Solver;
 
 /**
- * Structure for defining constraints.
+ * Structure for defining constraints. Implementations may "subclass" this
+ * structure (i.e., make a structure with a Constraint as its first member).
  */
-typedef struct {
-    /**
-     * Identifier of this constraint. Should not be modified.
-     */
-    int id;
-    /**
-     * User data associated to this constraint.
-     */
-    void* userData;
+typedef struct TConstraint Constraint;
+struct TConstraint {
     /**
      * Initial propagation callback. It is called during solver_post if it is
      * not NULL. It should perform the initial propagation and return true if
      * all went well or false if the propagation failed.
      */
-    bool (*initPropagate)(Solver* solver, void* userData);
+    bool (*initPropagate)(Solver* solver, Constraint* c);
     /**
      * Propagate callback. It is called when an event this contraint has
      * registered to, has been triggered. It should propagate this event and
      * return true if all went well or false if the propagation failed.
      */
-    bool (*propagate)(Solver* solver, void* userData);
+    bool (*propagate)(Solver* solver, Constraint* c);
     /**
-     * Free callback. Clean up your structures (in particular user_data) here.
-     * The default is the free userData if it is not NULL.
+     * Free callback called before the whole structure is freed. Clean up your
+     * structures here.
      */
-    void (*free)(Solver* solver, void* userData);
-} Constraint;
+    void (*free)(Solver* solver, Constraint* c);
+    /**
+     * Internal use by solver. No need to initialize.
+     * Next constraint in linked list of posted constraints.
+     */
+    Constraint *next;
+    /**
+     * Internal use by solver. No need to initialize.
+     * Next constraint in propagation queue.
+     * NULL iff the constraint has not been queued and is not currently
+     * propagating.
+     */
+    Constraint *nextPropag;
+};
+
+/**
+ * Macro to create and initialize a constraint of a certain subtype.
+ */
+#define CREATE_CONSTRAINT(var, Type) \
+    (var) = (Type*) malloc(sizeof(Type)); \
+    ((Constraint*)(var))->initPropagate = NULL; \
+    ((Constraint*)(var))->propagate = NULL; \
+    ((Constraint*)(var))->free = NULL;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constructor and destructor
@@ -79,20 +94,7 @@ void free_solver(Solver* self);
 // Posting constraints
 
 /**
- * Create a new constraint. After this call, the user should complement the
- * structure by defining the callbacks and optionnaly setting userData. He
- * should also register to variable events. Finally, he should call solver_post
- * before any other constraint creation, posting or searching occurs.
- *
- * No constraints may be created once the search has begun.
- *
- * @param self a solver instance
- * @return constraint structure or NULL if the search has begun
- */
-Constraint* solver_create_constraint(Solver* self);
-
-/**
- * Post a constraint. This should be called after solver_create_constraint.
+ * Post a constraint. The solver takes ownership of the constraint.
  *
  * @param self a solver instance
  * @param c the constraint
@@ -102,7 +104,7 @@ void solver_post(Solver* self, Constraint* c);
 /**
  * Register constraint c to the bind event of constraint x. A constraint must
  * not register twice for the same variable.
- * This should only be called when posting a constraint.
+ * This should be called just before solver_post.
  *
  * @param self a solver instance
  * @param c the constraint

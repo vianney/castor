@@ -60,6 +60,10 @@ void model_value_clean(Value* val) {
         free(val->lexical);
         val->lexical = NULL;
     }
+    if(val->cleanup & VALUE_CLEAN_DECIMAL) {
+        free_xsddecimal(val->decimal);
+        val->decimal = NULL;
+    }
     val->cleanup = VALUE_CLEAN_NOTHING;
 }
 
@@ -74,11 +78,20 @@ int model_value_compare(Value* arg1, Value* arg2) {
             if(i < 0) return -1;
             else if(i > 0) return 1;
             else return 0;
+        } else if(arg1->type == VALUE_TYPE_DECIMAL &&
+                  arg2->type == VALUE_TYPE_DECIMAL) {
+            return xsddecimal_compare(arg1->decimal, arg2->decimal);
         } else {
             d1 = IS_VALUE_TYPE_FLOATING(arg1->type) ?
-                 arg1->floating : (double) arg1->integer;
+                 arg1->floating :
+                 (arg1->type == VALUE_TYPE_DECIMAL ?
+                  xsddecimal_get_floating(arg1->decimal) :
+                  (double) arg1->integer);
             d2 = IS_VALUE_TYPE_FLOATING(arg2->type) ?
-                 arg2->floating : (double) arg2->integer;
+                 arg2->floating :
+                 (arg2->type == VALUE_TYPE_DECIMAL ?
+                  xsddecimal_get_floating(arg2->decimal) :
+                  (double) arg2->integer);
             d = d1 - d2;
             if(d < .0) return -1;
             else if(d > .0) return 1;
@@ -133,17 +146,18 @@ void model_value_ensure_lexical(Value* val) {
     if(val->lexical == NULL) {
         if(val->type == VALUE_TYPE_BOOLEAN) {
             val->lexical = val->integer ? "true" : "false";
-        } else if(val->type >= VALUE_TYPE_FIRST_INTEGER &&
-                  val->type <= VALUE_TYPE_LAST_INTEGER) {
+        } else if(IS_VALUE_TYPE_INTEGER(val->type)) {
             len = snprintf(NULL, 0, "%ld", val->integer);
             val->lexical = (char*) malloc(len * sizeof(char));
             sprintf(val->lexical, "%ld", val->integer);
             val->cleanup |= VALUE_CLEAN_LEXICAL;
-        } else if(val->type >= VALUE_TYPE_FIRST_FLOATING &&
-                  val->type <= VALUE_TYPE_LAST_FLOATING) {
+        } else if(IS_VALUE_TYPE_FLOATING(val->type)) {
             len = snprintf(NULL, 0, "%f", val->floating);
             val->lexical = (char*) malloc(len * sizeof(char));
             sprintf(val->lexical, "%f", val->floating);
+            val->cleanup |= VALUE_CLEAN_LEXICAL;
+        } else if(val->type == VALUE_TYPE_DECIMAL) {
+            val->lexical = xsddecimal_get_string(val->decimal);
             val->cleanup |= VALUE_CLEAN_LEXICAL;
         } else if(val->type == VALUE_TYPE_DATETIME) {
             // TODO
@@ -155,7 +169,7 @@ void model_value_ensure_lexical(Value* val) {
 }
 
 char* model_value_string(Value* val) {
-    char *result;
+    char *result, *tmp;
     int lexlen, len;
 
     lexlen = val->lexical == NULL ? 0 : strlen(val->lexical);
@@ -191,12 +205,14 @@ char* model_value_string(Value* val) {
         if(val->lexical == NULL) {
             if(val->type == VALUE_TYPE_BOOLEAN)
                 lexlen = val->integer ? 4 : 5;
-            else if(val->type >= VALUE_TYPE_FIRST_INTEGER &&
-                    val->type <= VALUE_TYPE_LAST_INTEGER)
+            else if(IS_VALUE_TYPE_INTEGER(val->type))
                 lexlen = snprintf(NULL, 0, "%ld", val->integer);
-            else if(val->type >= VALUE_TYPE_FIRST_FLOATING &&
-                    val->type <= VALUE_TYPE_LAST_FLOATING)
+            else if(IS_VALUE_TYPE_FLOATING(val->type))
                 lexlen = snprintf(NULL, 0, "%f", val->floating);
+            else if(val->type == VALUE_TYPE_DECIMAL) {
+                tmp = xsddecimal_get_string(val->decimal);
+                lexlen = strlen(tmp);
+            }
             // TODO datetime
         }
         len = lexlen + strlen(val->typeUri) + 5;
@@ -205,12 +221,14 @@ char* model_value_string(Value* val) {
         if(val->lexical == NULL) {
             if(val->type == VALUE_TYPE_BOOLEAN)
                 strcpy(result+1, val->integer ? "true" : "false");
-            else if(val->type >= VALUE_TYPE_FIRST_INTEGER &&
-                    val->type <= VALUE_TYPE_LAST_INTEGER)
+            else if(IS_VALUE_TYPE_INTEGER(val->type))
                 sprintf(result+1, "%ld", val->integer);
-            else if(val->type >= VALUE_TYPE_FIRST_FLOATING &&
-                    val->type <= VALUE_TYPE_LAST_FLOATING)
+            else if(IS_VALUE_TYPE_FLOATING(val->type))
                 sprintf(result+1, "%f", val->floating);
+            else if(val->type == VALUE_TYPE_DECIMAL) {
+                strcpy(result+1, tmp);
+                free(tmp);
+            }
             // TODO datetime
         } else {
             strcpy(result+1, val->lexical);

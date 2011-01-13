@@ -2,10 +2,11 @@ INCLUDEPATH += ..
 LIBS += -L.. -lsolver
 
 CONFIG += link_pkgconfig
-PKGCONFIG += sqlite3 raptor
+PKGCONFIG += sqlite3 raptor rasqal
 
-HEADERS += ../model.h
+HEADERS += ../model.h ../xsddecimal.h
 
 SOURCES += \
     createsqlite.c \
-    ../model.c
+    ../model.c \
+    ../xsddecimal.c
