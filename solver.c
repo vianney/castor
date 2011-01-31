@@ -169,7 +169,6 @@ struct TSolver {
 
 Solver* new_solver(int nbVars, int nbVals) {
     int x, v;
-    int maxCstrs;
     Solver *self;
     int *dom, *map;
 
@@ -177,32 +176,39 @@ Solver* new_solver(int nbVars, int nbVals) {
 
     self->nbVars = nbVars;
     self->maxVals = nbVals;
-    self->domSize = (int*) malloc(nbVars * sizeof(int));
-    for(x = 0; x < nbVars; x++)
-        self->domSize[x] = nbVals;
-    self->domain = (int**) malloc(nbVars * sizeof(int*));
-    self->domMap = (int**) malloc(nbVars * sizeof(int*));
-    // create one big array for all the domains and just store pointers to the
-    // relevant parts
-    dom = (int*) malloc(nbVars * nbVals * sizeof(int));
-    map = (int*) malloc(nbVars * nbVals * sizeof(int));
-    self->domain[0] = dom;
-    self->domMap[0] = map;
-    for(v = 0; v < nbVals; v++) {
-        dom[v] = v;
-        map[v] = v;
+    if(self->nbVars > 0) {
+        self->domSize = (int*) malloc(nbVars * sizeof(int));
+        for(x = 0; x < nbVars; x++)
+            self->domSize[x] = nbVals;
+        self->domain = (int**) malloc(nbVars * sizeof(int*));
+        self->domMap = (int**) malloc(nbVars * sizeof(int*));
+        // create one big array for all the domains and just store pointers to the
+        // relevant parts
+        dom = (int*) malloc(nbVars * nbVals * sizeof(int));
+        map = (int*) malloc(nbVars * nbVals * sizeof(int));
+        self->domain[0] = dom;
+        self->domMap[0] = map;
+        for(v = 0; v < nbVals; v++) {
+            dom[v] = v;
+            map[v] = v;
+        }
+        for(x = 1; x < nbVars; x++) {
+            self->domain[x] = &dom[x*nbVals];
+            memcpy(self->domain[x], dom, nbVals * sizeof(int));
+            self->domMap[x] = &map[x*nbVals];
+            memcpy(self->domMap[x], map, nbVals * sizeof(int));
+        }
+        self->domMarked = (int*) calloc(nbVars, sizeof(int));
+        self->evBind = (ConstraintList**) calloc(nbVars, sizeof(ConstraintList*));
+    } else {
+        self->domSize = NULL;
+        self->domain = NULL;
+        self->domMap = NULL;
+        self->domMarked = NULL;
+        self->evBind = NULL;
     }
-    for(x = 1; x < nbVars; x++) {
-        self->domain[x] = &dom[x*nbVals];
-        memcpy(self->domain[x], dom, nbVals * sizeof(int));
-        self->domMap[x] = &map[x*nbVals];
-        memcpy(self->domMap[x], map, nbVals * sizeof(int));
-    }
-    self->domMarked = (int*) calloc(nbVars, sizeof(int));
 
     self->constraints = NULL;
-    self->evBind = (ConstraintList**) calloc(nbVars, sizeof(ConstraintList*));
-
     self->propagQueue = NULL;
 
     self->nextOrder = NULL;
@@ -241,7 +247,6 @@ void free_solver(Solver* self) {
             free(cl);
         }
     }
-    free(self->evBind);
     while(self->constraints != NULL) {
         c = self->constraints;
         self->constraints = c->next;
@@ -249,12 +254,15 @@ void free_solver(Solver* self) {
             c->free(self, c);
         free(c);
     }
-    free(self->domMarked);
-    free(self->domMap[0]);
-    free(self->domMap);
-    free(self->domain[0]);
-    free(self->domain);
-    free(self->domSize);
+    if(self->nbVars > 0) {
+        free(self->evBind);
+        free(self->domMarked);
+        free(self->domMap[0]);
+        free(self->domMap);
+        free(self->domain[0]);
+        free(self->domain);
+        free(self->domSize);
+    }
     free(self);
 }
 

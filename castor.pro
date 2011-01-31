@@ -1,5 +1,4 @@
 CONFIG -= QT
-LIBS += -L. -lsolver
 
 CONFIG += link_pkgconfig
 PKGCONFIG += raptor rasqal
@@ -7,6 +6,7 @@ PKGCONFIG += sqlite3
 
 HEADERS += \
     defs.h \
+    solver.h \
     constraints.h \
     store.h \
     model.h \
@@ -17,6 +17,7 @@ HEADERS += \
 
 SOURCES += \
     castor.c \
+    solver.c \
     constraints.c \
     stores/store_sqlite.c \
     model.c \

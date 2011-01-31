@@ -224,7 +224,7 @@ int eval_ebv(Query* query, Expression* expr, Value* val) {
  * @param result value to create
  */
 void eval_make_boolean(bool value, Value* result) {
-    result->id = -1;
+    result->id = 0;
     result->type = VALUE_TYPE_BOOLEAN;
     result->typeUri = VALUETYPE_URIS[VALUE_TYPE_BOOLEAN];
     result->language = 0;
@@ -241,7 +241,7 @@ void eval_make_boolean(bool value, Value* result) {
  * @param result value to create
  */
 void eval_make_integer(long value, Value* result) {
-    result->id = -1;
+    result->id = 0;
     result->type = VALUE_TYPE_INTEGER;
     result->typeUri = VALUETYPE_URIS[VALUE_TYPE_INTEGER];
     result->language = 0;
@@ -258,7 +258,7 @@ void eval_make_integer(long value, Value* result) {
  * @param result value to create
  */
 void eval_make_double(double value, Value* result) {
-    result->id = -1;
+    result->id = 0;
     result->type = VALUE_TYPE_DOUBLE;
     result->typeUri = VALUETYPE_URIS[VALUE_TYPE_DOUBLE];
     result->language = 0;
@@ -275,7 +275,7 @@ void eval_make_double(double value, Value* result) {
  * @param result value to create
  */
 void eval_make_decimal(XSDDecimal* value, Value* result) {
-    result->id = -1;
+    result->id = 0;
     result->type = VALUE_TYPE_DECIMAL;
     result->typeUri = VALUETYPE_URIS[VALUE_TYPE_DECIMAL];
     result->language = 0;
@@ -293,7 +293,7 @@ void eval_make_decimal(XSDDecimal* value, Value* result) {
  * @param result value to create
  */
 void eval_make_simple_literal(char* lexical, bool freeLexical, Value* result) {
-    result->id = -1;
+    result->id = 0;
     result->type = VALUE_TYPE_PLAIN_STRING;
     result->typeUri = NULL;
     result->language = 0;
@@ -310,7 +310,7 @@ void eval_make_simple_literal(char* lexical, bool freeLexical, Value* result) {
  * @param result value to create
  */
 void eval_make_iri(char* lexical, bool freeLexical, Value* result) {
-    result->id = -1;
+    result->id = 0;
     result->type = VALUE_TYPE_IRI;
     result->typeUri = NULL;
     result->language = 0;

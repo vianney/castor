@@ -1,5 +1,9 @@
 INCLUDEPATH += ..
-LIBS += -L.. -lsolver
+
+HEADERS += \
+    ../defs.h \
+    ../solver.h
 
 SOURCES += \
+    ../solver.c \
     nqueens.c

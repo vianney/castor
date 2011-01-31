@@ -47,6 +47,10 @@ struct TQuery {
      */
     Store *store;
     /**
+     * Type of query
+     */
+    QueryType type;
+    /**
      * Number of variables
      */
     int nbVars;
@@ -83,7 +87,7 @@ struct TQuery {
  * @param self a query instance (store and variables should be initialized)
  * @param literal a rasqal literal
  * @return the positive id of the literal in the store, a negative value for
- *         a variable or -self->nbVars - 1 if unknown
+ *         a variable or 0 if unknown
  */
 int get_value_id(Query* self, rasqal_literal* literal) {
     ValueType type;
@@ -91,7 +95,6 @@ int get_value_id(Query* self, rasqal_literal* literal) {
     int id;
 
     if(literal->type == RASQAL_LITERAL_VARIABLE) {
-
         return -((Variable*) literal->value.variable->user_data)->id - 1;
     } else {
         lexical = (const char*) literal->string;
@@ -133,13 +136,13 @@ int get_value_id(Query* self, rasqal_literal* literal) {
         default:
             fprintf(stderr, "castor query: unknown rasqal literal type %d\n",
                     literal->type);
-            return -self->nbVars - 1;
+            return 0;
         }
 
         id = store_value_get_id(self->store, type, typeUri, lexical,
                                 literal->language);
         if(id < 0)
-            return -self->nbVars - 1;
+            return 0;
         else
             return id;
     }
@@ -177,11 +180,11 @@ Expression* convert_expression(Query* self, rasqal_expression* expr) {
                     ((Variable*) lit->value.variable->user_data)->id);
         } else {
             i = get_value_id(self, lit);
-            if(i >= 0)
+            if(i > 0)
                 return new_expression_value(store_value_get(self->store, i),
                                             false);
             val = (Value*) malloc(sizeof(Value));
-            val->id = -1;
+            val->id = 0;
             val->language = 0;
             val->languageTag = NULL;
             val->lexical = NULL;
@@ -380,9 +383,27 @@ Query* new_query(Store* store, char* queryString) {
     self = (Query*) malloc(sizeof(Query));
     self->store = store;
 
+    // information
+    switch(rasqal_query_get_verb(query)) {
+    case RASQAL_QUERY_VERB_SELECT:
+        self->type = QUERY_TYPE_SELECT;
+        break;
+    case RASQAL_QUERY_VERB_ASK:
+        self->type = QUERY_TYPE_ASK;
+        break;
+    default:
+        fprintf(stderr, "castor query: unsupported rasqal verb %d\n",
+                rasqal_query_get_verb(query));
+        goto cleanself;
+    }
+
     // variables
-    seq = rasqal_query_get_bound_variable_sequence(query);
-    self->nbRequestedVars = raptor_sequence_size(seq);
+    if(self->type == QUERY_TYPE_SELECT) {
+        seq = rasqal_query_get_bound_variable_sequence(query);
+        self->nbRequestedVars = raptor_sequence_size(seq);
+    } else {
+        self->nbRequestedVars = 0;
+    }
     seqVars = rasqal_query_get_all_variable_sequence(query);
     nbReal = raptor_sequence_size(seqVars);
     seqAnon = rasqal_query_get_anonymous_variable_sequence(query);
@@ -414,7 +435,6 @@ Query* new_query(Store* store, char* queryString) {
     }
 
     // triple patterns
-    x = -self->nbVars - 1; // unknown id value
     seq = rasqal_query_get_triple_sequence(query);
     self->nbPatterns = raptor_sequence_size(seq);
     self->patterns = (StatementPattern*) malloc(self->nbPatterns *
@@ -425,10 +445,6 @@ Query* new_query(Store* store, char* queryString) {
         stmt->subject = get_value_id(self, triple->subject);
         stmt->predicate = get_value_id(self, triple->predicate);
         stmt->object = get_value_id(self, triple->object);
-        if(stmt->subject == x || stmt->predicate == x || stmt->object == x) {
-            fprintf(stderr, "castor query: unknown literal in triple\n");
-            goto cleanpatterns;
-        }
     }
 
     // filters
@@ -461,9 +477,7 @@ Query* new_query(Store* store, char* queryString) {
     rasqal_free_world(world);
     return self;
 
-cleanpatterns:
-    free(self->patterns);
-    free(self->vars);
+cleanself:
     free(self);
 cleanquery:
     rasqal_free_query(query);
@@ -481,6 +495,13 @@ void free_query(Query* self) {
     free(self->patterns);
     free(self->vars);
     free(self);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Information
+
+QueryType query_get_type(Query* self) {
+    return self->type;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

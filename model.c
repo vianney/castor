@@ -114,7 +114,7 @@ int model_value_compare(Value* arg1, Value* arg2) {
 }
 
 int model_value_equal(Value* arg1, Value* arg2) {
-    if(arg1->id == arg2->id)
+    if(arg1->id > 0 && arg1->id == arg2->id)
         return 1;
     if(arg1->type == VALUE_TYPE_UNKOWN || arg2->type == VALUE_TYPE_UNKOWN) {
         if(arg1->typeUri == NULL || arg2->typeUri == NULL)

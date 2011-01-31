@@ -118,9 +118,9 @@ int sqlite_store_value_count(SqliteStore* self) {
 }
 
 Value* sqlite_store_value_get(SqliteStore* self, int id) {
-    if(id < 0 || id >= self->nbValues)
+    if(id <= 0 || id > self->nbValues)
         return NULL;
-    return &self->values[id];
+    return &self->values[id-1];
 }
 
 int sqlite_store_value_get_id(SqliteStore* self, const ValueType type,
@@ -161,9 +161,9 @@ int sqlite_store_value_get_id(SqliteStore* self, const ValueType type,
 
     switch(sqlite3_step(sql)) {
     case SQLITE_ROW:
-        return sqlite3_column_int(sql, 0) - 1;
+        return sqlite3_column_int(sql, 0);
     case SQLITE_DONE:
-        return -1;
+        return 0;
     default:
         goto error;
     }
@@ -182,7 +182,7 @@ bool sqlite_store_statement_query(SqliteStore* self, int subject, int predicate,
         goto error;
 
 #define BIND(col, var) \
-    if(var >= 0 && sqlite3_bind_int(self->sqlStmt, col, var+1) != SQLITE_OK) \
+    if(var >= 0 && sqlite3_bind_int(self->sqlStmt, col, var) != SQLITE_OK) \
         goto error;
 
     BIND(1, subject)
@@ -205,9 +205,9 @@ bool sqlite_store_statement_fetch(SqliteStore* self, Statement* stmt) {
     switch(sqlite3_step(self->sqlStmt)) {
     case SQLITE_ROW:
         if(stmt != NULL) {
-            stmt->subject = sqlite3_column_int(self->sqlStmt, 0) - 1;
-            stmt->predicate = sqlite3_column_int(self->sqlStmt, 1) - 1;
-            stmt->object = sqlite3_column_int(self->sqlStmt, 2) - 1;
+            stmt->subject = sqlite3_column_int(self->sqlStmt, 0);
+            stmt->predicate = sqlite3_column_int(self->sqlStmt, 1);
+            stmt->object = sqlite3_column_int(self->sqlStmt, 2);
         }
         return true;
     case SQLITE_DONE:

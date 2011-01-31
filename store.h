@@ -34,7 +34,7 @@ struct TStore {
     // Values
     /**
      * Number of values in the store. The ids of the values will always be
-     * between 0 and the returned value minus 1 included.
+     * between 1 and the returned value included.
      *
      * @param self a store instance
      * @return the number of values in the store or -1 if error
@@ -44,7 +44,7 @@ struct TStore {
      * Get a value from the store
      *
      * @param self a store instance
-     * @param id identifier of the value (within range 0..value_count(self)-1)
+     * @param id identifier of the value (within range 1..value_count(self))
      * @return the value corresponding to id or NULL if error
      */
     Value* (*value_get)(Store* self, int id);
@@ -56,7 +56,7 @@ struct TStore {
      * @param typeUri URI of the datatype if type is VALUE_TYPE_UNKOWN
      * @param lexical lexical form
      * @param language language tag or NULL if none
-     * @return the id of the value or -1 if not found
+     * @return the id of the value or 0 if not found
      */
     int (*value_get_id)(Store* self, const ValueType type, const char* typeUri,
                         const char* lexical, const char* language);

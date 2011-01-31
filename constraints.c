@@ -38,7 +38,9 @@ bool cstr_statement_propagate(Solver* solver, StatementConstraint* c) {
     bool result;
 
 #define INIT(p, part) \
-    if(c->stmt.part >= 0) { \
+    if(c->stmt.part == 0) { \
+        return false; \
+    } else if(c->stmt.part > 0) { \
         x ## p = -1; \
         v ## p = c->stmt.part; \
     } else { \

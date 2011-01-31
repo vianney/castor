@@ -31,6 +31,8 @@
 
 #include "stores/store_sqlite.h"
 
+#define BENCHMARK
+
 #define BUFFER_SIZE 1024
 
 /**
@@ -189,13 +191,18 @@ int main(int argc, char* argv[]) {
 
     getrusage(RUSAGE_SELF, &ru[2]);
 
-    solver = new_solver(query_variable_count(query), store_value_count(store));
+    n = query_variable_count(query);
+    solver = new_solver(n, store_value_count(store) + 1);
     if(solver == NULL) {
         fprintf(stderr, "Unable to initialize solver\n");
         goto cleanquery;
     }
 
     getrusage(RUSAGE_SELF, &ru[3]);
+
+    for(i = 0; i < n; i++) {
+        solver_diff(solver, i, 0);
+    }
 
     n = query_triple_pattern_count(query);
     for(i = 0; i < n; i++) {
@@ -212,6 +219,7 @@ int main(int argc, char* argv[]) {
     nbSols = 0;
     while(solver_search(solver)) {
         nbSols++;
+#ifndef BENCHMARK
         n = query_variable_requested(query);
         for(i = 0; i < n; i++) {
             str = model_value_string(
@@ -220,6 +228,9 @@ int main(int argc, char* argv[]) {
             free(str);
         }
         printf("\n");
+#endif
+        if(query_get_type(query) == QUERY_TYPE_ASK)
+            break;
     }
 
     getrusage(RUSAGE_SELF, &ru[5]);
@@ -240,6 +251,15 @@ int main(int argc, char* argv[]) {
     PRINT_TIME("Solver post", ru[3], ru[4])
     PRINT_TIME("Solver search", ru[4], ru[5])
 #undef PRINT_TIME
+
+#ifdef BENCHMARK
+    printf("Found: %d\n", nbSols);
+    diff = (long)(ru[5].ru_utime.tv_sec + ru[5].ru_stime.tv_sec -
+                  ru[2].ru_utime.tv_sec - ru[2].ru_stime.tv_sec) * 1000L +
+           (long)(ru[5].ru_utime.tv_usec + ru[5].ru_stime.tv_usec -
+                  ru[2].ru_utime.tv_usec - ru[2].ru_stime.tv_usec) / 1000L;
+    printf("Time: %ld\n", diff);
+#endif
 
     free_solver(solver);
     free_query(query);

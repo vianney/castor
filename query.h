@@ -35,6 +35,14 @@ typedef struct TQuery Query;
  */
 typedef Statement StatementPattern;
 
+/**
+ * Query type
+ */
+typedef enum {
+    QUERY_TYPE_SELECT,
+    QUERY_TYPE_ASK
+} QueryType;
+
 ////////////////////////////////////////////////////////////////////////////////
 // Constructor and destructor
 
@@ -53,6 +61,15 @@ Query* new_query(Store* store, char* queryString);
  * @param self a query instance
  */
 void free_query(Query* self);
+
+////////////////////////////////////////////////////////////////////////////////
+// Information
+
+/**
+ * @param self a query instance
+ * @return the type of the query
+ */
+QueryType query_get_type(Query* self);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Variables

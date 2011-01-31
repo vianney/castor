@@ -120,7 +120,7 @@ typedef enum {
  */
 typedef struct {
     /**
-     * ID of the value, starting from 0. Or -1 if not part of a store.
+     * ID of the value, starting from 1. Or 0 if not part of the store.
      */
     int id;
     /**
