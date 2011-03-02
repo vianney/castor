@@ -24,7 +24,7 @@
 #include <sqlite3.h>
 #include <raptor.h>
 
-#include "../model.h"
+#include "model.h"
 
 typedef struct {
     sqlite3 *db;

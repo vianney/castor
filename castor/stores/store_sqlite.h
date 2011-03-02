@@ -23,7 +23,7 @@
  */
 
 #include "defs.h"
-#include "store.h"
+#include "../store.h"
 
 /**
  * Open an existing sqlite store
