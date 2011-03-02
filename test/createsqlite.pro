@@ -1,5 +1,4 @@
 INCLUDEPATH += ..
-LIBS += -L.. -lsolver
 
 CONFIG += link_pkgconfig
 PKGCONFIG += sqlite3 raptor rasqal
