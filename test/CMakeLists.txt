@@ -19,5 +19,5 @@ include_directories(.. ../solver ../castor)
 add_executable(nqueens nqueens.c)
 target_link_libraries(nqueens solver)
 
-add_executable(createsqlite createsqlite.c)
+add_executable(createsqlite createsqlite.c ../castor/model.c ../castor/xsddecimal.c)
 target_link_libraries(createsqlite ${LIBS})
