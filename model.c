@@ -169,7 +169,7 @@ void model_value_ensure_lexical(Value* val) {
 }
 
 char* model_value_string(Value* val) {
-    char *result, *tmp;
+    char *result, *tmp = NULL;
     int lexlen, len;
 
     lexlen = val->lexical == NULL ? 0 : strlen(val->lexical);
