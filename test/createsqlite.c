@@ -40,6 +40,7 @@ typedef struct {
     raptor_parser *parser;
     unsigned char *fileURIstr;
     raptor_uri *fileURI;
+    raptor_world* world;
 
     int count;
 } Data;
@@ -64,7 +65,7 @@ void cleanup(Data *d) {
         raptor_free_uri(d->fileURI);
     if(d->fileURIstr != NULL)
         raptor_free_memory(d->fileURIstr);
-    raptor_finish();
+    raptor_free_world(d->world);
 }
 
 void sqlerror(Data* d) {
@@ -94,10 +95,11 @@ ValueType get_type(char *uri) {
     return VALUE_TYPE_UNKOWN;
 }
 
-void add_triple(void* user_data, const raptor_statement* triple) {
+void add_triple(void* user_data, raptor_statement* triple) {
     Data *d;
     sqlite3_stmt *sql;
-    ValueType ts, tp, to;
+    ValueType ts, to;
+    char *lexs, *lexp, *lexo;
     char *typeUri;
     int lang;
 
@@ -135,47 +137,64 @@ void add_triple(void* user_data, const raptor_statement* triple) {
         BIND_NULL(col); \
     }
 
-    ts = triple->subject_type == RAPTOR_IDENTIFIER_TYPE_ANONYMOUS
-         ? VALUE_TYPE_BLANK : VALUE_TYPE_IRI;
+    switch(triple->subject->type) {
+    case RAPTOR_TERM_TYPE_BLANK:
+        ts = VALUE_TYPE_BLANK;
+        lexs = (char*) triple->subject->value.blank.string;
+        break;
+    case RAPTOR_TERM_TYPE_URI:
+        ts = VALUE_TYPE_IRI;
+        lexs = (char*) raptor_uri_as_string(triple->subject->value.uri);
+        break;
+    default:
+        fprintf(stderr, "Unknown subject type %d\n", triple->subject->type);
+        goto error;
+    }
     START_SQL(d->sqlInsertVal);
     BIND_INT(1, ts);
-    BIND_STR(2, (char*) triple->subject);
+    BIND_STR(2, lexs);
     BIND_INT(3, 0);
     BIND_NULL(4);
     STOP_SQL;
 
-    tp = triple->predicate_type == RAPTOR_IDENTIFIER_TYPE_ANONYMOUS
-         ? VALUE_TYPE_BLANK : VALUE_TYPE_IRI;
+    if(triple->predicate->type != RAPTOR_TERM_TYPE_URI) {
+        fprintf(stderr, "Unknown predicate type %d\n", triple->predicate->type);
+        goto error;
+    }
+    lexp = (char*) raptor_uri_as_string(triple->predicate->value.uri);
     START_SQL(d->sqlInsertVal);
-    BIND_INT(1, tp);
-    BIND_STR(2, (char*) triple->predicate);
+    BIND_INT(1, VALUE_TYPE_IRI);
+    BIND_STR(2, lexp);
     BIND_INT(3, 0);
     BIND_NULL(4);
     STOP_SQL;
 
-    switch(triple->object_type) {
-    case RAPTOR_IDENTIFIER_TYPE_ANONYMOUS:
+    switch(triple->object->type) {
+    case RAPTOR_TERM_TYPE_BLANK:
         to = VALUE_TYPE_BLANK;
+        lexo = (char*) triple->object->value.blank.string;
         lang = 0;
         break;
-    case RAPTOR_IDENTIFIER_TYPE_RESOURCE:
+    case RAPTOR_TERM_TYPE_URI:
         to = VALUE_TYPE_IRI;
+        lexo = (char*) raptor_uri_as_string(triple->object->value.uri);
         lang = 0;
         break;
-    case RAPTOR_IDENTIFIER_TYPE_LITERAL:
-        if(triple->object_literal_datatype == NULL)
+    case RAPTOR_TERM_TYPE_LITERAL:
+        if(triple->object->value.literal.datatype == NULL)
             typeUri = NULL;
         else
-            typeUri = (char*) raptor_uri_as_string(triple->object_literal_datatype);
+            typeUri = (char*) raptor_uri_as_string(triple->object->value.literal.datatype);
         to = get_type(typeUri);
-        if(triple->object_literal_language == NULL ||
-           triple->object_literal_language[0] == '\0')
+        lexo = (char*) triple->object->value.literal.string;
+        if(triple->object->value.literal.language == NULL ||
+           triple->object->value.literal.language[0] == '\0')
             lang = 0;
         else
             lang = -1;
         break;
     default:
-        fprintf(stderr, "Unknown object type %d\n", triple->object_type);
+        fprintf(stderr, "Unknown object type %d\n", triple->object->type);
         goto error;
     }
 
@@ -187,56 +206,56 @@ void add_triple(void* user_data, const raptor_statement* triple) {
 
     if(lang == -1) {
         START_SQL(d->sqlInsertLanguage);
-        BIND_STR(1, (char*) triple->object_literal_language);
+        BIND_STR(1, (char*) triple->object->value.literal.language);
         STOP_SQL;
     }
 
     if(to == VALUE_TYPE_UNKOWN) {
         START_SQL(d->sqlInsertValUnkTypeLang);
         BIND_STR(1, typeUri);
-        BIND_STR(2, (char*) triple->object);
-        BIND_STR(3, (char*) triple->object_literal_language);
+        BIND_STR(2, lexo);
+        BIND_STR(3, (char*) triple->object->value.literal.language);
         STOP_SQL;
         START_SQL(d->sqlInsertStmtUnkTypeLang);
-        BIND_STR(1, (char*) triple->subject);
+        BIND_STR(1, lexs);
         BIND_INT(2, ts);
-        BIND_STR(3, (char*) triple->predicate);
-        BIND_INT(4, tp);
-        BIND_STR(5, (char*) triple->object);
+        BIND_STR(3, lexp);
+        BIND_INT(4, VALUE_TYPE_IRI);
+        BIND_STR(5, lexo);
         BIND_STR(6, typeUri);
-        BIND_STR(7, (char*) triple->object_literal_language);
+        BIND_STR(7, (char*) triple->object->value.literal.language);
         STOP_SQL;
     } else if(lang == 0) {
         START_SQL(d->sqlInsertVal);
         BIND_INT(1, to);
-        BIND_STR(2, (char*) triple->object);
+        BIND_STR(2, lexo);
         BIND_INT(3, lang);
-        BIND_VALUE(4, to, (char*) triple->object);
+        BIND_VALUE(4, to, lexo);
         STOP_SQL;
         START_SQL(d->sqlInsertStmt);
-        BIND_STR(1, (char*) triple->subject);
+        BIND_STR(1, lexs);
         BIND_INT(2, ts);
-        BIND_STR(3, (char*) triple->predicate);
-        BIND_INT(4, tp);
-        BIND_STR(5, (char*) triple->object);
+        BIND_STR(3, lexp);
+        BIND_INT(4, VALUE_TYPE_IRI);
+        BIND_STR(5, lexo);
         BIND_INT(6, to);
         BIND_INT(7, lang);
         STOP_SQL;
     } else {
         START_SQL(d->sqlInsertValUnkLang);
         BIND_INT(1, to);
-        BIND_STR(2, (char*) triple->object);
-        BIND_STR(3, (char*) triple->object_literal_language);
-        BIND_VALUE(4, to, (char*) triple->object);
+        BIND_STR(2, lexo);
+        BIND_STR(3, (char*) triple->object->value.literal.language);
+        BIND_VALUE(4, to, lexo);
         STOP_SQL;
         START_SQL(d->sqlInsertStmtUnkLang);
-        BIND_STR(1, (char*) triple->subject);
+        BIND_STR(1, lexs);
         BIND_INT(2, ts);
-        BIND_STR(3, (char*) triple->predicate);
-        BIND_INT(4, tp);
-        BIND_STR(5, (char*) triple->object);
+        BIND_STR(3, lexp);
+        BIND_INT(4, VALUE_TYPE_IRI);
+        BIND_STR(5, lexo);
         BIND_INT(6, to);
-        BIND_STR(7, (char*) triple->object_literal_language);
+        BIND_STR(7, (char*) triple->object->value.literal.language);
         STOP_SQL;
     }
 
@@ -308,7 +327,7 @@ int main(int argc, char* argv[]) {
         return 2;
     }
 
-    raptor_init();
+    d.world = raptor_new_world();
 
     if(!append) {
         if(sqlite3_exec(d.db,
@@ -419,19 +438,19 @@ int main(int argc, char* argv[]) {
         "          o.lexical = ?5 AND datatypes.uri = ?6 AND languages.tag = ?7;");
 #undef SQL
 
-    d.parser = raptor_new_parser(syntax);
+    d.parser = raptor_new_parser(d.world, syntax);
     if(d.parser == NULL) {
         fprintf(stderr, "Unable to create parser\n");
         goto cleandb;
     }
-    raptor_set_statement_handler(d.parser, &d, add_triple);
+    raptor_parser_set_statement_handler(d.parser, &d, add_triple);
     if(rdfpath == NULL) {
-        d.fileURI = raptor_new_uri((unsigned char*) "http://www.example.org/");
-        raptor_parse_file_stream(d.parser, stdin, NULL, d.fileURI);
+        d.fileURI = raptor_new_uri(d.world, (unsigned char*) "http://www.example.org/");
+        raptor_parser_parse_file_stream(d.parser, stdin, NULL, d.fileURI);
     } else {
         d.fileURIstr = raptor_uri_filename_to_uri_string(rdfpath);
-        d.fileURI = raptor_new_uri(d.fileURIstr);
-        raptor_parse_file(d.parser, d.fileURI, NULL);
+        d.fileURI = raptor_new_uri(d.world, d.fileURIstr);
+        raptor_parser_parse_file(d.parser, d.fileURI, NULL);
     }
 
     if(d.count >= 10000)

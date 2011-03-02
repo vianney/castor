@@ -1,7 +1,7 @@
 INCLUDEPATH += ..
 
 CONFIG += link_pkgconfig
-PKGCONFIG += sqlite3 raptor rasqal
+PKGCONFIG += sqlite3 raptor2 rasqal
 
 HEADERS += ../model.h ../xsddecimal.h
 

@@ -1,7 +1,7 @@
 CONFIG -= QT
 
 CONFIG += link_pkgconfig
-PKGCONFIG += raptor rasqal
+PKGCONFIG += raptor2 rasqal
 PKGCONFIG += sqlite3
 
 HEADERS += \
