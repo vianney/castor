@@ -14,7 +14,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Castor; if not, see <http://www.gnu.org/licenses/>.
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 2.6)
 project(Castor)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
