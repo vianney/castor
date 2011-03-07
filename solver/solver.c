@@ -23,25 +23,6 @@
 #include "solver.h"
 
 /**
- * Linked list for defining the search order
- */
-typedef struct TSearchOrder SearchOrder;
-struct TSearchOrder {
-    /**
-     * Next search order or NULL if end
-     */
-    SearchOrder* next;
-    /**
-     * Variable to bind
-     */
-    int x;
-    /**
-     * Compare function to sort the domain (casted for qsort)
-     */
-    int (*compar)(const void*, const void*);
-};
-
-/**
  * Checkpoint structure for backtracking
  */
 typedef struct TCheckpoint Checkpoint;
@@ -63,10 +44,6 @@ struct TCheckpoint {
      * checkpoint
      */
     int v;
-    /**
-     * Next search order to apply after assigning variable x
-     */
-    SearchOrder* nextOrder;
 };
 
 /**
@@ -133,20 +110,6 @@ struct TSolver {
 
     // Search
     /**
-     * Next order to consider or NULL to use minDom heuristic
-     */
-    SearchOrder* nextOrder;
-    /**
-     * First order in the list or NULL if no order has been specified.
-     * Used for cleaning.
-     */
-    SearchOrder* firstOrder;
-    /**
-     * Last order in the list or NULL if no order has been specified.
-     * Used to append orders.
-     */
-    SearchOrder* lastOrder;
-    /**
      * true if the model is closed (either the search has begun or one of the
      * initial propagations failed)
      */
@@ -211,9 +174,6 @@ Solver* new_solver(int nbVars, int nbVals) {
     self->constraints = NULL;
     self->propagQueue = NULL;
 
-    self->nextOrder = NULL;
-    self->firstOrder = NULL;
-    self->lastOrder = NULL;
     self->closed = false;
     self->trail = NULL;
 
@@ -226,7 +186,6 @@ void free_solver(Solver* self) {
     int x;
     Constraint *c;
     Checkpoint *chkp;
-    SearchOrder *order;
     ConstraintList *cl;
 
     while(self->trail != NULL) {
@@ -234,11 +193,6 @@ void free_solver(Solver* self) {
         self->trail = chkp->next;
         free(chkp->domSize);
         free(chkp);
-    }
-    while(self->firstOrder != NULL) {
-        order = self->firstOrder;
-        self->firstOrder = order->next;
-        free(order);
     }
     for(x = 0; x < self->nbVars; x++) {
         while(self->evBind[x] != NULL) {
@@ -379,26 +333,6 @@ void solver_fail(Solver* self) {
 ////////////////////////////////////////////////////////////////////////////////
 // Searching
 
-void solver_add_order(Solver* self, int x,
-                      int (*compar)(const int*,const int*)) {
-    SearchOrder *order;
-
-    if(self->closed)
-        return;
-    order = (SearchOrder*) malloc(sizeof(SearchOrder));
-    order->next = NULL;
-    order->x = x;
-    order->compar = (int (*)(const void*, const void*)) compar;
-    if(self->lastOrder == NULL) {
-        self->firstOrder = order;
-        self->lastOrder = order;
-        self->nextOrder = order;
-    } else {
-        self->lastOrder->next = order;
-        self->lastOrder = order;
-    }
-}
-
 /**
  * Backtrack to the previous checkpoint, remove the chosen value from the
  * chosen variable and propagate. If the propagation leads to a failure,
@@ -423,7 +357,6 @@ int backtrack(Solver* self) {
     self->domSize = chkp->domSize;
     x = chkp->x;
     v = chkp->v;
-    self->nextOrder = chkp->nextOrder;
     free(chkp);
     // clear propagation queue
     while(self->propagQueue != NULL) {
@@ -442,9 +375,8 @@ int backtrack(Solver* self) {
 }
 
 bool solver_search(Solver* self) {
-    int x, y, sx, sy, v, i;
+    int x, y, sx, sy, v;
     Checkpoint *chkp;
-    SearchOrder *order;
 
     x = -1;
     if(self->closed) { // the search has started, try to backtrack
@@ -457,39 +389,18 @@ bool solver_search(Solver* self) {
     while(true) {
         // search for a variable to bind if needed
         if(x == -1 || solver_var_bound(self, x)) {
+            // find unbound variable with smallest domain
             x = -1;
-            // first try the user-defined search orders
-            while(self->nextOrder != NULL) {
-                order = self->nextOrder;
-                self->nextOrder = order->next;
-                x = order->x;
-                sx = self->domSize[x];
-                if(sx > 1) {
-                    /* Caution: this works only because the only event is bind.
-                     * Otherwise, some values may be removed from the domain
-                     * while propagating during backtrack and the order is not
-                     * guaranteed anymore.
-                     */
-                    qsort(self->domain[x], sx, sizeof(int), order->compar);
-                    for(i = 0; i < sx; i++)
-                        self->domMap[x][self->domain[x][i]] = i;
-                    break;
+            sx = self->maxVals + 1;
+            for(y = 0; y < self->nbVars; y++) {
+                sy = self->domSize[y];
+                if(sy > 1 && sy < sx) {
+                    x = y;
+                    sx = sy;
                 }
-                x = -1;
             }
-            // then, find unbound variable with smallest domain
-            if(x == -1) {
-                sx = self->maxVals + 1;
-                for(y = 0; y < self->nbVars; y++) {
-                    sy = self->domSize[y];
-                    if(sy > 1 && sy < sx) {
-                        x = y;
-                        sx = sy;
-                    }
-                }
-                if(x == -1) // we have a solution
-                    return true;
-            }
+            if(x == -1) // we have a solution
+                return true;
         }
         // Take the last value of the domain
         v = self->domain[x][self->domSize[x]-1];
@@ -499,7 +410,6 @@ bool solver_search(Solver* self) {
         memcpy(chkp->domSize, self->domSize, self->nbVars * sizeof(int));
         chkp->x = x;
         chkp->v = v;
-        chkp->nextOrder = self->nextOrder;
         chkp->next = self->trail;
         self->trail = chkp;
         // bind and propagate

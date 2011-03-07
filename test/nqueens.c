@@ -82,9 +82,6 @@ int main(int argc, const char* argv[]) {
         }
     }
 
-    for(i = 0; i < n; i++)
-        solver_add_order(solver, i, comp);
-
     nbSols = 0;
     while(solver_search(solver)) {
         nbSols++;

@@ -150,19 +150,6 @@ void solver_fail(Solver* self);
 // Searching
 
 /**
- * Add an order to follow when searching. Beware that the values will be taken
- * in reverse order, from greater to smaller.
- *
- * No order can be added once the search has begun. They will be ignored.
- *
- * @param self a solver instance
- * @param x variable number to choose
- * @param compar comparison function for sorting the domain (see qsort)
- */
-void solver_add_order(Solver* self, int x,
-                      int (*compar)(const int*,const int*));
-
-/**
  * Search for the next solution.
  *
  * @param self a solver instance
