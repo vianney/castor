@@ -150,10 +150,21 @@ void solver_fail(Solver* self);
 // Searching
 
 /**
- * Search for the next solution.
+ * Add a search subtree. Constraints may be added after the call of this
+ * function. They will be backtracked once the subtree is done.
  *
  * @param self a solver instance
- * @return true if a solution has been found, false if the search is done
+ * @param vars the variables to label in the subtree
+ * @param nbVars number of variables to label
+ */
+void solver_add_search(Solver* self, int* vars, int nbVars);
+
+/**
+ * Search for the next solution in the current subtree. No constraint may be
+ * posted once the search has begun in the current subtree.
+ *
+ * @param self a solver instance
+ * @return true if a solution has been found, false if the subtree is done
  */
 bool solver_search(Solver* self);
 

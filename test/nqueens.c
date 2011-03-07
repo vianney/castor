@@ -67,6 +67,7 @@ int comp(const int *a, const int *b) {
 
 int main(int argc, const char* argv[]) {
     int n, i, j, nbSols;
+    int *vars;
     Solver *solver;
 
     n = 8;
@@ -82,6 +83,11 @@ int main(int argc, const char* argv[]) {
         }
     }
 
+    vars = (int*) malloc(n * sizeof(int));
+    for(i = 0; i < n; i++)
+        vars[i] = i;
+    solver_add_search(solver, vars, n);
+
     nbSols = 0;
     while(solver_search(solver)) {
         nbSols++;
@@ -94,5 +100,6 @@ int main(int argc, const char* argv[]) {
     solver_print_statistics(solver);
 
     free_solver(solver);
+    free(vars);
     return 0;
 }

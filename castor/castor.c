@@ -198,6 +198,12 @@ int main(int argc, char* argv[]) {
         goto cleanquery;
     }
 
+    // FIXME
+    int *vars = (int*) malloc(n * sizeof(int));
+    for(i = 0; i < n; i++)
+        vars[i] = i;
+    solver_add_search(solver, vars, n);
+
     getrusage(RUSAGE_SELF, &ru[3]);
 
     for(i = 0; i < n; i++) {

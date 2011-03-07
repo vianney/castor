@@ -47,6 +47,37 @@ struct TCheckpoint {
 };
 
 /**
+ * Structure for a search subtree
+ */
+typedef struct TSubTree SubTree;
+struct TSubTree {
+    /**
+     * Parent search subtree or NULL if top
+     */
+    SubTree *parent;
+    /**
+     * Number of variables to label
+     */
+    int nbVars;
+    /**
+     * Variables to label
+     */
+    int *vars;
+    /**
+     * Has the search in this subtree started?
+     */
+    bool started;
+    /**
+     * Last constraint posted (first in the linked list)
+     */
+    Constraint *constraints;
+    /**
+     * Trail to backtrack
+     */
+    Checkpoint* trail;
+};
+
+/**
  * Node of a linked list of constraints
  */
 typedef struct TConstraintList ConstraintList;
@@ -110,14 +141,13 @@ struct TSolver {
 
     // Search
     /**
-     * true if the model is closed (either the search has begun or one of the
-     * initial propagations failed)
+     * true if the current search state is inconsistent (a domain is empty)
      */
-    bool closed;
+    bool inconsistent;
     /**
-     * Trail to backtrack
+     * Current search subtree
      */
-    Checkpoint* trail;
+    SubTree* subtree;
 
     // Statistics
     /**
@@ -174,8 +204,8 @@ Solver* new_solver(int nbVars, int nbVals) {
     self->constraints = NULL;
     self->propagQueue = NULL;
 
-    self->closed = false;
-    self->trail = NULL;
+    self->inconsistent = false;
+    self->subtree = NULL;
 
     self->statBacktracks = 0;
 
@@ -185,14 +215,20 @@ Solver* new_solver(int nbVars, int nbVals) {
 void free_solver(Solver* self) {
     int x;
     Constraint *c;
+    SubTree *sub;
     Checkpoint *chkp;
     ConstraintList *cl;
 
-    while(self->trail != NULL) {
-        chkp = self->trail;
-        self->trail = chkp->next;
-        free(chkp->domSize);
-        free(chkp);
+    while(self->subtree != NULL) {
+        sub = self->subtree;
+        self->subtree = sub->parent;
+        while(sub->trail != NULL) {
+            chkp = sub->trail;
+            sub->trail = chkp->next;
+            free(chkp->domSize);
+            free(chkp);
+        }
+        free(sub);
     }
     for(x = 0; x < self->nbVars; x++) {
         while(self->evBind[x] != NULL) {
@@ -226,7 +262,7 @@ void free_solver(Solver* self) {
 /**
  * Dummy non-null pointer to indicate a constraint is currently propagating.
  */
-#define CSTR_PROPAGATING ((Constraint*) 1)
+#define CSTR_PROPAGATING ((Constraint*) &propagate)
 
 /**
  * Perform propagation of the constraints in the queue. After this call, either
@@ -285,7 +321,7 @@ void queue_bind_event(Solver* self, int x) {
 // Posting constraints
 
 void solver_post(Solver* self, Constraint* c) {
-    if(self->closed) {
+    if(self->inconsistent) {
         if(c->free != NULL)
             c->free(self, c);
         free(c);
@@ -298,13 +334,13 @@ void solver_post(Solver* self, Constraint* c) {
         c->nextPropag = CSTR_PROPAGATING; // ignore events during initial propagation
         if(!c->initPropagate(self, c)) {
             c->nextPropag = NULL;
-            self->closed = true;
+            self->inconsistent = true;
             return;
         }
         c->nextPropag = NULL;
     }
     if(!propagate(self))
-        self->closed = true;
+        self->inconsistent = true;
 }
 
 void solver_register_bind(Solver* self, Constraint* c, int x) {
@@ -318,16 +354,16 @@ void solver_register_bind(Solver* self, Constraint* c, int x) {
 
 void solver_label(Solver* self, int x, int v) {
     if(!solver_var_bind(self, x, v) || !propagate(self))
-        self->closed = true;
+        self->inconsistent = true;
 }
 
 void solver_diff(Solver* self, int x, int v) {
     if(!solver_var_remove(self, x, v) || !propagate(self))
-        self->closed = true;
+        self->inconsistent = true;
 }
 
 void solver_fail(Solver* self) {
-    self->closed = true;
+    self->inconsistent = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -344,15 +380,17 @@ void solver_fail(Solver* self) {
  */
 int backtrack(Solver* self) {
     int x, v;
+    SubTree *sub;
     Checkpoint *chkp;
     Constraint *c;
 
+    sub = self->subtree;
     self->statBacktracks++;
-    if(self->trail == NULL)
+    if(sub->trail == NULL)
         return -1;
-    // restore domains
-    chkp = self->trail;
-    self->trail = chkp->next;
+    // restore domains and constraints
+    chkp = sub->trail;
+    sub->trail = chkp->next;
     free(self->domSize);
     self->domSize = chkp->domSize;
     x = chkp->x;
@@ -374,17 +412,41 @@ int backtrack(Solver* self) {
     return x;
 }
 
+void solver_add_search(Solver* self, int* vars, int nbVars) {
+    SubTree *sub;
+
+    if(self->inconsistent)
+        return;
+    sub = (SubTree*) malloc(sizeof(SubTree));
+    sub->parent = self->subtree;
+    sub->nbVars = nbVars;
+    sub->vars = vars;
+    sub->started = false;
+    sub->constraints = self->constraints;
+    sub->trail = NULL;
+    self->subtree = sub;
+}
+
 bool solver_search(Solver* self) {
-    int x, y, sx, sy, v;
+    int x, i, sx, sy, v;
+    SubTree *sub;
     Checkpoint *chkp;
+    Constraint *c;
+
+    sub = self->subtree;
+    if(sub == NULL)
+        return false;
+
+    if(self->inconsistent)
+        goto done;
 
     x = -1;
-    if(self->closed) { // the search has started, try to backtrack
+    if(sub->started) { // the search has started, try to backtrack
         x = backtrack(self);
         if(x == -1)
-            return false;
+            goto done;
     } else {
-        self->closed = true;
+        sub->started = true;
     }
     while(true) {
         // search for a variable to bind if needed
@@ -392,15 +454,16 @@ bool solver_search(Solver* self) {
             // find unbound variable with smallest domain
             x = -1;
             sx = self->maxVals + 1;
-            for(y = 0; y < self->nbVars; y++) {
-                sy = self->domSize[y];
+            for(i = 0; i < sub->nbVars; i++) {
+                sy = self->domSize[sub->vars[i]];
                 if(sy > 1 && sy < sx) {
-                    x = y;
+                    x = sub->vars[i];
                     sx = sy;
                 }
             }
-            if(x == -1) // we have a solution
+            if(x == -1) { // we have a solution for vars
                 return true;
+            }
         }
         // Take the last value of the domain
         v = self->domain[x][self->domSize[x]-1];
@@ -410,16 +473,34 @@ bool solver_search(Solver* self) {
         memcpy(chkp->domSize, self->domSize, self->nbVars * sizeof(int));
         chkp->x = x;
         chkp->v = v;
-        chkp->next = self->trail;
-        self->trail = chkp;
+        chkp->next = sub->trail;
+        sub->trail = chkp;
         // bind and propagate
         solver_var_bind(self, x, v); // should always return true
         if(!propagate(self)) {
             x = backtrack(self);
             if(x == -1)
-                return false;
+                goto done;
         }
     }
+
+done:
+    // restore constraints
+    while(self->constraints != sub->constraints) {
+        c = self->constraints;
+        self->constraints = c->next;
+        for(x = 0; x < self->nbVars; x++) {
+            if(self->evBind[x] != NULL && self->evBind[x]->cstr == c)
+                self->evBind[x] = self->evBind[x]->next;
+        }
+        if(c->free != NULL)
+            c->free(self, c);
+        free(c);
+    }
+    self->subtree = sub->parent;
+    free(sub);
+    self->inconsistent = false;
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
