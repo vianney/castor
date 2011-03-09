@@ -95,7 +95,8 @@ int get_value_id(Query* self, rasqal_literal* literal) {
     int id;
 
     if(literal->type == RASQAL_LITERAL_VARIABLE) {
-        return -((Variable*) literal->value.variable->user_data)->id - 1;
+        return STMTPAT_VARTOID(
+                ((Variable*) literal->value.variable->user_data)->id);
     } else {
         lexical = (const char*) literal->string;
         typeUri = NULL;
@@ -176,12 +177,13 @@ Expression* convert_expression(Query* self, rasqal_expression* expr) {
     case RASQAL_EXPR_LITERAL:
         lit = expr->literal;
         if(lit->type == RASQAL_LITERAL_VARIABLE) {
-            return new_expression_variable(
+            return new_expression_variable(self,
                     ((Variable*) lit->value.variable->user_data)->id);
         } else {
             i = get_value_id(self, lit);
             if(i > 0)
-                return new_expression_value(store_value_get(self->store, i),
+                return new_expression_value(self,
+                                            store_value_get(self->store, i),
                                             false);
             val = (Value*) malloc(sizeof(Value));
             val->id = 0;
@@ -261,93 +263,93 @@ Expression* convert_expression(Query* self, rasqal_expression* expr) {
                 strcpy(val->lexical, (const char*) lit->string);
                 val->cleanup |= VALUE_CLEAN_LEXICAL;
             }
-            return new_expression_value(val, true);
+            return new_expression_value(self, val, true);
         }
     case RASQAL_EXPR_BANG:
-        return new_expression_unary(EXPR_OP_BANG,
+        return new_expression_unary(self, EXPR_OP_BANG,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_UMINUS:
-        return new_expression_unary(EXPR_OP_UMINUS,
+        return new_expression_unary(self, EXPR_OP_UMINUS,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_BOUND:
-        return new_expression_unary(EXPR_OP_BOUND,
+        return new_expression_unary(self, EXPR_OP_BOUND,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_ISURI:
-        return new_expression_unary(EXPR_OP_ISIRI,
+        return new_expression_unary(self, EXPR_OP_ISIRI,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_ISBLANK:
-        return new_expression_unary(EXPR_OP_ISBLANK,
+        return new_expression_unary(self, EXPR_OP_ISBLANK,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_ISLITERAL:
-        return new_expression_unary(EXPR_OP_ISLITERAL,
+        return new_expression_unary(self, EXPR_OP_ISLITERAL,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_STR:
-        return new_expression_unary(EXPR_OP_STR,
+        return new_expression_unary(self, EXPR_OP_STR,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_LANG:
-        return new_expression_unary(EXPR_OP_LANG,
+        return new_expression_unary(self, EXPR_OP_LANG,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_DATATYPE:
-        return new_expression_unary(EXPR_OP_DATATYPE,
+        return new_expression_unary(self, EXPR_OP_DATATYPE,
                                     convert_expression(self, expr->arg1));
     case RASQAL_EXPR_OR:
-        return new_expression_binary(EXPR_OP_OR,
+        return new_expression_binary(self, EXPR_OP_OR,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_AND:
-        return new_expression_binary(EXPR_OP_AND,
+        return new_expression_binary(self, EXPR_OP_AND,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_EQ:
-        return new_expression_binary(EXPR_OP_EQ,
+        return new_expression_binary(self, EXPR_OP_EQ,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_NEQ:
-        return new_expression_binary(EXPR_OP_NEQ,
+        return new_expression_binary(self, EXPR_OP_NEQ,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_LT:
-        return new_expression_binary(EXPR_OP_LT,
+        return new_expression_binary(self, EXPR_OP_LT,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_GT:
-        return new_expression_binary(EXPR_OP_GT,
+        return new_expression_binary(self, EXPR_OP_GT,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_LE:
-        return new_expression_binary(EXPR_OP_LE,
+        return new_expression_binary(self, EXPR_OP_LE,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_GE:
-        return new_expression_binary(EXPR_OP_GE,
+        return new_expression_binary(self, EXPR_OP_GE,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_STAR:
-        return new_expression_binary(EXPR_OP_STAR,
+        return new_expression_binary(self, EXPR_OP_STAR,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_SLASH:
-        return new_expression_binary(EXPR_OP_SLASH,
+        return new_expression_binary(self, EXPR_OP_SLASH,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_PLUS:
-        return new_expression_binary(EXPR_OP_PLUS,
+        return new_expression_binary(self, EXPR_OP_PLUS,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_MINUS:
-        return new_expression_binary(EXPR_OP_MINUS,
+        return new_expression_binary(self, EXPR_OP_MINUS,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_SAMETERM:
-        return new_expression_binary(EXPR_OP_SAMETERM,
+        return new_expression_binary(self, EXPR_OP_SAMETERM,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_LANGMATCHES:
-        return new_expression_binary(EXPR_OP_LANGMATCHES,
+        return new_expression_binary(self, EXPR_OP_LANGMATCHES,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2));
     case RASQAL_EXPR_REGEX:
-        return new_expression_trinary(EXPR_OP_REGEX,
+        return new_expression_trinary(self, EXPR_OP_REGEX,
                                      convert_expression(self, expr->arg1),
                                      convert_expression(self, expr->arg2),
                                      convert_expression(self, expr->arg3));

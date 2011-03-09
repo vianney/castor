@@ -40,15 +40,14 @@ bool cstr_statement_propagate(Solver* solver, StatementConstraint* c) {
 #define INIT(p, part) \
     if(c->stmt.part == 0) { \
         return false; \
-    } else if(c->stmt.part > 0) { \
-        x ## p = -1; \
-        v ## p = c->stmt.part; \
-    } else { \
-        x ## p = -c->stmt.part - 1; \
+    } else if(STMTPAT_ISVAR(c->stmt.part)) { \
+        x ## p = STMTPAT_IDTOVAR(c->stmt.part); \
         v ## p = solver_var_bound(solver, x ## p) ? \
                  solver_var_value(solver, x ## p) : -1; \
+    } else { \
+        x ## p = -1; \
+        v ## p = c->stmt.part; \
     }
-
     INIT(s, subject)
     INIT(p, predicate)
     INIT(o, object)
@@ -99,12 +98,15 @@ void post_statement(Solver* solver, Store* store, StatementPattern* stmt) {
     c->stmt = *stmt;
     c->cstr.propagate = (bool (*)(Solver*, Constraint*)) cstr_statement_propagate;
     c->cstr.initPropagate = c->cstr.propagate;
-    if(stmt->subject < 0)
-        solver_register_bind(solver, (Constraint*) c, -stmt->subject - 1);
-    if(stmt->predicate < 0)
-        solver_register_bind(solver, (Constraint*) c, -stmt->predicate - 1);
-    if(stmt->object < 0)
-        solver_register_bind(solver, (Constraint*) c, -stmt->object - 1);
+    if(STMTPAT_ISVAR(stmt->subject))
+        solver_register_bind(solver, (Constraint*) c,
+                             STMTPAT_IDTOVAR(stmt->subject));
+    if(STMTPAT_ISVAR(stmt->predicate))
+        solver_register_bind(solver, (Constraint*) c,
+                             STMTPAT_IDTOVAR(stmt->predicate));
+    if(STMTPAT_ISVAR(stmt->object))
+        solver_register_bind(solver, (Constraint*) c,
+                             STMTPAT_IDTOVAR(stmt->object));
     solver_post(solver, (Constraint*) c);
 }
 
@@ -114,21 +116,21 @@ void post_statement(Solver* solver, Store* store, StatementPattern* stmt) {
 typedef struct {
     Constraint cstr;
     Store *store;
-    Query *query;
     Expression* expr;
-    int nbVars;
-    int* vars;
 } FilterConstraint;
 
 bool cstr_filter_propagate(Solver* solver, FilterConstraint* c) {
+    Expression *expr;
     int unbound, x, i, n;
     const int *dom;
 
+    expr = c->expr;
+
     unbound = -1;
-    for(i = 0; i < c->nbVars; i++) {
-        x = c->vars[i];
+    for(i = 0; i < expr->nbVars; i++) {
+        x = expr->vars[i];
         if(solver_var_bound(solver, x)) {
-            query_variable_bind(c->query, x,
+            query_variable_bind(expr->query, x,
                                 store_value_get(c->store,
                                                 solver_var_value(solver, x)));
         } else if(unbound >= 0) {
@@ -139,42 +141,33 @@ bool cstr_filter_propagate(Solver* solver, FilterConstraint* c) {
     }
     if(unbound < 0) {
         // all variables are bound -> check
-        return expression_is_true(c->query, c->expr);
+        return expression_is_true(expr);
     } else {
         // all variables, except one, are bound -> forward checking
         solver_var_clear_marks(solver, unbound);
         n = solver_var_size(solver, unbound);
         dom = solver_var_domain(solver, unbound);
         for(i = 0; i < n; i++) {
-            query_variable_bind(c->query, unbound,
+            query_variable_bind(expr->query, unbound,
                                 store_value_get(c->store, dom[i]));
-            if(expression_is_true(c->query, c->expr))
+            if(expression_is_true(expr))
                 solver_var_mark(solver, unbound, dom[i]);
         }
         return solver_var_restrict_to_marks(solver, unbound);
     }
 }
 
-void cstr_filter_free(Solver* UNUSED(solver), FilterConstraint* c) {
-    free(c->vars);
-}
-
-void post_filter(Solver* solver, Store* store, Query* query, Expression* expr) {
+void post_filter(Solver* solver, Store* store, Expression* expr) {
     FilterConstraint *c;
     int i;
 
     CREATE_CONSTRAINT(c, FilterConstraint);
     c->store = store;
-    c->query = query;
     c->expr = expr;
-    c->vars = (int*) malloc(query_variable_count(query) * sizeof(int));
-    c->nbVars = expression_get_variables(query, expr, c->vars);
-    c->vars = (int*) realloc(c->vars, c->nbVars * sizeof(int));
-    c->cstr.free = (void (*)(Solver*, Constraint*)) cstr_filter_free;
     c->cstr.propagate = (bool (*)(Solver*, Constraint*)) cstr_filter_propagate;
     c->cstr.initPropagate = c->cstr.propagate;
-    for(i = 0; i < c->nbVars; i++)
-        solver_register_bind(solver, (Constraint*) c, c->vars[i]);
+    for(i = 0; i < expr->nbVars; i++)
+        solver_register_bind(solver, (Constraint*) c, expr->vars[i]);
     solver_post(solver, (Constraint*) c);
 }
 

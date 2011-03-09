@@ -37,10 +37,9 @@ void post_statement(Solver* solver, Store* store, StatementPattern* stmt);
  *
  * @param solver a solver instance
  * @param store a store instance
- * @param query a query instance
  * @param expr the filter expression
  */
-void post_filter(Solver* solver, Store* store, Query* query, Expression* expr);
+void post_filter(Solver* solver, Store* store, Expression* expr);
 
 /**
  * Post the constraint x1 != x2

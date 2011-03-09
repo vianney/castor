@@ -14,10 +14,13 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Castor; if not, see <http://www.gnu.org/licenses/>.
-include_directories(.. ../solver ../castor)
+include_directories(../castor)
 
-add_executable(nqueens nqueens.c)
-target_link_libraries(nqueens solver)
+add_executable(nqueens nqueens.c ../castor/solver.c)
+target_link_libraries(nqueens)
 
 add_executable(createsqlite createsqlite.c ../castor/model.c ../castor/xsddecimal.c)
 target_link_libraries(createsqlite ${LIBS})
+
+add_executable(castor main.c)
+target_link_libraries(castor libcastor ${LIBS})

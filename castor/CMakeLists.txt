@@ -15,7 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with Castor; if not, see <http://www.gnu.org/licenses/>.
 set(CASTOR_SRCS
-    ../defs.h
+    defs.h
+    castor.h
     castor.c
     model.h
     model.c
@@ -27,13 +28,16 @@ set(CASTOR_SRCS
     query.c
     expression.h
     expression.c
+    pattern.h
+    pattern.c
+    solver.h
+    solver.c
     constraints.h
     constraints.c
     stores/store_sqlite.h
     stores/store_sqlite.c
 )
 
-include_directories(.. ../solver)
-add_executable(castor ${CASTOR_SRCS})
-target_link_libraries(castor ${LIBS})
-target_link_libraries(castor solver)
+add_library(libcastor ${CASTOR_SRCS})
+set_target_properties(libcastor PROPERTIES OUTPUT_NAME castor)
+target_link_libraries(libcastor ${LIBS})

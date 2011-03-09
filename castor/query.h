@@ -26,14 +26,8 @@ typedef struct TQuery Query;
 #include "defs.h"
 #include "model.h"
 #include "expression.h"
+#include "pattern.h"
 #include "store.h"
-
-/**
- * A statement pattern has the same structure as a statement, but allows
- * negative ids for designing variables. The variable number is retrieved with
- * -id - 1.
- */
-typedef Statement StatementPattern;
 
 /**
  * Query type

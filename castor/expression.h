@@ -69,9 +69,26 @@ typedef enum {
  */
 struct TExpression {
     /**
+     * Parent query
+     */
+    Query *query;
+    /**
      * Operator
      */
     ExprOperator op;
+    /**
+     * Number of variables occuring in this expression
+     */
+    int nbVars;
+    /**
+     * Variables occuring in this expression
+     */
+    int *vars;
+    /**
+     * Map of variables occuring in this expression
+     * varMap[x] <=> x in vars
+     */
+    bool *varMap;
     /**
      * Operands dependent on the operator
      */
@@ -118,78 +135,74 @@ struct TExpression {
 // Constructors and destructors
 
 /**
+ * @param query parent query
  * @param value a value
  * @param valueOwnership take ownership of the value
  * @return a new expression representing the value
  */
-Expression* new_expression_value(Value* value, bool valueOwnership);
+Expression* new_expression_value(Query *query, Value* value, bool valueOwnership);
 
 /**
+ * @param query parent query
  * @param variable variable id
  * @return a new expression representing the variable
  */
-Expression* new_expression_variable(int variable);
+Expression* new_expression_variable(Query *query, int variable);
 
 /**
+ * @param query parent query
  * @param op unary operator (EXPR_OP_FIRST_UNARY <= op < EXPR_OP_FIRST_BINARY)
  * @param arg1 first argument
  * @return a new expression
  */
-Expression* new_expression_unary(ExprOperator op, Expression* arg1);
+Expression* new_expression_unary(Query *query, ExprOperator op, Expression* arg1);
 
 /**
+ * @param query parent query
  * @param op binary operator (EXPR_OP_FIRST_BINARY <= op < EXPR_OP_FIRST_TRINARY)
  * @param arg1 first argument
  * @param arg2 second argument
  * @return a new expression
  */
-Expression* new_expression_binary(ExprOperator op, Expression* arg1,
-                                  Expression* arg2);
+Expression* new_expression_binary(Query *query, ExprOperator op,
+                                  Expression* arg1, Expression* arg2);
 
 /**
+ * @param query parent query
  * @param op trinary operator (EXPR_OP_FIRST_TRINARY <= op < EXPR_OP_LAST_TRINARY)
  * @param arg1 first argument
  * @param arg2 second argument
  * @param arg3 third argument
  * @return a new expression
  */
-Expression* new_expression_trinary(ExprOperator op, Expression* arg1,
-                                   Expression* arg2, Expression* arg3);
+Expression* new_expression_trinary(Query *query, ExprOperator op,
+                                   Expression* arg1, Expression* arg2,
+                                   Expression* arg3);
 
 /**
+ * @param query parent query
  * @param destType type to which to cast
  * @param castArg expression to cast
  * @return a new expression
  */
-Expression* new_expression_cast(ValueType destType, Expression* castArg);
+Expression* new_expression_cast(Query *query, ValueType destType,
+                                Expression* castArg);
 
 /**
+ * @param query parent query
  * @param fn function id
  * @param nbArgs number of arguments
  * @param args array of arguments, ownership is taken
  * @return a new expression
  */
-Expression* new_expression_call(int fn, int nbArgs, Expression* args[]);
+Expression* new_expression_call(Query *query, int fn, int nbArgs,
+                                Expression* args[]);
 
 /**
  * Free an expression and recursively all its children expressions. Values for
  * which the ownership has been taken and args arrays will be freed too.
  */
 void free_expression(Expression* expr);
-
-////////////////////////////////////////////////////////////////////////////////
-// Manipulation
-
-/**
- * Gather all unique variables used in an expression.
- *
- * @param query a query instance
- * @param expr an expression
- * @param vars output array, should be able to contain at least
- *             query_variable_count(query) elements; NULL if not needed
- * @return the number of unique variables in expr
- */
-int expression_get_variables(Query* query, Expression* expr, int* vars);
 
 ////////////////////////////////////////////////////////////////////////////////
 // Evaluation
@@ -199,22 +212,20 @@ int expression_get_variables(Query* query, Expression* expr, int* vars);
  * written in the result argument. This may need to be cleaned. In case of
  * evaluation error, result may have changed, but nothing needs to be cleaned.
  *
- * @param query a query instance
  * @param expr the expression to evaluate
  * @param result value to fill in with the result
  * @return false on evaluation error, true otherwise
  */
-bool expression_evaluate(Query* query, Expression* expr, Value* result);
+bool expression_evaluate(Expression* expr, Value* result);
 
 /**
  * Evaluate an expression given the current assignment in query. Returns the
  * effective boolean value (EBV).
  *
- * @param query a query instance
  * @param expr the expression to evaluate
  * @return true if the EBV is true, false if the EBV is false or an error
  *         occured
  */
-bool expression_is_true(Query* query, Expression* expr);
+bool expression_is_true(Expression* expr);
 
 #endif // EXPRESSION_H

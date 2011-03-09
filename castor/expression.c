@@ -26,78 +26,200 @@
 ////////////////////////////////////////////////////////////////////////////////
 // Constructors and destructors
 
-Expression* new_expression_value(Value* value, bool valueOwnership) {
+Expression* new_expression_value(Query* query, Value* value, bool valueOwnership) {
     Expression* expr;
 
     expr = (Expression*) malloc(sizeof(Expression));
+    expr->query = query;
     expr->op = EXPR_OP_VALUE;
     expr->value = value;
     expr->valueOwnership = valueOwnership;
+
+    expr->nbVars = 0;
+    expr->vars = NULL;
+    expr->varMap = (bool*) calloc(query_variable_count(query), sizeof(bool));
+
     return expr;
 }
 
-Expression* new_expression_variable(int variable) {
+Expression* new_expression_variable(Query* query, int variable) {
     Expression* expr;
 
     expr = (Expression*) malloc(sizeof(Expression));
+    expr->query = query;
     expr->op = EXPR_OP_VARIABLE;
     expr->variable = variable;
+
+    expr->nbVars = 1;
+    expr->vars = (int*) malloc(sizeof(int));
+    expr->vars[0] = variable;
+    expr->varMap = (bool*) calloc(query_variable_count(query), sizeof(bool));
+    expr->varMap[variable] = true;
+
     return expr;
 }
 
-Expression* new_expression_unary(ExprOperator op, Expression* arg1) {
+Expression* new_expression_unary(Query* query, ExprOperator op, Expression* arg1) {
     Expression* expr;
 
     expr = (Expression*) malloc(sizeof(Expression));
+    expr->query = query;
     expr->op = op;
     expr->arg1 = arg1;
     expr->arg2 = NULL;
     expr->arg3 = NULL;
+
+    expr->nbVars = arg1->nbVars;
+    expr->vars = arg1->vars;
+    expr->varMap = arg1->varMap;
+
     return expr;
 }
 
-Expression* new_expression_binary(ExprOperator op, Expression* arg1,
-                                  Expression* arg2) {
+Expression* new_expression_binary(Query* query, ExprOperator op,
+                                  Expression* arg1, Expression* arg2) {
     Expression* expr;
+    int nbVars, i, x;
+    int* vars;
+    bool* varMap;
 
     expr = (Expression*) malloc(sizeof(Expression));
+    expr->query = query;
     expr->op = op;
     expr->arg1 = arg1;
     expr->arg2 = arg2;
     expr->arg3 = NULL;
+
+    if(arg1->nbVars == 0) {
+        expr->nbVars = arg2->nbVars;
+        expr->vars = arg2->vars;
+        expr->varMap = arg2->varMap;
+    } else if(arg2->nbVars == 0) {
+        expr->nbVars = arg1->nbVars;
+        expr->vars = arg1->vars;
+        expr->varMap = arg1->varMap;
+    } else {
+        nbVars = query_variable_count(query);
+        vars = (int*) malloc(nbVars * sizeof(int));
+        varMap = (bool*) malloc(nbVars * sizeof(bool));
+        memcpy(varMap, arg1->varMap, nbVars * sizeof(bool));
+        nbVars = arg1->nbVars;
+        memcpy(vars, arg1->vars, nbVars * sizeof(int));
+        for(i = 0; i < arg2->nbVars; i++) {
+            x = arg2->vars[i];
+            if(!varMap[x]) {
+                vars[nbVars++] = x;
+                varMap[x] = true;
+            }
+        }
+        expr->nbVars = nbVars;
+        expr->vars = (int*) realloc(vars, nbVars * sizeof(int));
+        expr->varMap = varMap;
+    }
+
     return expr;
 }
 
-Expression* new_expression_trinary(ExprOperator op, Expression* arg1,
-                                   Expression* arg2, Expression* arg3) {
+Expression* new_expression_trinary(Query* query, ExprOperator op,
+                                   Expression* arg1, Expression* arg2,
+                                   Expression* arg3) {
     Expression* expr;
+    int nbVars, i, x;
+    int* vars;
+    bool* varMap;
 
     expr = (Expression*) malloc(sizeof(Expression));
+    expr->query = query;
     expr->op = op;
     expr->arg1 = arg1;
     expr->arg2 = arg2;
     expr->arg3 = arg3;
+
+    if(arg1->nbVars == 0 && arg2->nbVars == 0) {
+        expr->nbVars = arg3->nbVars;
+        expr->vars = arg3->vars;
+        expr->varMap = arg3->varMap;
+    } else if(arg1->nbVars == 0 && arg3->nbVars == 0) {
+        expr->nbVars = arg2->nbVars;
+        expr->vars = arg2->vars;
+        expr->varMap = arg2->varMap;
+    } else if(arg2->nbVars == 0 && arg3->nbVars == 0) {
+        expr->nbVars = arg1->nbVars;
+        expr->vars = arg1->vars;
+        expr->varMap = arg1->varMap;
+    } else {
+        nbVars = query_variable_count(query);
+        vars = (int*) malloc(nbVars * sizeof(int));
+        varMap = (bool*) calloc(nbVars, sizeof(bool));
+        nbVars = 0;
+#define ADDVARS(k) \
+        for(i = 0; i < arg ## k->nbVars; i++) { \
+            x = arg ## k->vars[i]; \
+            if(!varMap[x]) { \
+                vars[nbVars++] = x; \
+                varMap[x] = true; \
+            } \
+        }
+        ADDVARS(1)
+        ADDVARS(2)
+        ADDVARS(3)
+#undef ADDVARS
+        expr->nbVars = nbVars;
+        expr->vars = (int*) realloc(vars, nbVars * sizeof(int));
+        expr->varMap = varMap;
+    }
+
     return expr;
 }
 
-Expression* new_expression_cast(ValueType destType, Expression* castArg) {
+Expression* new_expression_cast(Query* query, ValueType destType,
+                                Expression* castArg) {
     Expression* expr;
 
     expr = (Expression*) malloc(sizeof(Expression));
+    expr->query = query;
     expr->op = EXPR_OP_CAST;
     expr->destType = destType;
     expr->castArg = castArg;
+
+    expr->nbVars = castArg->nbVars;
+    expr->vars = castArg->vars;
+    expr->varMap = castArg->varMap;
+
     return expr;
 }
 
-Expression* new_expression_call(int fn, int nbArgs, Expression* args[]) {
+Expression* new_expression_call(Query* query, int fn, int nbArgs,
+                                Expression* args[]) {
     Expression* expr;
+    int nbVars, i, j, x;
+    int* vars;
+    bool* varMap;
 
     expr = (Expression*) malloc(sizeof(Expression));
+    expr->query = query;
     expr->op = EXPR_OP_CALL;
     expr->fn = fn;
     expr->nbArgs = nbArgs;
     expr->args = args;
+
+    nbVars = query_variable_count(query);
+    vars = (int*) malloc(nbVars * sizeof(int));
+    varMap = (bool*) calloc(nbVars, sizeof(int));
+    nbVars = 0;
+    for(j = 0; j < nbArgs; j++) {
+        for(i = 0; i < args[j]->nbVars; i++) {
+            x = args[j]->vars[i];
+            if(!varMap[x]) {
+                vars[nbVars++] = x;
+                varMap[x] = true;
+            }
+        }
+    }
+    expr->nbVars = nbVars;
+    expr->vars = (int*) realloc(vars, nbVars * sizeof(int));
+    expr->varMap = varMap;
+
     return expr;
 }
 
@@ -110,8 +232,11 @@ void free_expression(Expression* expr) {
             model_value_clean(expr->value);
             free(expr->value);
         }
+        free(expr->varMap);
         break;
     case EXPR_OP_VARIABLE:
+        free(expr->vars);
+        free(expr->varMap);
         break;
     case EXPR_OP_CAST:
         free_expression(expr->castArg);
@@ -120,67 +245,27 @@ void free_expression(Expression* expr) {
         for(i = 0; i < expr->nbArgs; i++)
             free_expression(expr->args[i]);
         free(expr->args);
+        free(expr->vars);
+        free(expr->varMap);
         break;
     default:
-        if(expr->arg1 != NULL) free_expression(expr->arg1);
-        if(expr->arg2 != NULL) free_expression(expr->arg2);
-        if(expr->arg3 != NULL) free_expression(expr->arg3);
+        i = 0;
+#define FREEARG(k) \
+        if(expr->arg ## k != NULL) { \
+            if(expr->arg ## k->nbVars > 0) \
+                i++; \
+                free_expression(expr->arg ## k); \
+        }
+        FREEARG(1)
+        FREEARG(2)
+        FREEARG(3)
+#undef FREEARG
+        if(i > 1) {
+            free(expr->vars);
+            free(expr->varMap);
+        }
     }
     free(expr);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Manipulation
-
-/**
- * Recursive function to gather all unique variables of an expression.
- *
- * @param expr the expression
- * @param vars output array or NULL if not needed
- * @param varIncluded is a variable already included in vars
- * @return the number of unique variables in expr that were not already
- *         included (varIncluded was false) and that have been added to vars.
- *         varIncluded is updated accordingly.
- */
-int visit_get_variables(Expression* expr, int* vars, bool* varIncluded) {
-    int i, count;
-
-    count = 0;
-    switch(expr->op) {
-    case EXPR_OP_VALUE:
-        return 0;
-    case EXPR_OP_VARIABLE:
-        if(varIncluded[expr->variable])
-            return 0;
-        if(vars != NULL)
-            vars[0] = expr->variable;
-        varIncluded[expr->variable] = true;
-        return 1;
-    case EXPR_OP_CAST:
-        return visit_get_variables(expr->castArg, vars, varIncluded);
-    case EXPR_OP_CALL:
-        for(i = 0; i < expr->nbArgs; i++)
-            count += visit_get_variables(expr->args[i], vars+count, varIncluded);
-        break;
-    default:
-        if(expr->arg1 != NULL)
-            count += visit_get_variables(expr->arg1, vars+count, varIncluded);
-        if(expr->arg2 != NULL)
-            count += visit_get_variables(expr->arg2, vars+count, varIncluded);
-        if(expr->arg3 != NULL)
-            count += visit_get_variables(expr->arg3, vars+count, varIncluded);
-    }
-    return count;
-}
-
-int expression_get_variables(Query* query, Expression* expr, int* vars) {
-    int result;
-    int* varIncluded;
-
-    varIncluded = (int*) calloc(query_variable_count(query), sizeof(int));
-    result = visit_get_variables(expr, vars, varIncluded);
-    free(varIncluded);
-    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -189,15 +274,14 @@ int expression_get_variables(Query* query, Expression* expr, int* vars) {
 /**
  * Evaluate an expression and compute its effective boolean value (EBV).
  *
- * @param query a query instance
  * @param expr the expression to evaluate
  * @param val value buffer to be used during evaluation, should not be cleaned
  * @return 1 if true, 0 if false, -1 if type error
  */
-int eval_ebv(Query* query, Expression* expr, Value* val) {
+int eval_ebv(Expression* expr, Value* val) {
     int result;
 
-    if(!expression_evaluate(query, expr, val))
+    if(!expression_evaluate(expr, val))
         return -1;
     if(val->type == VALUE_TYPE_BOOLEAN)
         result = val->boolean ? 1 : 0;
@@ -362,18 +446,18 @@ void eval_numeric_type_promotion(Value* arg1, Value* arg2) {
     }
 }
 
-typedef bool (*eval_fn)(Query* query, Expression* expr, Value* result);
+typedef bool (*eval_fn)(Expression* expr, Value* result);
 
-bool eval_value(Query* UNUSED(query), Expression* expr, Value* result) {
+bool eval_value(Expression* expr, Value* result) {
     memcpy(result, expr->value, sizeof(Value));
     result->cleanup = VALUE_CLEAN_NOTHING;
     return true;
 }
 
-bool eval_variable(Query* query, Expression* expr, Value* result) {
+bool eval_variable(Expression* expr, Value* result) {
     Value *val;
 
-    val = query_variable_get(query, expr->variable);
+    val = query_variable_get(expr->query, expr->variable);
     if(val == NULL)
         return false;
     memcpy(result, val, sizeof(Value));
@@ -381,18 +465,18 @@ bool eval_variable(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_bang(Query* query, Expression* expr, Value* result) {
+bool eval_bang(Expression* expr, Value* result) {
     int b;
 
-    b = eval_ebv(query, expr->arg1, result);
+    b = eval_ebv(expr->arg1, result);
     if(b == -1)
         return false;
     eval_make_boolean(b, result);
     return true;
 }
 
-bool eval_uplus(Query* query, Expression* expr, Value* result) {
-    if(!expression_evaluate(query, expr->arg1, result))
+bool eval_uplus(Expression* expr, Value* result) {
+    if(!expression_evaluate(expr->arg1, result))
         return false;
     if(!IS_VALUE_TYPE_NUMERIC(result->type)) {
         model_value_clean(result);
@@ -401,8 +485,8 @@ bool eval_uplus(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_uminus(Query* query, Expression* expr, Value* result) {
-    if(!expression_evaluate(query, expr->arg1, result))
+bool eval_uminus(Expression* expr, Value* result) {
+    if(!expression_evaluate(expr->arg1, result))
         return false;
 
     if(IS_VALUE_TYPE_INTEGER(result->type)) {
@@ -435,18 +519,18 @@ bool eval_uminus(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_bound(Query* query, Expression* expr, Value* result) {
+bool eval_bound(Expression* expr, Value* result) {
     if(expr->arg1->op != EXPR_OP_VARIABLE)
         return false;
-    eval_make_boolean(query_variable_get(query, expr->arg1->variable) != NULL,
+    eval_make_boolean(query_variable_get(expr->query, expr->arg1->variable) != NULL,
                       result);
     return true;
 }
 
-bool eval_isiri(Query* query, Expression* expr, Value* result) {
+bool eval_isiri(Expression* expr, Value* result) {
     bool b;
 
-    if(!expression_evaluate(query, expr->arg1, result))
+    if(!expression_evaluate(expr->arg1, result))
         return false;
     b = (result->type == VALUE_TYPE_IRI);
     model_value_clean(result);
@@ -454,10 +538,10 @@ bool eval_isiri(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_isblank(Query* query, Expression* expr, Value* result) {
+bool eval_isblank(Expression* expr, Value* result) {
     bool b;
 
-    if(!expression_evaluate(query, expr->arg1, result))
+    if(!expression_evaluate(expr->arg1, result))
         return false;
     b = (result->type == VALUE_TYPE_BLANK);
     model_value_clean(result);
@@ -465,10 +549,10 @@ bool eval_isblank(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_isliteral(Query* query, Expression* expr, Value* result) {
+bool eval_isliteral(Expression* expr, Value* result) {
     bool b;
 
-    if(!expression_evaluate(query, expr->arg1, result))
+    if(!expression_evaluate(expr->arg1, result))
         return false;
     b = (result->type != VALUE_TYPE_BLANK && result->type != VALUE_TYPE_IRI);
     model_value_clean(result);
@@ -476,11 +560,11 @@ bool eval_isliteral(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_str(Query* query, Expression* expr, Value* result) {
+bool eval_str(Expression* expr, Value* result) {
     char *lex;
     bool freeLex;
 
-    if(!expression_evaluate(query, expr->arg1, result))
+    if(!expression_evaluate(expr->arg1, result))
         return false;
     if(result->type == VALUE_TYPE_BLANK) {
         model_value_clean(result);
@@ -495,11 +579,11 @@ bool eval_str(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_lang(Query* query, Expression* expr, Value* result) {
+bool eval_lang(Expression* expr, Value* result) {
     char *lang;
     bool freeLang;
 
-    if(!expression_evaluate(query, expr->arg1, result))
+    if(!expression_evaluate(expr->arg1, result))
         return false;
     if(result->type == VALUE_TYPE_BLANK || result->type == VALUE_TYPE_IRI) {
         model_value_clean(result);
@@ -515,11 +599,11 @@ bool eval_lang(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_datatype(Query* query, Expression* expr, Value* result) {
+bool eval_datatype(Expression* expr, Value* result) {
     char* iri;
     bool freeIRI;
 
-    if(!expression_evaluate(query, expr->arg1, result))
+    if(!expression_evaluate(expr->arg1, result))
         return false;
     if(result->type == VALUE_TYPE_BLANK || result->type == VALUE_TYPE_IRI) {
         model_value_clean(result);
@@ -543,10 +627,10 @@ bool eval_datatype(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_or(Query* query, Expression* expr, Value* result) {
+bool eval_or(Expression* expr, Value* result) {
     int left, right;
-    left = eval_ebv(query, expr->arg1, result);
-    right = eval_ebv(query, expr->arg2, result);
+    left = eval_ebv(expr->arg1, result);
+    right = eval_ebv(expr->arg2, result);
     if(left == 1 || right == 1)
         eval_make_boolean(true, result);
     else if(left == 0 && right == 0)
@@ -556,10 +640,10 @@ bool eval_or(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_and(Query* query, Expression* expr, Value* result) {
+bool eval_and(Expression* expr, Value* result) {
     int left, right;
-    left = eval_ebv(query, expr->arg1, result);
-    right = eval_ebv(query, expr->arg2, result);
+    left = eval_ebv(expr->arg1, result);
+    right = eval_ebv(expr->arg2, result);
     if(left == 0 || right == 0)
         eval_make_boolean(false, result);
     else if(left == 1 && right == 1)
@@ -570,13 +654,13 @@ bool eval_and(Query* query, Expression* expr, Value* result) {
 }
 
 #define EVAL_EQ(fn, op) \
-    bool eval_ ## fn (Query* query, Expression* expr, Value* result) { \
+    bool eval_ ## fn (Expression* expr, Value* result) { \
         Value right; \
         int cmp; \
          \
-        if(!expression_evaluate(query, expr->arg1, result)) \
+        if(!expression_evaluate(expr->arg1, result)) \
             return false; \
-        if(!expression_evaluate(query, expr->arg2, &right)) { \
+        if(!expression_evaluate(expr->arg2, &right)) { \
             model_value_clean(result); \
             return false; \
         } \
@@ -600,13 +684,13 @@ EVAL_EQ(neq, !=)
 #undef EVAL_EQ
 
 #define EVAL_CMP(fn, op) \
-    bool eval_ ## fn (Query* query, Expression* expr, Value* result) { \
+    bool eval_ ## fn (Expression* expr, Value* result) { \
         Value right; \
         int cmp; \
          \
-        if(!expression_evaluate(query, expr->arg1, result)) \
+        if(!expression_evaluate(expr->arg1, result)) \
             return false; \
-        if(!expression_evaluate(query, expr->arg2, &right)) { \
+        if(!expression_evaluate(expr->arg2, &right)) { \
             model_value_clean(result); \
             return false; \
         } \
@@ -630,12 +714,12 @@ EVAL_CMP(ge, >=)
 #undef EVAL_CMP
 
 #define EVAL_ARITHMETIC(fn, op, opdec) \
-    bool eval_ ## fn (Query* query, Expression* expr, Value* result) { \
+    bool eval_ ## fn (Expression* expr, Value* result) { \
         Value right; \
          \
-        if(!expression_evaluate(query, expr->arg1, result)) \
+        if(!expression_evaluate(expr->arg1, result)) \
             return false; \
-        if(!expression_evaluate(query, expr->arg2, &right)) { \
+        if(!expression_evaluate(expr->arg2, &right)) { \
             model_value_clean(result); \
             return false; \
         } \
@@ -682,12 +766,12 @@ EVAL_ARITHMETIC(plus, +, add)
 EVAL_ARITHMETIC(minus, -, substract)
 #undef EVAL_ARITHMETIC
 
-bool eval_slash(Query* query, Expression* expr, Value* result) {
+bool eval_slash(Expression* expr, Value* result) {
     Value right;
 
-    if(!expression_evaluate(query, expr->arg1, result))
+    if(!expression_evaluate(expr->arg1, result))
         return false;
-    if(!expression_evaluate(query, expr->arg2, &right)) {
+    if(!expression_evaluate(expr->arg2, &right)) {
         model_value_clean(result);
         return false;
     }
@@ -734,13 +818,13 @@ bool eval_slash(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_sameterm(Query* query, Expression* expr, Value* result) {
+bool eval_sameterm(Expression* expr, Value* result) {
     Value right;
     bool b;
 
-    if(!expression_evaluate(query, expr->arg1, result))
+    if(!expression_evaluate(expr->arg1, result))
         return false;
-    if(!expression_evaluate(query, expr->arg2, &right)) {
+    if(!expression_evaluate(expr->arg2, &right)) {
         model_value_clean(result);
         return false;
     }
@@ -752,29 +836,25 @@ bool eval_sameterm(Query* query, Expression* expr, Value* result) {
     return true;
 }
 
-bool eval_langmatches(Query* UNUSED(query), Expression* UNUSED(expr),
-                      Value* UNUSED(result)) {
+bool eval_langmatches(Expression* UNUSED(expr), Value* UNUSED(result)) {
     // TODO
     fprintf(stderr, "castor expression: Unimplemented operator LANGMATCHES\n");
     return false;
 }
 
-bool eval_regex(Query* UNUSED(query), Expression* UNUSED(expr),
-                Value* UNUSED(result)) {
+bool eval_regex(Expression* UNUSED(expr), Value* UNUSED(result)) {
     // TODO
     fprintf(stderr, "castor expression: Unimplemented operator REGEX\n");
     return false;
 }
 
-bool eval_cast(Query* UNUSED(query), Expression* UNUSED(expr),
-               Value* UNUSED(result)) {
+bool eval_cast(Expression* UNUSED(expr), Value* UNUSED(result)) {
     // TODO
     fprintf(stderr, "castor expression: Casting operators unimplemented\n");
     return false;
 }
 
-bool eval_call(Query* UNUSED(query), Expression* UNUSED(expr),
-               Value* UNUSED(result)) {
+bool eval_call(Expression* UNUSED(expr), Value* UNUSED(result)) {
     // TODO
     fprintf(stderr, "castor expression: Function support unimplemented\n");
     return false;
@@ -812,12 +892,12 @@ eval_fn EVAL_FUNCTIONS[] = {
     eval_call
 };
 
-bool expression_evaluate(Query* query, Expression* expr, Value* result) {
-    return EVAL_FUNCTIONS[expr->op](query, expr, result);
+bool expression_evaluate(Expression* expr, Value* result) {
+    return EVAL_FUNCTIONS[expr->op](expr, result);
 }
 
-bool expression_is_true(Query* query, Expression* expr) {
+bool expression_is_true(Expression* expr) {
     Value val;
 
-    return eval_ebv(query, expr, &val) == 1;
+    return eval_ebv(expr, &val) == 1;
 }

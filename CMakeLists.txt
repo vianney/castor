@@ -36,6 +36,5 @@ set(LIBS
 
 set(CMAKE_C_FLAGS_DEBUG "-g -Wall")
 
-add_subdirectory(solver)
 add_subdirectory(castor)
 add_subdirectory(test)
