@@ -313,7 +313,7 @@ Expression* convert_expression(Query* self, rasqal_expression* expr) {
  */
 Pattern* convert_pattern(Query* self, rasqal_graph_pattern* gp) {
     Pattern *pat, *subpat;
-    int i, n;
+    int i, n, m;
     raptor_sequence *seq;
     rasqal_graph_pattern *subgp;
     rasqal_triple *triple;
@@ -377,12 +377,12 @@ Pattern* convert_pattern(Query* self, rasqal_graph_pattern* gp) {
                                                  expr, subexpr);
                 break;
             case RASQAL_GRAPH_PATTERN_OPERATOR_OPTIONAL:
-                n = raptor_sequence_size(
+                m = raptor_sequence_size(
                         rasqal_graph_pattern_get_sub_graph_pattern_sequence(subgp));
-                if(n != 1) {
+                if(m != 1) {
                     fprintf(stderr,
                             "castor query: ignoring OPTIONAL pattern with %d subpatterns\n",
-                            n);
+                            m);
                     break;
                 }
                 subpat = convert_pattern(self,
@@ -558,7 +558,13 @@ cleanquery:
 }
 
 void free_query(Query* self) {
+    int x;
+
     free_pattern(self->pattern);
+    for(x = 0; x < self->nbVars; x++) {
+        if(self->vars[x].name != NULL)
+            free(self->vars[x].name);
+    }
     free(self->vars);
     free(self);
 }

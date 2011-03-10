@@ -17,31 +17,88 @@
  */
 
 #include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/time.h>
-#include <sys/resource.h>
 
 #include "castor.h"
 #include "solver.h"
 #include "constraints.h"
 
-struct TCastor {
-    Store *store;
-    Query *query;
-    Solver *solver;
-    bool started; // FIXME
+/**
+ * Node corresponding to a pattern during the search
+ */
+typedef struct TPatternNode PatternNode;
+struct TPatternNode {
+    /**
+     * Linked pattern
+     */
+    Pattern *pat;
+    /**
+     * PatternNode corresponding to pat->left
+     */
+    PatternNode *left;
+    /**
+     * PatternNode corresponding to pat->right
+     */
+    PatternNode *right;
+    /**
+     * Is this node currently posted?
+     */
+    bool posted;
+    /**
+     * Flag depending on the pattern type
+     * BGP: are the triples posted
+     * LEFTJOIN: is the optional subpattern consistent
+     * UNION: are we done with the left branch
+     */
+    bool flag;
 };
+
+struct TCastor {
+    /**
+     * Store of the dataset
+     */
+    Store *store;
+    /**
+     * Query to execute
+     */
+    Query *query;
+    /**
+     * CP solver
+     */
+    Solver *solver;
+    /**
+     * Root pattern node corresponding to the root graph pattern
+     */
+    PatternNode *root;
+    /**
+     * Last pattern node posted
+     */
+    PatternNode *last;
+};
+
+/**
+ * @param pat a graph pattern
+ * @return a new corresponding pattern node
+ */
+PatternNode* create_pattern_node(Pattern* pat) {
+    PatternNode* node;
+
+    node = (PatternNode*) malloc(sizeof(PatternNode));
+    node->pat = pat;
+    node->left = NULL;
+    node->right = NULL;
+    node->posted = false;
+    node->flag = false;
+    if(IS_PATTERN_TYPE_COMPOUND(pat->type)) {
+        if(pat->left != NULL)
+            node->left = create_pattern_node(pat->left);
+        if(pat->right != NULL)
+            node->right = create_pattern_node(pat->right);
+    }
+    return node;
+}
 
 Castor* new_castor(Store* store, Query* query) {
     Castor *self;
-
-    if(query->pattern->type != PATTERN_TYPE_BASIC &&
-       !(query->pattern->type == PATTERN_TYPE_FILTER &&
-         query->pattern->left->type == PATTERN_TYPE_BASIC)) {
-        fprintf(stderr, "castor: only simple queries supported for now\n");
-        return NULL;
-    }
 
     self = (Castor*) malloc(sizeof(Castor));
     self->store = store;
@@ -52,11 +109,24 @@ Castor* new_castor(Store* store, Query* query) {
         free(self);
         return NULL;
     }
-    self->started = false;
+    self->root = create_pattern_node(query->pattern);
+    self->last = NULL;
     return self;
 }
 
+/**
+ * Free a pattern node and all its children
+ *
+ * @param node a pattern node
+ */
+void free_pattern_node(PatternNode* node) {
+    if(node->left != NULL) free_pattern_node(node->left);
+    if(node->right != NULL) free_pattern_node(node->right);
+    free(node);
+}
+
 void free_castor(Castor* self) {
+    free_pattern_node(self->root);
     free_solver(self->solver);
     free(self);
 }
@@ -156,32 +226,94 @@ void visit_filter(Solver* solver, Store* store, Expression* expr) {
     post_filter(solver, store, expr);
 }
 
-bool castor_next(Castor* self) {
-    int i, n;
+bool sol(Castor* self, PatternNode* node) {
     Pattern *pat;
+    int i, x;
 
-    if(!self->started) {
-        pat = self->query->pattern;
+    pat = node->pat;
 
-        solver_add_search(self->solver, pat->vars, pat->nbVars);
-
-        for(i = 0; i < pat->nbVars; i++) {
-            solver_diff(self->solver, i, 0);
+    // Simple query
+    if(pat->type == PATTERN_TYPE_BASIC ||
+       (pat->type == PATTERN_TYPE_FILTER &&
+        pat->left->type == PATTERN_TYPE_BASIC)) {
+        if(!node->flag) {
+            solver_add_search(self->solver, pat->vars, pat->nbVars);
+            for(i = 0; i < pat->nbVars; i++)
+                solver_diff(self->solver, pat->vars[i], 0);
+            if(pat->type == PATTERN_TYPE_FILTER) {
+                visit_filter(self->solver, self->store, pat->expr);
+                pat = pat->left;
+            }
+            for(i = 0; i < pat->nbTriples; i++) {
+                post_statement(self->solver, self->store, &pat->triples[i]);
+            }
+            node->flag = true;
+        } else if(self->last != NULL && self->last != node) {
+            return true; // another BGP is posted further down
         }
-
-        if(pat->type == PATTERN_TYPE_FILTER) {
-            visit_filter(self->solver, self->store, pat->expr);
-            pat = pat->left;
-        }
-
-        for(i = 0; i < pat->nbTriples; i++) {
-            post_statement(self->solver, self->store, &pat->triples[i]);
-        }
-
-        self->started = true;
+        self->last = node;
+        if(solver_search(self->solver))
+            return true;
+        node->flag = false;
+        self->last = NULL;
+        return false;
     }
 
-    if(!solver_search(self->solver))
+    // Compound query
+    switch(pat->type) {
+    case PATTERN_TYPE_FALSE:
+        return false;
+    case PATTERN_TYPE_FILTER:
+        while(sol(self, node->left)) {
+            for(i = 0; i < pat->expr->nbVars; i++) {
+                x = pat->expr->vars[i];
+                if(solver_var_contains(self->solver, x, 0))
+                    self->query->vars[x].value = NULL;
+                else
+                    self->query->vars[x].value = store_value_get(self->store,
+                                        solver_var_value(self->solver, x));
+            }
+            if(expression_is_true(pat->expr))
+                return true;
+        }
+        return false;
+    case PATTERN_TYPE_JOIN:
+        while(sol(self, node->left)) {
+            if(sol(self, node->right))
+                return true;
+        }
+        return false;
+    case PATTERN_TYPE_LEFTJOIN:
+        while(sol(self, node->left)) {
+            if(sol(self, node->right)) {
+                node->flag = true;
+                return true;
+            } else if(!node->flag) {
+                return true;
+            } else {
+                node->flag = false;
+            }
+        }
+        return false;
+    case PATTERN_TYPE_UNION:
+        if(!node->flag && sol(self, node->left))
+            return true;
+        node->flag = true;
+        if(sol(self, node->right))
+            return true;
+        node->flag = false;
+        return false;
+    default:
+        // should not happen
+        return false;
+    }
+    return false;
+}
+
+bool castor_next(Castor* self) {
+    int i, n;
+
+    if(!sol(self, self->root))
         return false;
 
     n = self->query->nbVars;

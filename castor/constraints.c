@@ -127,7 +127,9 @@ bool cstr_filter_propagate(Solver* solver, FilterConstraint* c) {
     unbound = -1;
     for(i = 0; i < expr->nbVars; i++) {
         x = expr->vars[i];
-        if(solver_var_bound(solver, x)) {
+        if(solver_var_contains(solver, x, 0)) {
+            expr->query->vars[x].value = NULL;
+        } else if(solver_var_bound(solver, x)) {
             expr->query->vars[x].value =
                     store_value_get(c->store, solver_var_value(solver, x));
         } else if(unbound >= 0) {

@@ -468,7 +468,7 @@ bool eval_bang(Expression* expr, Value* result) {
     b = eval_ebv(expr->arg1, result);
     if(b == -1)
         return false;
-    eval_make_boolean(b, result);
+    eval_make_boolean(!b, result);
     return true;
 }
 

@@ -25,7 +25,7 @@
 #include "castor.h"
 #include "stores/store_sqlite.h"
 
-#define BENCHMARK
+//#define BENCHMARK
 
 #define BUFFER_SIZE 1024
 
@@ -107,7 +107,6 @@ int main(int argc, char* argv[]) {
         nbSols++;
 #ifndef BENCHMARK
         for(i = 0; i < query->nbRequestedVars; i++) {
-            // FIXME unbound variables?
             str = model_value_string(query->vars[i].value);
             printf("%s ", str);
             free(str);

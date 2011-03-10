@@ -172,6 +172,12 @@ char* model_value_string(Value* val) {
     char *result, *tmp = NULL;
     int lexlen, len;
 
+    if(val == NULL) {
+        result = (char*) malloc(sizeof(char));
+        result[0] = '\0';
+        return result;
+    }
+
     lexlen = val->lexical == NULL ? 0 : strlen(val->lexical);
 
     switch(val->type) {

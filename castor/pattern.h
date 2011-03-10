@@ -78,8 +78,13 @@ typedef enum {
     /**
      * UNION
      */
-    PATTERN_TYPE_UNION
+    PATTERN_TYPE_UNION,
+
+    PATTERN_TYPE_FIRST_COMPOUND = PATTERN_TYPE_FILTER
 } PatternType;
+
+#define IS_PATTERN_TYPE_COMPOUND(type) \
+    ((type) >= PATTERN_TYPE_FIRST_COMPOUND)
 
 /**
  * Structure for a SPARQL graph pattern

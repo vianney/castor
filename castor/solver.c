@@ -370,6 +370,28 @@ void solver_fail(Solver* self) {
 // Searching
 
 /**
+ * Create a checkpoint in the current subtree
+ *
+ * @param self a solver instance
+ * @param x chosen variable
+ * @param v chosen value
+ */
+void checkpoint(Solver* self, int x, int v) {
+    SubTree *sub;
+    Checkpoint *chkp;
+
+    sub = self->subtree;
+
+    chkp = (Checkpoint*) malloc(sizeof(Checkpoint));
+    chkp->domSize = (int*) malloc(self->nbVars * sizeof(int));
+    memcpy(chkp->domSize, self->domSize, self->nbVars * sizeof(int));
+    chkp->x = x;
+    chkp->v = v;
+    chkp->next = sub->trail;
+    sub->trail = chkp;
+}
+
+/**
  * Backtrack to the previous checkpoint, remove the chosen value from the
  * chosen variable and propagate. If the propagation leads to a failure,
  * backtrack to an older checkpoint.
@@ -402,13 +424,16 @@ int backtrack(Solver* self) {
         self->propagQueue = c->nextPropag;
         c->nextPropag = NULL;
     }
-    // remove old (failed) choice
-    if(!solver_var_remove(self, x, v)) {
-        self->statBacktracks--; // branch finished: does not count as backtrack
-        return backtrack(self);
+    if(x >= 0) {
+        // remove old (failed) choice
+        if(!solver_var_remove(self, x, v)) {
+            // branch finished: does not count as backtrack
+            self->statBacktracks--;
+            return backtrack(self);
+        }
+        if(!propagate(self))
+            return backtrack(self);
     }
-    if(!propagate(self))
-        return backtrack(self);
     return x;
 }
 
@@ -425,20 +450,25 @@ void solver_add_search(Solver* self, int* vars, int nbVars) {
     sub->constraints = self->constraints;
     sub->trail = NULL;
     self->subtree = sub;
+
+    // Create the root checkpoint with variable -1
+    checkpoint(self, -1, -1);
 }
 
 bool solver_search(Solver* self) {
     int x, i, sx, sy, v;
     SubTree *sub;
-    Checkpoint *chkp;
     Constraint *c;
+    ConstraintList *cl;
 
     sub = self->subtree;
     if(sub == NULL)
         return false;
 
-    if(self->inconsistent)
+    if(self->inconsistent) {
+        backtrack(self);
         goto done;
+    }
 
     x = -1;
     if(sub->started) { // the search has started, try to backtrack
@@ -467,15 +497,7 @@ bool solver_search(Solver* self) {
         }
         // Take the last value of the domain
         v = self->domain[x][self->domSize[x]-1];
-        // create a checkpoint
-        chkp = (Checkpoint*) malloc(sizeof(Checkpoint));
-        chkp->domSize = (int*) malloc(self->nbVars * sizeof(int));
-        memcpy(chkp->domSize, self->domSize, self->nbVars * sizeof(int));
-        chkp->x = x;
-        chkp->v = v;
-        chkp->next = sub->trail;
-        sub->trail = chkp;
-        // bind and propagate
+        checkpoint(self, x, v);
         solver_var_bind(self, x, v); // should always return true
         if(!propagate(self)) {
             x = backtrack(self);
@@ -490,8 +512,11 @@ done:
         c = self->constraints;
         self->constraints = c->next;
         for(x = 0; x < self->nbVars; x++) {
-            if(self->evBind[x] != NULL && self->evBind[x]->cstr == c)
-                self->evBind[x] = self->evBind[x]->next;
+            if(self->evBind[x] != NULL && self->evBind[x]->cstr == c) {
+                cl = self->evBind[x];
+                self->evBind[x] = cl->next;
+                free(cl);
+            }
         }
         if(c->free != NULL)
             c->free(self, c);
