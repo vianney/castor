@@ -38,9 +38,7 @@ bool cstr_statement_propagate(Solver* solver, StatementConstraint* c) {
     bool result;
 
 #define INIT(p, part) \
-    if(c->stmt.part == 0) { \
-        return false; \
-    } else if(STMTPAT_ISVAR(c->stmt.part)) { \
+    if(STMTPAT_ISVAR(c->stmt.part)) { \
         x ## p = STMTPAT_IDTOVAR(c->stmt.part); \
         v ## p = solver_var_bound(solver, x ## p) ? \
                  solver_var_value(solver, x ## p) : -1; \
@@ -130,9 +128,8 @@ bool cstr_filter_propagate(Solver* solver, FilterConstraint* c) {
     for(i = 0; i < expr->nbVars; i++) {
         x = expr->vars[i];
         if(solver_var_bound(solver, x)) {
-            query_variable_bind(expr->query, x,
-                                store_value_get(c->store,
-                                                solver_var_value(solver, x)));
+            expr->query->vars[x].value =
+                    store_value_get(c->store, solver_var_value(solver, x));
         } else if(unbound >= 0) {
             return true; // too many unbound variables (> 1)
         } else {
@@ -148,8 +145,8 @@ bool cstr_filter_propagate(Solver* solver, FilterConstraint* c) {
         n = solver_var_size(solver, unbound);
         dom = solver_var_domain(solver, unbound);
         for(i = 0; i < n; i++) {
-            query_variable_bind(expr->query, unbound,
-                                store_value_get(c->store, dom[i]));
+            expr->query->vars[unbound].value =
+                    store_value_get(c->store, dom[i]);
             if(expression_is_true(expr))
                 solver_var_mark(solver, unbound, dom[i]);
         }

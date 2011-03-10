@@ -38,7 +38,7 @@ int main(int argc, char* argv[]) {
     Store *store;
     Query *query;
     Castor *engine;
-    int nbSols, i, n;
+    int nbSols, i;
     char *str;
     struct rusage ru[5];
     long diff;
@@ -90,6 +90,8 @@ int main(int argc, char* argv[]) {
         goto cleanstore;
     }
 
+    query_print(query, stdout);
+
     getrusage(RUSAGE_SELF, &ru[2]);
 
     engine = new_castor(store, query);
@@ -104,15 +106,15 @@ int main(int argc, char* argv[]) {
     while(castor_next(engine)) {
         nbSols++;
 #ifndef BENCHMARK
-        n = query_variable_requested(query);
-        for(i = 0; i < n; i++) {
-            str = model_value_string(query_variable_get(query, i));
+        for(i = 0; i < query->nbRequestedVars; i++) {
+            // FIXME unbound variables?
+            str = model_value_string(query->vars[i].value);
             printf("%s ", str);
             free(str);
         }
         printf("\n");
 #endif
-        if(query_get_type(query) == QUERY_TYPE_ASK)
+        if(query->limit > 0 && nbSols >= query->limit)
             break;
     }
 

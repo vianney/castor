@@ -25,62 +25,6 @@
 #include "query.h"
 
 ////////////////////////////////////////////////////////////////////////////////
-// Query data structure
-
-/**
- * Variable structure
- */
-typedef struct {
-    /**
-     * Index of the variable
-     */
-    int id;
-    /**
-     * Value bound to the variable or NULL if unbound
-     */
-    Value *value;
-} Variable;
-
-struct TQuery {
-    /**
-     * Store associated to the query
-     */
-    Store *store;
-    /**
-     * Type of query
-     */
-    QueryType type;
-    /**
-     * Number of variables
-     */
-    int nbVars;
-    /**
-     * Number of requested variables
-     */
-    int nbRequestedVars;
-    /**
-     * Array of variables. The requested variables come first.
-     */
-    Variable* vars;
-    /**
-     * Number of triple patterns
-     */
-    int nbPatterns;
-    /**
-     * Array of triple patterns
-     */
-    StatementPattern *patterns;
-    /**
-     * Number of filters
-     */
-    int nbFilters;
-    /**
-     * Array of filters
-     */
-    Expression** filters;
-};
-
-////////////////////////////////////////////////////////////////////////////////
 // Helper functions for query construction
 
 /**
@@ -178,7 +122,7 @@ Expression* convert_expression(Query* self, rasqal_expression* expr) {
         lit = expr->literal;
         if(lit->type == RASQAL_LITERAL_VARIABLE) {
             return new_expression_variable(self,
-                    ((Variable*) lit->value.variable->user_data)->id);
+                                (Variable*) lit->value.variable->user_data);
         } else {
             i = get_value_id(self, lit);
             if(i > 0)
@@ -360,6 +304,171 @@ Expression* convert_expression(Query* self, rasqal_expression* expr) {
     }
 }
 
+/**
+ * Create a graph pattern from a rasqal_graph_pattern
+ *
+ * @param self a query instance (store and variables should be initialized)
+ * @param gp a rasqal_graph_pattern
+ * @return the new pattern
+ */
+Pattern* convert_pattern(Query* self, rasqal_graph_pattern* gp) {
+    Pattern *pat, *subpat;
+    int i, n;
+    raptor_sequence *seq;
+    rasqal_graph_pattern *subgp;
+    rasqal_triple *triple;
+    StatementPattern *stmts;
+    Expression *expr, *subexpr;
+
+    switch(rasqal_graph_pattern_get_operator(gp)) {
+    case RASQAL_GRAPH_PATTERN_OPERATOR_BASIC:
+        // FIXME better way of getting the number of triples?
+        for(n = 0; rasqal_graph_pattern_get_triple(gp, n) != NULL; n++);
+        stmts = (StatementPattern*) malloc(n * sizeof(StatementPattern));
+        for(i = 0; i < n; i++) {
+            triple = rasqal_graph_pattern_get_triple(gp, i);
+            stmts[i].subject = get_value_id(self, triple->subject);
+            stmts[i].predicate = get_value_id(self, triple->predicate);
+            stmts[i].object = get_value_id(self, triple->object);
+            if(stmts[i].subject == 0 ||
+               stmts[i].predicate == 0 ||
+               stmts[i].object == 0) {
+                // We have an unknown value, this BGP will never match
+                free(stmts);
+                return new_pattern_false(self);
+            }
+        }
+        return new_pattern_basic(self, stmts, n);
+    case RASQAL_GRAPH_PATTERN_OPERATOR_UNION:
+        pat = NULL;
+        seq = rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp);
+        n = raptor_sequence_size(seq);
+        for(i = 0; i < n; i++) {
+            subgp = raptor_sequence_get_at(seq, i);
+            subpat = convert_pattern(self, subgp);
+            if(subpat->type == PATTERN_TYPE_FALSE) {
+                free_pattern(subpat);
+                continue;
+            }
+            if(pat == NULL)
+                pat = subpat;
+            else
+                pat = new_pattern_compound(self, PATTERN_TYPE_UNION,
+                                           pat, subpat, NULL);
+        }
+        if(pat == NULL)
+            pat = new_pattern_false(self);
+        return pat;
+    case RASQAL_GRAPH_PATTERN_OPERATOR_GROUP:
+        expr = NULL;
+        pat = NULL;
+        seq = rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp);
+        n = raptor_sequence_size(seq);
+        for(i = 0; i < n; i++) {
+            subgp = raptor_sequence_get_at(seq, i);
+            switch(rasqal_graph_pattern_get_operator(subgp)) {
+            case RASQAL_GRAPH_PATTERN_OPERATOR_FILTER:
+                subexpr = convert_expression(self,
+                            rasqal_graph_pattern_get_filter_expression(subgp));
+                if(expr == NULL)
+                    expr = subexpr;
+                else
+                    expr = new_expression_binary(self, EXPR_OP_AND,
+                                                 expr, subexpr);
+                break;
+            case RASQAL_GRAPH_PATTERN_OPERATOR_OPTIONAL:
+                n = raptor_sequence_size(
+                        rasqal_graph_pattern_get_sub_graph_pattern_sequence(subgp));
+                if(n != 1) {
+                    fprintf(stderr,
+                            "castor query: ignoring OPTIONAL pattern with %d subpatterns\n",
+                            n);
+                    break;
+                }
+                subpat = convert_pattern(self,
+                        rasqal_graph_pattern_get_sub_graph_pattern(subgp, 0));
+                if(subpat->type == PATTERN_TYPE_FALSE) {
+                    free_pattern(subpat);
+                    break;
+                }
+                if(pat == NULL)
+                    pat = new_pattern_basic(self, NULL, 0); // empty pattern
+                if(subpat->type == PATTERN_TYPE_FILTER) {
+                    pat = new_pattern_compound(self, PATTERN_TYPE_LEFTJOIN,
+                                               pat, subpat->left, subpat->expr);
+                    subpat->left = NULL; // do not free these
+                    subpat->expr = NULL;
+                    free_pattern(subpat);
+                } else {
+                    pat = new_pattern_compound(self, PATTERN_TYPE_LEFTJOIN,
+                                               pat, subpat, NULL);
+                }
+                break;
+            default:
+                subpat = convert_pattern(self, subgp);
+                if(subpat->type == PATTERN_TYPE_FALSE) {
+                    // one false pattern in a join makes the whole group false
+                    if(pat != NULL)
+                        free_pattern(pat);
+                    if(expr != NULL)
+                        free_expression(expr);
+                    return subpat;
+                }
+                if(pat == NULL)
+                    pat = subpat;
+                else
+                    pat = new_pattern_compound(self, PATTERN_TYPE_JOIN,
+                                               pat, subpat, NULL);
+            }
+        }
+        if(pat == NULL)
+            pat = new_pattern_basic(self, NULL, 0); // empty pattern
+        if(expr != NULL)
+            pat = new_pattern_compound(self, PATTERN_TYPE_FILTER,
+                                       pat, NULL, expr);
+        return pat;
+    case RASQAL_GRAPH_PATTERN_OPERATOR_OPTIONAL:
+        // lone optional pattern
+        n = raptor_sequence_size(
+                rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp));
+        if(n != 1) {
+            fprintf(stderr,
+                    "castor query: ignoring OPTIONAL pattern with %d subpatterns\n",
+                    n);
+            break;
+        }
+        pat = new_pattern_basic(self, NULL, 0); // empty pattern
+        subpat = convert_pattern(self,
+                rasqal_graph_pattern_get_sub_graph_pattern(gp, 0));
+        if(subpat->type == PATTERN_TYPE_FALSE) {
+            free_pattern(subpat);
+            return pat;
+        }
+        if(subpat->type == PATTERN_TYPE_FILTER) {
+            pat = new_pattern_compound(self, PATTERN_TYPE_LEFTJOIN,
+                                       pat, subpat->left, subpat->expr);
+            subpat->left = NULL; // do not free these
+            subpat->expr = NULL;
+            free_pattern(subpat);
+        } else {
+            pat = new_pattern_compound(self, PATTERN_TYPE_LEFTJOIN,
+                                       pat, subpat, NULL);
+        }
+        return pat;
+    case RASQAL_GRAPH_PATTERN_OPERATOR_FILTER:
+        // lone filter pattern
+        expr = convert_expression(self,
+                            rasqal_graph_pattern_get_filter_expression(gp));
+        return new_pattern_compound(self, PATTERN_TYPE_FILTER,
+                                    new_pattern_basic(self, NULL, 0), // empty pattern
+                                    NULL, expr);
+    default:
+        fprintf(stderr, "castor query: unsupported rasqal graph pattern op %d\n",
+                rasqal_graph_pattern_get_operator(gp));
+    }
+    return NULL;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Constructor and destructor
 
@@ -369,12 +478,8 @@ Query* new_query(Store* store, char* queryString) {
     rasqal_query *query;
     raptor_sequence *seq, *seqVars, *seqAnon;
     int nbReal, nbAnon;
-    int i, x, n;
+    int i, x;
     rasqal_variable *var;
-    rasqal_triple *triple;
-    StatementPattern *stmt;
-    rasqal_graph_pattern *gp;
-    rasqal_expression *expr;
 
     world = rasqal_new_world();
     rasqal_world_open(world);
@@ -385,26 +490,21 @@ Query* new_query(Store* store, char* queryString) {
     self = (Query*) malloc(sizeof(Query));
     self->store = store;
 
-    // information
+    // variables
     switch(rasqal_query_get_verb(query)) {
     case RASQAL_QUERY_VERB_SELECT:
-        self->type = QUERY_TYPE_SELECT;
+        self->limit = rasqal_query_get_limit(query); // TODO check if no limit
+        seq = rasqal_query_get_bound_variable_sequence(query);
+        self->nbRequestedVars = raptor_sequence_size(seq);
         break;
     case RASQAL_QUERY_VERB_ASK:
-        self->type = QUERY_TYPE_ASK;
+        self->limit = 1;
+        self->nbRequestedVars = 0;
         break;
     default:
         fprintf(stderr, "castor query: unsupported rasqal verb %d\n",
                 rasqal_query_get_verb(query));
         goto cleanself;
-    }
-
-    // variables
-    if(self->type == QUERY_TYPE_SELECT) {
-        seq = rasqal_query_get_bound_variable_sequence(query);
-        self->nbRequestedVars = raptor_sequence_size(seq);
-    } else {
-        self->nbRequestedVars = 0;
     }
     seqVars = rasqal_query_get_all_variable_sequence(query);
     nbReal = raptor_sequence_size(seqVars);
@@ -417,6 +517,8 @@ Query* new_query(Store* store, char* queryString) {
         var = (rasqal_variable*) raptor_sequence_get_at(seq, x);
         var->user_data = &self->vars[x];
         self->vars[x].id = x;
+        self->vars[x].name = (char*) malloc((strlen((const char*)var->name)+1)*sizeof(char));
+        strcpy(self->vars[x].name, (const char*) var->name);
         self->vars[x].value = NULL;
     }
     for(i = 0; i < nbReal; i++) {
@@ -424,6 +526,8 @@ Query* new_query(Store* store, char* queryString) {
         if(var->user_data == NULL) {
             var->user_data = &self->vars[x];
             self->vars[x].id = x;
+            self->vars[x].name = (char*) malloc((strlen((const char*)var->name)+1)*sizeof(char));
+            strcpy(self->vars[x].name, (const char*) var->name);
             self->vars[x].value = NULL;
             x++;
         }
@@ -432,48 +536,14 @@ Query* new_query(Store* store, char* queryString) {
         var = (rasqal_variable*) raptor_sequence_get_at(seqAnon, i);
         var->user_data = &self->vars[x];
         self->vars[x].id = x;
+        self->vars[x].name = NULL;
         self->vars[x].value = NULL;
         x++;
     }
 
-    // triple patterns
-    seq = rasqal_query_get_triple_sequence(query);
-    self->nbPatterns = raptor_sequence_size(seq);
-    self->patterns = (StatementPattern*) malloc(self->nbPatterns *
-                                                sizeof(StatementPattern));
-    for(i = 0; i < self->nbPatterns; i++) {
-        triple = (rasqal_triple*) raptor_sequence_get_at(seq, i);
-        stmt = &self->patterns[i];
-        stmt->subject = get_value_id(self, triple->subject);
-        stmt->predicate = get_value_id(self, triple->predicate);
-        stmt->object = get_value_id(self, triple->object);
-    }
-
-    // filters
-    seq = rasqal_query_get_graph_pattern_sequence(query);
-    self->nbFilters = 0;
-    if(seq != NULL) {
-        n = raptor_sequence_size(seq);
-        self->nbFilters = 0;
-        for(i = 0; i < n; i++) {
-            gp = (rasqal_graph_pattern*) raptor_sequence_get_at(seq, i);
-            if(rasqal_graph_pattern_get_filter_expression(gp) != NULL)
-                self->nbFilters++;
-        }
-    }
-    if(self->nbFilters > 0) {
-        self->filters = (Expression**) malloc(self->nbFilters *
-                                              sizeof(Expression*));
-        x = 0;
-        for(i = 0; i < n; i++) {
-            gp = (rasqal_graph_pattern*) raptor_sequence_get_at(seq, i);
-            expr = rasqal_graph_pattern_get_filter_expression(gp);
-            if(expr != NULL)
-                self->filters[x++] = convert_expression(self, expr);
-        }
-    } else {
-        self->filters = NULL;
-    }
+    // graph pattern
+    self->pattern = convert_pattern(self,
+                                    rasqal_query_get_query_graph_pattern(query));
 
     rasqal_free_query(query);
     rasqal_free_world(world);
@@ -488,61 +558,55 @@ cleanquery:
 }
 
 void free_query(Query* self) {
-    int i;
-
-    for(i = 0; i < self->nbFilters; i++)
-        free_expression(self->filters[i]);
-    if(self->filters != NULL)
-        free(self->filters);
-    free(self->patterns);
+    free_pattern(self->pattern);
     free(self->vars);
     free(self);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Information
+// Debugging
 
-QueryType query_get_type(Query* self) {
-    return self->type;
+/**
+ * Print the pattern to f
+ *
+ * @param pat the pattern
+ * @param f output file
+ * @param indent number of spaces to add in front of each line
+ */
+void print_pattern(Pattern* pat, FILE* f, int indent) {
+    switch(pat->type) {
+    case PATTERN_TYPE_FALSE:
+        fprintf(f, "%*sFalse\n", indent, "");
+        break;
+    case PATTERN_TYPE_BASIC:
+        fprintf(f, "%*sBasic(%d triples)\n", indent, "", pat->nbTriples);
+        break;
+    case PATTERN_TYPE_FILTER:
+        fprintf(f, "%*sFilter(%d variables)\n", indent, "", pat->expr->nbVars);
+        print_pattern(pat->left, f, indent+2);
+        break;
+    case PATTERN_TYPE_JOIN:
+        fprintf(f, "%*sJoin\n", indent, "");
+        print_pattern(pat->left, f, indent+2);
+        print_pattern(pat->right, f, indent+2);
+        break;
+    case PATTERN_TYPE_LEFTJOIN:
+        fprintf(f, "%*sLeftJoin", indent, "");
+        if(pat->expr != NULL)
+            fprintf(f, "(condition on %d variables)", pat->expr->nbVars);
+        fprintf(f, "\n");
+        print_pattern(pat->left, f, indent+2);
+        print_pattern(pat->right, f, indent+2);
+        break;
+    case PATTERN_TYPE_UNION:
+        fprintf(f, "%*sUnion\n", indent, "");
+        print_pattern(pat->left, f, indent+2);
+        print_pattern(pat->right, f, indent+2);
+        break;
+    }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Variables
-
-int query_variable_count(Query* self) {
-    return self->nbVars;
-}
-
-int query_variable_requested(Query* self) {
-    return self->nbRequestedVars;
-}
-
-Value* query_variable_get(Query* self, int x) {
-    return self->vars[x].value;
-}
-
-void query_variable_bind(Query* self, int x, Value* v) {
-    self->vars[x].value = v;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Triple patterns
-
-int query_triple_pattern_count(Query* self) {
-    return self->nbPatterns;
-}
-
-StatementPattern* query_triple_pattern_get(Query* self, int i) {
-    return &self->patterns[i];
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Filters
-
-int query_filter_count(Query* self) {
-    return self->nbFilters;
-}
-
-Expression* query_filter_get(Query* self, int i) {
-    return self->filters[i];
+void query_print(Query* self, FILE* f) {
+    // TODO print other info
+    print_pattern(self->pattern, f, 0);
 }

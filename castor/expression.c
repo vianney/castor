@@ -37,12 +37,12 @@ Expression* new_expression_value(Query* query, Value* value, bool valueOwnership
 
     expr->nbVars = 0;
     expr->vars = NULL;
-    expr->varMap = (bool*) calloc(query_variable_count(query), sizeof(bool));
+    expr->varMap = (bool*) calloc(query->nbVars, sizeof(bool));
 
     return expr;
 }
 
-Expression* new_expression_variable(Query* query, int variable) {
+Expression* new_expression_variable(Query* query, Variable* variable) {
     Expression* expr;
 
     expr = (Expression*) malloc(sizeof(Expression));
@@ -52,9 +52,9 @@ Expression* new_expression_variable(Query* query, int variable) {
 
     expr->nbVars = 1;
     expr->vars = (int*) malloc(sizeof(int));
-    expr->vars[0] = variable;
-    expr->varMap = (bool*) calloc(query_variable_count(query), sizeof(bool));
-    expr->varMap[variable] = true;
+    expr->vars[0] = variable->id;
+    expr->varMap = (bool*) calloc(query->nbVars, sizeof(bool));
+    expr->varMap[variable->id] = true;
 
     return expr;
 }
@@ -99,10 +99,9 @@ Expression* new_expression_binary(Query* query, ExprOperator op,
         expr->vars = arg1->vars;
         expr->varMap = arg1->varMap;
     } else {
-        nbVars = query_variable_count(query);
-        vars = (int*) malloc(nbVars * sizeof(int));
-        varMap = (bool*) malloc(nbVars * sizeof(bool));
-        memcpy(varMap, arg1->varMap, nbVars * sizeof(bool));
+        vars = (int*) malloc(query->nbVars * sizeof(int));
+        varMap = (bool*) malloc(query->nbVars * sizeof(bool));
+        memcpy(varMap, arg1->varMap, query->nbVars * sizeof(bool));
         nbVars = arg1->nbVars;
         memcpy(vars, arg1->vars, nbVars * sizeof(int));
         for(i = 0; i < arg2->nbVars; i++) {
@@ -148,9 +147,8 @@ Expression* new_expression_trinary(Query* query, ExprOperator op,
         expr->vars = arg1->vars;
         expr->varMap = arg1->varMap;
     } else {
-        nbVars = query_variable_count(query);
-        vars = (int*) malloc(nbVars * sizeof(int));
-        varMap = (bool*) calloc(nbVars, sizeof(bool));
+        vars = (int*) malloc(query->nbVars * sizeof(int));
+        varMap = (bool*) calloc(query->nbVars, sizeof(bool));
         nbVars = 0;
 #define ADDVARS(k) \
         for(i = 0; i < arg ## k->nbVars; i++) { \
@@ -203,9 +201,8 @@ Expression* new_expression_call(Query* query, int fn, int nbArgs,
     expr->nbArgs = nbArgs;
     expr->args = args;
 
-    nbVars = query_variable_count(query);
-    vars = (int*) malloc(nbVars * sizeof(int));
-    varMap = (bool*) calloc(nbVars, sizeof(int));
+    vars = (int*) malloc(query->nbVars * sizeof(int));
+    varMap = (bool*) calloc(query->nbVars, sizeof(int));
     nbVars = 0;
     for(j = 0; j < nbArgs; j++) {
         for(i = 0; i < args[j]->nbVars; i++) {
@@ -457,7 +454,7 @@ bool eval_value(Expression* expr, Value* result) {
 bool eval_variable(Expression* expr, Value* result) {
     Value *val;
 
-    val = query_variable_get(expr->query, expr->variable);
+    val = expr->variable->value;
     if(val == NULL)
         return false;
     memcpy(result, val, sizeof(Value));
@@ -522,8 +519,7 @@ bool eval_uminus(Expression* expr, Value* result) {
 bool eval_bound(Expression* expr, Value* result) {
     if(expr->arg1->op != EXPR_OP_VARIABLE)
         return false;
-    eval_make_boolean(query_variable_get(expr->query, expr->arg1->variable) != NULL,
-                      result);
+    eval_make_boolean(expr->arg1->variable->value != NULL, result);
     return true;
 }
 

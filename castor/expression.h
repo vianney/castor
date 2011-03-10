@@ -104,7 +104,7 @@ struct TExpression {
          * op == EXPR_OP_VARIABLE
          * Id of the variable
          */
-        int variable;
+        Variable *variable;
         /**
          * EXPR_OP_FIRST_UNARY <= op <= EXPR_OP_LAST_TRINARY
          */
@@ -144,10 +144,10 @@ Expression* new_expression_value(Query *query, Value* value, bool valueOwnership
 
 /**
  * @param query parent query
- * @param variable variable id
+ * @param variable variable
  * @return a new expression representing the variable
  */
-Expression* new_expression_variable(Query *query, int variable);
+Expression* new_expression_variable(Query *query, Variable *variable);
 
 /**
  * @param query parent query

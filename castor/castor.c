@@ -36,10 +36,17 @@ struct TCastor {
 Castor* new_castor(Store* store, Query* query) {
     Castor *self;
 
+    if(query->pattern->type != PATTERN_TYPE_BASIC &&
+       !(query->pattern->type == PATTERN_TYPE_FILTER &&
+         query->pattern->left->type == PATTERN_TYPE_BASIC)) {
+        fprintf(stderr, "castor: only simple queries supported for now\n");
+        return NULL;
+    }
+
     self = (Castor*) malloc(sizeof(Castor));
     self->store = store;
     self->query = query;
-    self->solver = new_solver(query_variable_count(query),
+    self->solver = new_solver(query->nbVars,
                               store_value_count(store) + 1);
     if(self->solver == NULL) {
         free(self);
@@ -73,7 +80,8 @@ void visit_filter(Solver* solver, Store* store, Expression* expr) {
     } else if(expr->op == EXPR_OP_EQ) {
         if(expr->arg1->op == EXPR_OP_VARIABLE &&
            expr->arg2->op == EXPR_OP_VARIABLE) {
-            post_eq(solver, store, expr->arg1->variable, expr->arg2->variable);
+            post_eq(solver, store, expr->arg1->variable->id,
+                    expr->arg2->variable->id);
             return;
         } else if(expr->arg1->op == EXPR_OP_VARIABLE &&
                   expr->arg2->nbVars == 0) {
@@ -88,7 +96,7 @@ void visit_filter(Solver* solver, Store* store, Expression* expr) {
                 solver_fail(solver);
                 return;
             }
-            solver_label(solver, expr->arg1->variable, i);
+            solver_label(solver, expr->arg1->variable->id, i);
             return;
         } else if(expr->arg2->op == EXPR_OP_VARIABLE &&
                   expr->arg1->nbVars == 0) {
@@ -103,13 +111,14 @@ void visit_filter(Solver* solver, Store* store, Expression* expr) {
                 solver_fail(solver);
                 return;
             }
-            solver_label(solver, expr->arg2->variable, i);
+            solver_label(solver, expr->arg2->variable->id, i);
             return;
         }
     } else if(expr->op == EXPR_OP_NEQ) {
         if(expr->arg1->op == EXPR_OP_VARIABLE &&
            expr->arg2->op == EXPR_OP_VARIABLE) {
-            post_diff(solver, store, expr->arg1->variable, expr->arg2->variable);
+            post_diff(solver, store, expr->arg1->variable->id,
+                      expr->arg2->variable->id);
             return;
         } else if(expr->arg1->op == EXPR_OP_VARIABLE &&
                   expr->arg2->nbVars == 0) {
@@ -124,7 +133,7 @@ void visit_filter(Solver* solver, Store* store, Expression* expr) {
                 solver_fail(solver);
                 return;
             }
-            solver_diff(solver, expr->arg1->variable, i);
+            solver_diff(solver, expr->arg1->variable->id, i);
             return;
         } else if(expr->arg2->op == EXPR_OP_VARIABLE &&
                   expr->arg1->nbVars == 0) {
@@ -139,7 +148,7 @@ void visit_filter(Solver* solver, Store* store, Expression* expr) {
                 solver_fail(solver);
                 return;
             }
-            solver_diff(solver, expr->arg2->variable, i);
+            solver_diff(solver, expr->arg2->variable->id, i);
             return;
         }
     }
@@ -149,44 +158,40 @@ void visit_filter(Solver* solver, Store* store, Expression* expr) {
 
 bool castor_next(Castor* self) {
     int i, n;
+    Pattern *pat;
 
     if(!self->started) {
-        // FIXME
-        n = query_variable_count(self->query);
-        int *vars = (int*) malloc(n * sizeof(int));
-        for(i = 0; i < n; i++)
-            vars[i] = i;
-        solver_add_search(self->solver, vars, n);
+        pat = self->query->pattern;
 
-        for(i = 0; i < n; i++) {
+        solver_add_search(self->solver, pat->vars, pat->nbVars);
+
+        for(i = 0; i < pat->nbVars; i++) {
             solver_diff(self->solver, i, 0);
         }
 
-        n = query_triple_pattern_count(self->query);
-        for(i = 0; i < n; i++) {
-            post_statement(self->solver, self->store,
-                           query_triple_pattern_get(self->query, i));
+        if(pat->type == PATTERN_TYPE_FILTER) {
+            visit_filter(self->solver, self->store, pat->expr);
+            pat = pat->left;
         }
 
-        n = query_filter_count(self->query);
-        for(i = 0; i < n; i++) {
-            visit_filter(self->solver, self->store,
-                         query_filter_get(self->query, i));
+        for(i = 0; i < pat->nbTriples; i++) {
+            post_statement(self->solver, self->store, &pat->triples[i]);
         }
+
         self->started = true;
     }
 
     if(!solver_search(self->solver))
         return false;
 
-    n = query_variable_requested(self->query);
+    n = self->query->nbVars;
     for(i = 0; i < n; i++) {
         if(solver_var_contains(self->solver, i, 0))
-            query_variable_bind(self->query, i, NULL);
+            self->query->vars[i].value = NULL;
         else
-            query_variable_bind(self->query, i,
-                                store_value_get(self->store,
-                                                solver_var_value(self->solver, i)));
+            self->query->vars[i].value =
+                    store_value_get(self->store,
+                                    solver_var_value(self->solver, i));
     }
 
     return true;

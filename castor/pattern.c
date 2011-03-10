@@ -24,6 +24,18 @@
 ////////////////////////////////////////////////////////////////////////////////
 // Constructors and destructors
 
+Pattern* new_pattern_false(Query *query) {
+    Pattern *pat;
+
+    pat = (Pattern*) malloc(sizeof(Pattern));
+    pat->query = query;
+    pat->type = PATTERN_TYPE_FALSE;
+    pat->nbVars = 0;
+    pat->vars = NULL;
+    pat->varMap = (bool*) calloc(query->nbVars, sizeof(bool));
+    return pat;
+}
+
 Pattern* new_pattern_basic(Query *query, StatementPattern *triples,
                            int nbTriples) {
     Pattern *pat;
@@ -37,9 +49,8 @@ Pattern* new_pattern_basic(Query *query, StatementPattern *triples,
     pat->nbTriples = nbTriples;
     pat->triples = triples;
 
-    nbVars = query_variable_count(query);
-    vars = (int*) malloc(nbVars * sizeof(int));
-    varMap = (bool*) calloc(nbVars, sizeof(bool));
+    vars = (int*) malloc(query->nbVars * sizeof(int));
+    varMap = (bool*) calloc(query->nbVars, sizeof(bool));
     nbVars = 0;
     for(i = 0; i < nbTriples; i++, triples++) {
 #define CHECK(part) \
@@ -81,9 +92,8 @@ Pattern* new_pattern_compound(Query *query, PatternType type,
         pat->nbVars = left->nbVars;
         pat->varMap = left->varMap;
     } else {
-        nbVars = query_variable_count(query);
-        vars = (int*) malloc(nbVars * sizeof(int));
-        varMap = (bool*) calloc(nbVars, sizeof(bool));
+        vars = (int*) malloc(query->nbVars * sizeof(int));
+        varMap = (bool*) calloc(query->nbVars, sizeof(bool));
         nbVars = 0;
         for(i = 0; i < left->nbVars; i++) {
             x = left->vars[i];
@@ -107,23 +117,30 @@ Pattern* new_pattern_compound(Query *query, PatternType type,
 
 void free_pattern(Pattern* pat) {
     switch(pat->type) {
+    case PATTERN_TYPE_FALSE:
+        free(pat->varMap);
+        break;
     case PATTERN_TYPE_BASIC:
-        free(pat->triples);
+        if(pat->triples != NULL)
+            free(pat->triples);
         if(pat->vars != NULL)
             free(pat->vars);
         free(pat->varMap);
         break;
     case PATTERN_TYPE_FILTER:
-        free_pattern(pat->left);
-        free_expression(pat->expr);
+        if(pat->left != NULL)
+            free_pattern(pat->left);
+        if(pat->expr != NULL)
+            free_expression(pat->expr);
         // vars were copied from left, so already freed
         break;
-    case PATTERN_TYPE_LEFTJOIN:
-        free_expression(pat->expr);
-        // no break
     default:
-        free_pattern(pat->left);
-        free_pattern(pat->right);
+        if(pat->left != NULL)
+            free_pattern(pat->left);
+        if(pat->right != NULL)
+            free_pattern(pat->right);
+        if(pat->expr != NULL)
+            free_expression(pat->expr);
         if(pat->vars != NULL)
             free(pat->vars);
         free(pat->varMap);

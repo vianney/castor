@@ -54,10 +54,30 @@ typedef Statement StatementPattern;
  * Pattern type enumeration
  */
 typedef enum {
+    /**
+     * Dummy pattern always resulting in an empty set of solutions, i.e., it
+     * cannot be matched
+     */
+    PATTERN_TYPE_FALSE,
+    /**
+     * Basic graph pattern (set of statement patterns)
+     */
     PATTERN_TYPE_BASIC,
+    /**
+     * Filter expression
+     */
     PATTERN_TYPE_FILTER,
+    /**
+     * Concatenation
+     */
     PATTERN_TYPE_JOIN,
+    /**
+     * OPTIONAL
+     */
     PATTERN_TYPE_LEFTJOIN,
+    /**
+     * UNION
+     */
     PATTERN_TYPE_UNION
 } PatternType;
 
@@ -110,6 +130,12 @@ struct TPattern {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Constructors and destructors
+
+/**
+ * @param query parent query
+ * @return a new false graph pattern
+ */
+Pattern* new_pattern_false(Query *query);
 
 /**
  * @param query parent query
