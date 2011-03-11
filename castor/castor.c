@@ -45,11 +45,11 @@ struct TPatternNode {
     bool posted;
     /**
      * Flag depending on the pattern type
-     * BGP: are the triples posted
-     * LEFTJOIN: is the optional subpattern consistent
-     * UNION: are we done with the left branch
+     * BGP: depth of the posted subtree, or 0 if not posted
+     * LEFTJOIN: 1 if the optional subpattern is consistent, 0 otherwise
+     * UNION: 0 if exploring the left branch, 1 for the right branch
      */
-    bool flag;
+    int flag;
 };
 
 struct TCastor {
@@ -69,10 +69,6 @@ struct TCastor {
      * Root pattern node corresponding to the root graph pattern
      */
     PatternNode *root;
-    /**
-     * Last pattern node posted
-     */
-    PatternNode *last;
 };
 
 /**
@@ -87,7 +83,7 @@ PatternNode* create_pattern_node(Pattern* pat) {
     node->left = NULL;
     node->right = NULL;
     node->posted = false;
-    node->flag = false;
+    node->flag = 0;
     if(IS_PATTERN_TYPE_COMPOUND(pat->type)) {
         if(pat->left != NULL)
             node->left = create_pattern_node(pat->left);
@@ -110,7 +106,6 @@ Castor* new_castor(Store* store, Query* query) {
         return NULL;
     }
     self->root = create_pattern_node(query->pattern);
-    self->last = NULL;
     return self;
 }
 
@@ -236,8 +231,12 @@ bool sol(Castor* self, PatternNode* node) {
     if(pat->type == PATTERN_TYPE_BASIC ||
        (pat->type == PATTERN_TYPE_FILTER &&
         pat->left->type == PATTERN_TYPE_BASIC)) {
-        if(!node->flag) {
-            solver_add_search(self->solver, pat->vars, pat->nbVars);
+        if(node->flag == 0) {
+            solver_print_domains(self->solver);
+            node->flag = solver_add_search(self->solver, pat->vars, pat->nbVars);
+            if(node->flag == 0) { // we were already inconsistent, should not happen
+                return false;
+            }
             for(i = 0; i < pat->nbVars; i++)
                 solver_diff(self->solver, pat->vars[i], 0);
             if(pat->type == PATTERN_TYPE_FILTER) {
@@ -247,15 +246,13 @@ bool sol(Castor* self, PatternNode* node) {
             for(i = 0; i < pat->nbTriples; i++) {
                 post_statement(self->solver, self->store, &pat->triples[i]);
             }
-            node->flag = true;
-        } else if(self->last != NULL && self->last != node) {
+            solver_print_domains(self->solver);
+        } else if(node->flag != solver_search_depth(self->solver)) {
             return true; // another BGP is posted further down
         }
-        self->last = node;
         if(solver_search(self->solver))
             return true;
-        node->flag = false;
-        self->last = NULL;
+        node->flag = 0;
         return false;
     }
 
@@ -286,22 +283,22 @@ bool sol(Castor* self, PatternNode* node) {
     case PATTERN_TYPE_LEFTJOIN:
         while(sol(self, node->left)) {
             if(sol(self, node->right)) {
-                node->flag = true;
+                node->flag = 1;
                 return true;
-            } else if(!node->flag) {
+            } else if(node->flag == 0) {
                 return true;
             } else {
-                node->flag = false;
+                node->flag = 0;
             }
         }
         return false;
     case PATTERN_TYPE_UNION:
-        if(!node->flag && sol(self, node->left))
+        if(node->flag == 0 && sol(self, node->left))
             return true;
-        node->flag = true;
+        node->flag = 1;
         if(sol(self, node->right))
             return true;
-        node->flag = false;
+        node->flag = 0;
         return false;
     default:
         // should not happen
