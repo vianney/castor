@@ -393,16 +393,16 @@ Pattern* convert_pattern(Query* self, rasqal_graph_pattern* gp) {
                 }
                 if(pat == NULL)
                     pat = new_pattern_basic(self, NULL, 0); // empty pattern
-                if(subpat->type == PATTERN_TYPE_FILTER) {
-                    pat = new_pattern_compound(self, PATTERN_TYPE_LEFTJOIN,
-                                               pat, subpat->left, subpat->expr);
-                    subpat->left = NULL; // do not free these
-                    subpat->expr = NULL;
-                    free_pattern(subpat);
-                } else {
+//                if(subpat->type == PATTERN_TYPE_FILTER) {
+//                    pat = new_pattern_compound(self, PATTERN_TYPE_LEFTJOIN,
+//                                               pat, subpat->left, subpat->expr);
+//                    subpat->left = NULL; // do not free these
+//                    subpat->expr = NULL;
+//                    free_pattern(subpat);
+//                } else {
                     pat = new_pattern_compound(self, PATTERN_TYPE_LEFTJOIN,
                                                pat, subpat, NULL);
-                }
+//                }
                 break;
             default:
                 subpat = convert_pattern(self, subgp);
