@@ -156,12 +156,21 @@ void solver_fail(Solver* self);
  * @param self a solver instance
  * @param vars the variables to label in the subtree
  * @param nbVars number of variables to label
+ * @return depth of the new subtree (starting from 1), or 0 if no subtree has
+ *         been added due to an inconsistent state
  */
-void solver_add_search(Solver* self, int* vars, int nbVars);
+int solver_add_search(Solver* self, int* vars, int nbVars);
+
+/**
+ * @return the depth of the current search subtree (starting from 1) or 0 if no
+ *         subtree has been added or remains
+ */
+int solver_search_depth(Solver* self);
 
 /**
  * Search for the next solution in the current subtree. No constraint may be
- * posted once the search has begun in the current subtree.
+ * posted once the search has begun in the current subtree. When a subtree is
+ * done (this function returns false), it is automatically discarded.
  *
  * @param self a solver instance
  * @return true if a solution has been found, false if the subtree is done

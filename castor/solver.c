@@ -148,6 +148,10 @@ struct TSolver {
      * Current search subtree
      */
     SubTree* subtree;
+    /**
+     * Depth of the current subtree, i.e., length of the subtree linked list.
+     */
+    int depth;
 
     // Statistics
     /**
@@ -206,6 +210,7 @@ Solver* new_solver(int nbVars, int nbVals) {
 
     self->inconsistent = false;
     self->subtree = NULL;
+    self->depth = 0;
 
     self->statBacktracks = 0;
 
@@ -437,11 +442,11 @@ int backtrack(Solver* self) {
     return x;
 }
 
-void solver_add_search(Solver* self, int* vars, int nbVars) {
+int solver_add_search(Solver* self, int* vars, int nbVars) {
     SubTree *sub;
 
     if(self->inconsistent)
-        return;
+        return 0;
     sub = (SubTree*) malloc(sizeof(SubTree));
     sub->parent = self->subtree;
     sub->nbVars = nbVars;
@@ -450,9 +455,16 @@ void solver_add_search(Solver* self, int* vars, int nbVars) {
     sub->constraints = self->constraints;
     sub->trail = NULL;
     self->subtree = sub;
+    self->depth++;
 
     // Create the root checkpoint with variable -1
     checkpoint(self, -1, -1);
+
+    return self->depth;
+}
+
+int solver_search_depth(Solver* self) {
+    return self->depth;
 }
 
 bool solver_search(Solver* self) {
@@ -525,6 +537,7 @@ done:
     self->subtree = sub->parent;
     free(sub);
     self->inconsistent = false;
+    self->depth--;
     return false;
 }
 
