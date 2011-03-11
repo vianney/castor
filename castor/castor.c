@@ -232,7 +232,6 @@ bool sol(Castor* self, PatternNode* node) {
        (pat->type == PATTERN_TYPE_FILTER &&
         pat->left->type == PATTERN_TYPE_BASIC)) {
         if(node->flag == 0) {
-            solver_print_domains(self->solver);
             node->flag = solver_add_search(self->solver, pat->vars, pat->nbVars);
             if(node->flag == 0) { // we were already inconsistent, should not happen
                 return false;
@@ -246,7 +245,6 @@ bool sol(Castor* self, PatternNode* node) {
             for(i = 0; i < pat->nbTriples; i++) {
                 post_statement(self->solver, self->store, &pat->triples[i]);
             }
-            solver_print_domains(self->solver);
         } else if(node->flag != solver_search_depth(self->solver)) {
             return true; // another BGP is posted further down
         }
