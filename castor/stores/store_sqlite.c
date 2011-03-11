@@ -340,8 +340,8 @@ Store* sqlite_store_open(const char* filename) {
     while((rc = sqlite3_step(sql)) != SQLITE_DONE) {
         if(rc != SQLITE_ROW)
             goto cleansql;
-        i = sqlite3_column_int(sql, 0) - 1;
-        v = &self->values[i];
+        i = sqlite3_column_int(sql, 0);
+        v = &self->values[i-1];
         v->id = i;
         v->type = sqlite3_column_int(sql, 1);
         v->typeUri = self->datatypes[v->type];
