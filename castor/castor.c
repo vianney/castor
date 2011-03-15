@@ -40,10 +40,6 @@ struct TPatternNode {
      */
     PatternNode *right;
     /**
-     * Is this node currently posted?
-     */
-    bool posted;
-    /**
      * Flag depending on the pattern type
      * BGP: depth of the posted subtree, or 0 if not posted
      * LEFTJOIN: 1 if the optional subpattern is consistent, 0 otherwise
@@ -82,7 +78,6 @@ PatternNode* create_pattern_node(Pattern* pat) {
     node->pat = pat;
     node->left = NULL;
     node->right = NULL;
-    node->posted = false;
     node->flag = 0;
     if(IS_PATTERN_TYPE_COMPOUND(pat->type)) {
         if(pat->left != NULL)
