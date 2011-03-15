@@ -17,6 +17,7 @@
  */
 
 #include <stdlib.h>
+#include <assert.h>
 
 #include "castor.h"
 #include "solver.h"
@@ -228,9 +229,7 @@ bool sol(Castor* self, PatternNode* node) {
         pat->left->type == PATTERN_TYPE_BASIC)) {
         if(node->flag == 0) {
             node->flag = solver_add_search(self->solver, pat->vars, pat->nbVars);
-            if(node->flag == 0) { // we were already inconsistent, should not happen
-                return false;
-            }
+            assert(node->flag != 0);
             for(i = 0; i < pat->nbVars; i++)
                 solver_diff(self->solver, pat->vars[i], 0);
             if(pat->type == PATTERN_TYPE_FILTER) {
@@ -294,10 +293,8 @@ bool sol(Castor* self, PatternNode* node) {
         node->flag = 0;
         return false;
     default:
-        // should not happen
-        return false;
+        assert(false); // should not happen
     }
-    return false;
 }
 
 bool castor_next(Castor* self) {
