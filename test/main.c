@@ -25,8 +25,6 @@
 #include "castor.h"
 #include "stores/store_sqlite.h"
 
-//#define BENCHMARK
-
 #define BUFFER_SIZE 1024
 
 int main(int argc, char* argv[]) {
@@ -105,14 +103,12 @@ int main(int argc, char* argv[]) {
     nbSols = 0;
     while(castor_next(engine)) {
         nbSols++;
-#ifndef BENCHMARK
         for(i = 0; i < query->nbRequestedVars; i++) {
             str = model_value_string(query->vars[i].value);
             printf("%s ", str);
             free(str);
         }
         printf("\n");
-#endif
         if(query->limit > 0 && nbSols >= query->limit)
             break;
     }
@@ -134,14 +130,12 @@ int main(int argc, char* argv[]) {
     PRINT_TIME("Engine search", ru[3], ru[4])
 #undef PRINT_TIME
 
-#ifdef BENCHMARK
     printf("Found: %d\n", nbSols);
     diff = (long)(ru[4].ru_utime.tv_sec + ru[4].ru_stime.tv_sec -
                   ru[2].ru_utime.tv_sec - ru[2].ru_stime.tv_sec) * 1000L +
            (long)(ru[4].ru_utime.tv_usec + ru[4].ru_stime.tv_usec -
                   ru[2].ru_utime.tv_usec - ru[2].ru_stime.tv_usec) / 1000L;
     printf("Time: %ld\n", diff);
-#endif
 
     free_castor(engine);
     free_query(query);
