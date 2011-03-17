@@ -136,6 +136,7 @@ int main(int argc, char* argv[]) {
            (long)(ru[4].ru_utime.tv_usec + ru[4].ru_stime.tv_usec -
                   ru[2].ru_utime.tv_usec - ru[2].ru_stime.tv_usec) / 1000L;
     printf("Time: %ld\n", diff);
+    printf("Memory: %ld\n", ru[4].ru_maxrss);
 
     free_castor(engine);
     free_query(query);
