@@ -182,9 +182,10 @@ char* model_value_string(Value* val) {
 
     switch(val->type) {
     case VALUE_TYPE_BLANK:
-        len = lexlen + 1;
+        len = lexlen + 3;
         result = (char*) malloc(len * sizeof(char));
-        strcpy(result, val->lexical == NULL ? "" : val->lexical);
+        strcpy(result, "_:");
+        strcpy(result+2, val->lexical == NULL ? "" : val->lexical);
         return result;
     case VALUE_TYPE_IRI:
         len = lexlen + 3;
@@ -221,7 +222,7 @@ char* model_value_string(Value* val) {
             }
             // TODO datetime
         }
-        len = lexlen + strlen(val->typeUri) + 5;
+        len = lexlen + strlen(val->typeUri) + 7;
         result = (char*) malloc(len * sizeof(char));
         result[0] = '"';
         if(val->lexical == NULL) {
@@ -239,9 +240,9 @@ char* model_value_string(Value* val) {
         } else {
             strcpy(result+1, val->lexical);
         }
-        strcpy(result+lexlen+1, "\"^^");
-        strcpy(result+lexlen+4, val->typeUri);
-        result[len-1] = '\0';
+        strcpy(result+lexlen+1, "\"^^<");
+        strcpy(result+lexlen+5, val->typeUri);
+        strcpy(result+len-2, ">");
         return result;
     }
 }
