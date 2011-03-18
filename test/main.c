@@ -28,7 +28,7 @@
 #define BUFFER_SIZE 1024
 
 int main(int argc, char* argv[]) {
-    char *dbpath, *rqpath;
+    char *dbpath, *rqpath, *solpath;
     FILE *f;
     char *queryString, buffer[BUFFER_SIZE];
     size_t read;
@@ -41,16 +41,17 @@ int main(int argc, char* argv[]) {
     struct rusage ru[5];
     long diff;
 
-    if(argc < 2 || argc > 3) {
-        printf("Usage: %s DB [QUERY]\n", argv[0]);
+    if(argc < 3 || argc > 4) {
+        printf("Usage: %s DB QUERY [SOL]\n", argv[0]);
         return 1;
     }
     dbpath = argv[1];
-    rqpath = argc > 2 ? argv[2] : NULL;
+    rqpath = argv[2];
+    solpath = argc > 3 ? argv[3] : NULL;
 
     queryString = NULL;
     queryLen = 0;
-    f = rqpath == NULL ? stdin : fopen(rqpath, "r");
+    f = fopen(rqpath, "r");
     if(f == NULL) {
         perror("castor");
         return 2;
@@ -71,6 +72,12 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     queryString[queryLen] = '\0';
+
+    f = solpath == NULL ? stdout : fopen(solpath, "w");
+    if(f == NULL) {
+        perror("castor");
+        f = stdout;
+    }
 
     getrusage(RUSAGE_SELF, &ru[0]);
 
@@ -103,17 +110,27 @@ int main(int argc, char* argv[]) {
     nbSols = 0;
     while(castor_next(engine)) {
         nbSols++;
-        for(i = 0; i < query->nbRequestedVars; i++) {
-            str = model_value_string(query->vars[i].value);
-            printf("%s ", str);
-            free(str);
+        if(query->nbRequestedVars == 0) {
+            fprintf(f, "YES\n");
+        } else {
+            for(i = 0; i < query->nbRequestedVars; i++) {
+                str = model_value_string(query->vars[i].value);
+                fprintf(f, "%s ", str);
+                free(str);
+            }
+            fprintf(f, "\n");
         }
-        printf("\n");
         if(query->limit > 0 && nbSols >= query->limit)
             break;
     }
 
     getrusage(RUSAGE_SELF, &ru[4]);
+
+    if(query->nbRequestedVars == 0 && nbSols == 0)
+        fprintf(f, "NO\n");
+
+    if(solpath != NULL)
+        fclose(f);
 
     printf("Found %d solutions\n", nbSols);
 
