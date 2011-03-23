@@ -430,6 +430,8 @@ Pattern* convert_pattern(Query* self, rasqal_graph_pattern* gp) {
                expr->arg1->arg1->op == EXPR_OP_VARIABLE &&
                !pat->left->varMap[expr->arg1->arg1->variable->id] &&
                pat->right->varMap[expr->arg1->arg1->variable->id]) {
+                // FIXME this check is not entirly correct as pat->right might
+                // not always bind the variable (if it is compound)
                 subpat = new_pattern_compound(self, PATTERN_TYPE_MINUS,
                                               pat->left, pat->right, pat->expr);
                 pat->left = NULL; // do not free these
