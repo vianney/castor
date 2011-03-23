@@ -217,6 +217,49 @@ void visit_filter(Solver* solver, Store* store, Expression* expr) {
     post_filter(solver, store, expr);
 }
 
+void discard(Castor* self, PatternNode* node) {
+    Pattern *pat;
+
+    pat = node->pat;
+
+    // Simple query
+    if(pat->type == PATTERN_TYPE_BASIC ||
+       (pat->type == PATTERN_TYPE_FILTER &&
+        pat->left->type == PATTERN_TYPE_BASIC)) {
+        if(node->flag != 0) {
+            assert(node->flag == solver_search_depth(self->solver));
+            solver_discard_search(self->solver);
+            node->flag = 0;
+        }
+        return;
+    }
+
+    // Compound query
+    switch(pat->type) {
+    case PATTERN_TYPE_FALSE:
+        return;
+    case PATTERN_TYPE_FILTER:
+        discard(self, node->left);
+        return;
+    case PATTERN_TYPE_JOIN:
+    case PATTERN_TYPE_LEFTJOIN:
+    case PATTERN_TYPE_MINUS:
+        discard(self, node->right);
+        discard(self, node->left);
+        node->flag = 0;
+        return;
+    case PATTERN_TYPE_UNION:
+        if(node->flag == 0)
+            discard(self, node->left);
+        else
+            discard(self, node->right);
+        node->flag = 0;
+        return;
+    default:
+        assert(false); // should not happen
+    }
+}
+
 bool sol(Castor* self, PatternNode* node) {
     Pattern *pat;
     int i, x;
@@ -286,11 +329,10 @@ bool sol(Castor* self, PatternNode* node) {
         return false;
     case PATTERN_TYPE_MINUS:
         while(sol(self, node->left)) {
-            i = solver_search_depth(self->solver);
-            if(!sol(self, node->right))
+            if(sol(self, node->right))
+                discard(self, node->right);
+            else
                 return true;
-            while(i < solver_search_depth(self->solver))
-                solver_discard_search(self->solver);
         }
         return false;
     case PATTERN_TYPE_UNION:
