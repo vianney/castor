@@ -463,6 +463,50 @@ int solver_add_search(Solver* self, int* vars, int nbVars) {
     return self->depth;
 }
 
+int solver_discard_search(Solver* self) {
+    SubTree *sub;
+    int x;
+    Checkpoint *chkp;
+    Constraint *c;
+    ConstraintList *cl;
+
+    sub = self->subtree;
+    if(sub == NULL)
+        return 0;
+
+    // clear trail
+    while(sub->trail != NULL) {
+        if(sub->trail->x == -1) { // root checkpoint: backtrack
+            backtrack(self);
+        } else { // non-root checkpoint: discard
+            chkp = sub->trail;
+            sub->trail = chkp->next;
+            free(chkp->domSize);
+            free(chkp);
+        }
+    }
+
+    // restore constraints
+    while(self->constraints != sub->constraints) {
+        c = self->constraints;
+        self->constraints = c->next;
+        for(x = 0; x < self->nbVars; x++) {
+            if(self->evBind[x] != NULL && self->evBind[x]->cstr == c) {
+                cl = self->evBind[x];
+                self->evBind[x] = cl->next;
+                free(cl);
+            }
+        }
+        if(c->free != NULL)
+            c->free(self, c);
+        free(c);
+    }
+    self->subtree = sub->parent;
+    free(sub);
+    self->inconsistent = false;
+    return self->depth--;
+}
+
 int solver_search_depth(Solver* self) {
     return self->depth;
 }
@@ -470,17 +514,13 @@ int solver_search_depth(Solver* self) {
 bool solver_search(Solver* self) {
     int x, i, sx, sy, v;
     SubTree *sub;
-    Constraint *c;
-    ConstraintList *cl;
 
     sub = self->subtree;
     if(sub == NULL)
         return false;
 
-    if(self->inconsistent) {
-        backtrack(self);
+    if(self->inconsistent)
         goto done;
-    }
 
     x = -1;
     if(sub->started) { // the search has started, try to backtrack
@@ -519,25 +559,7 @@ bool solver_search(Solver* self) {
     }
 
 done:
-    // restore constraints
-    while(self->constraints != sub->constraints) {
-        c = self->constraints;
-        self->constraints = c->next;
-        for(x = 0; x < self->nbVars; x++) {
-            if(self->evBind[x] != NULL && self->evBind[x]->cstr == c) {
-                cl = self->evBind[x];
-                self->evBind[x] = cl->next;
-                free(cl);
-            }
-        }
-        if(c->free != NULL)
-            c->free(self, c);
-        free(c);
-    }
-    self->subtree = sub->parent;
-    free(sub);
-    self->inconsistent = false;
-    self->depth--;
+    solver_discard_search(self);
     return false;
 }
 

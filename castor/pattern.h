@@ -76,6 +76,10 @@ typedef enum {
      */
     PATTERN_TYPE_LEFTJOIN,
     /**
+     * OPTIONAL { ... } FILTER(!bound(...))
+     */
+    PATTERN_TYPE_MINUS,
+    /**
      * UNION
      */
     PATTERN_TYPE_UNION,

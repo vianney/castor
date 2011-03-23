@@ -284,6 +284,15 @@ bool sol(Castor* self, PatternNode* node) {
             }
         }
         return false;
+    case PATTERN_TYPE_MINUS:
+        while(sol(self, node->left)) {
+            i = solver_search_depth(self->solver);
+            if(!sol(self, node->right))
+                return true;
+            while(i < solver_search_depth(self->solver))
+                solver_discard_search(self->solver);
+        }
+        return false;
     case PATTERN_TYPE_UNION:
         if(node->flag == 0 && sol(self, node->left))
             return true;

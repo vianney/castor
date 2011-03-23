@@ -162,6 +162,15 @@ void solver_fail(Solver* self);
 int solver_add_search(Solver* self, int* vars, int nbVars);
 
 /**
+ * Discard the current subtree.
+ *
+ * @param self a solver instance
+ * @return the depth of the discarded subtree (starting from 1) or 0 if there
+ *         was no subtree
+ */
+int solver_discard_search(Solver* self);
+
+/**
  * @return the depth of the current search subtree (starting from 1) or 0 if no
  *         subtree has been added or remains
  */

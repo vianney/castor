@@ -423,9 +423,26 @@ Pattern* convert_pattern(Query* self, rasqal_graph_pattern* gp) {
         }
         if(pat == NULL)
             pat = new_pattern_basic(self, NULL, 0); // empty pattern
-        if(expr != NULL)
-            pat = new_pattern_compound(self, PATTERN_TYPE_FILTER,
-                                       pat, NULL, expr);
+        if(expr != NULL) {
+            if(pat->type == PATTERN_TYPE_LEFTJOIN &&
+               expr->op == EXPR_OP_BANG &&
+               expr->arg1->op == EXPR_OP_BOUND &&
+               expr->arg1->arg1->op == EXPR_OP_VARIABLE &&
+               !pat->left->varMap[expr->arg1->arg1->variable->id] &&
+               pat->right->varMap[expr->arg1->arg1->variable->id]) {
+                subpat = new_pattern_compound(self, PATTERN_TYPE_MINUS,
+                                              pat->left, pat->right, pat->expr);
+                pat->left = NULL; // do not free these
+                pat->right = NULL;
+                pat->expr = NULL;
+                free_pattern(pat);
+                pat = subpat;
+                free_expression(expr);
+            } else {
+                pat = new_pattern_compound(self, PATTERN_TYPE_FILTER,
+                                           pat, NULL, expr);
+            }
+        }
         return pat;
     case RASQAL_GRAPH_PATTERN_OPERATOR_OPTIONAL:
         // lone optional pattern
@@ -598,6 +615,14 @@ void print_pattern(Pattern* pat, FILE* f, int indent) {
         break;
     case PATTERN_TYPE_LEFTJOIN:
         fprintf(f, "%*sLeftJoin", indent, "");
+        if(pat->expr != NULL)
+            fprintf(f, "(condition on %d variables)", pat->expr->nbVars);
+        fprintf(f, "\n");
+        print_pattern(pat->left, f, indent+2);
+        print_pattern(pat->right, f, indent+2);
+        break;
+    case PATTERN_TYPE_MINUS:
+        fprintf(f, "%*sMinus", indent, "");
         if(pat->expr != NULL)
             fprintf(f, "(condition on %d variables)", pat->expr->nbVars);
         fprintf(f, "\n");
