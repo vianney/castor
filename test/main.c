@@ -27,6 +27,16 @@
 
 #define BUFFER_SIZE 1024
 
+#define DIFFTIME(start, stop) \
+    ((long)((stop).ru_utime.tv_sec + (stop).ru_stime.tv_sec - \
+           (start).ru_utime.tv_sec - (start).ru_stime.tv_sec) * 1000L + \
+    (long)((stop).ru_utime.tv_usec + (stop).ru_stime.tv_usec - \
+           (start).ru_utime.tv_usec - (start).ru_stime.tv_usec) / 1000L)
+
+#define PRINT_TIME(msg, time) \
+    printf(msg ": %ld.%03ld s\n", (time) / 1000, (time) % 1000); \
+    fflush(stdout);
+
 int main(int argc, char* argv[]) {
     char *dbpath, *rqpath, *solpath;
     FILE *f;
@@ -89,6 +99,9 @@ int main(int argc, char* argv[]) {
 
     getrusage(RUSAGE_SELF, &ru[1]);
 
+    diff = DIFFTIME(ru[0], ru[1]);
+    PRINT_TIME("Store open", diff)
+
     query = new_query(store, queryString);
     if(query == NULL) {
         fprintf(stderr, "Unable to parse query\n");
@@ -99,6 +112,9 @@ int main(int argc, char* argv[]) {
 
     getrusage(RUSAGE_SELF, &ru[2]);
 
+    diff = DIFFTIME(ru[1], ru[2]);
+    PRINT_TIME("Query parse", diff)
+
     engine = new_castor(store, query);
     if(engine == NULL)  {
         fprintf(stderr, "Unable to initialize Castor engine\n");
@@ -106,6 +122,9 @@ int main(int argc, char* argv[]) {
     }
 
     getrusage(RUSAGE_SELF, &ru[3]);
+
+    diff = DIFFTIME(ru[2], ru[3]);
+    PRINT_TIME("Engine init", diff)
 
     nbSols = 0;
     while(castor_next(engine)) {
@@ -126,33 +145,17 @@ int main(int argc, char* argv[]) {
 
     getrusage(RUSAGE_SELF, &ru[4]);
 
+    diff = DIFFTIME(ru[3], ru[4]);
+    PRINT_TIME("Engine search", diff)
+
     if(query->nbRequestedVars == 0 && nbSols == 0)
         fprintf(f, "NO\n");
 
     if(solpath != NULL)
         fclose(f);
 
-    printf("Found %d solutions\n", nbSols);
-
-#define PRINT_TIME(msg, start, stop) \
-    diff = (long)(stop.ru_utime.tv_sec + stop.ru_stime.tv_sec - \
-                  start.ru_utime.tv_sec - start.ru_stime.tv_sec) * 1000L + \
-           (long)(stop.ru_utime.tv_usec + stop.ru_stime.tv_usec - \
-                  start.ru_utime.tv_usec - start.ru_stime.tv_usec) / 1000L; \
-    printf(msg ": %ld.%03ld s\n", diff / 1000, diff % 1000);
-
-    PRINT_TIME("Store open", ru[0], ru[1])
-    PRINT_TIME("Query parse", ru[1], ru[2])
-    PRINT_TIME("Engine init", ru[2], ru[3])
-    PRINT_TIME("Engine search", ru[3], ru[4])
-#undef PRINT_TIME
-
     printf("Found: %d\n", nbSols);
-    diff = (long)(ru[4].ru_utime.tv_sec + ru[4].ru_stime.tv_sec -
-                  ru[2].ru_utime.tv_sec - ru[2].ru_stime.tv_sec) * 1000L +
-           (long)(ru[4].ru_utime.tv_usec + ru[4].ru_stime.tv_usec -
-                  ru[2].ru_utime.tv_usec - ru[2].ru_stime.tv_usec) / 1000L;
-    printf("Time: %ld\n", diff);
+    printf("Time: %ld\n", DIFFTIME(ru[2], ru[4]));
     printf("Memory: %ld\n", ru[4].ru_maxrss);
 
     free_castor(engine);
