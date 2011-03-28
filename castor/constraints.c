@@ -225,18 +225,34 @@ typedef struct {
 } EqConstraint;
 
 bool cstr_eq_propagate(Solver* solver, EqConstraint* c) {
-    register int x1, x2;
+    register int i, n, x1, x2, v;
+    const int *dom;
 
     x1 = c->x1;
     x2 = c->x2;
-    if(solver_var_bound(solver, x1)) {
-        if(!solver_var_bind(solver, x2, solver_var_value(solver, x1)))
-            return false;
-    } else {
-        if(!solver_var_bind(solver, x1, solver_var_value(solver, x2)))
-            return false;
+
+    n = solver_var_size(solver, x1);
+    i = solver_var_size(solver, x2);
+    if(i < n) {
+        x1 = c->x2;
+        x2 = c->x1;
+        n = i;
     }
-    return true;
+
+    solver_var_clear_marks(solver, x2);
+    dom = solver_var_domain(solver, x1);
+    for(i = 0; i < n; i++) {
+        v = dom[i];
+        if(solver_var_contains(solver, x2, v)) {
+            solver_var_mark(solver, x2, v);
+        } else {
+            if(!solver_var_remove(solver, x1, v))
+                return false;
+            n--;
+            i--;
+        }
+    }
+    return solver_var_restrict_to_marks(solver, x2);
 }
 
 void post_eq(Solver* solver, Store* store, int x1, int x2) {
@@ -252,8 +268,9 @@ void post_eq(Solver* solver, Store* store, int x1, int x2) {
         c->x1 = x1;
         c->x2 = x2;
         c->cstr.propagate = (bool (*)(Solver*, Constraint*)) cstr_eq_propagate;
-        solver_register_bind(solver, (Constraint*) c, x1);
-        solver_register_bind(solver, (Constraint*) c, x2);
+        c->cstr.initPropagate = c->cstr.propagate;
+        solver_register_change(solver, (Constraint*) c, x1);
+        solver_register_change(solver, (Constraint*) c, x2);
         solver_post(solver, (Constraint*) c);
     }
 }

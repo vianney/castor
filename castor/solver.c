@@ -132,6 +132,11 @@ struct TSolver {
      *     variable x
      */
     ConstraintList** evBind;
+    /**
+     * evChange[x] = linked list of constraints registered to the change event
+     *     of variable x
+     */
+    ConstraintList** evChange;
 
     // Propagation
     /**
@@ -197,12 +202,14 @@ Solver* new_solver(int nbVars, int nbVals) {
         }
         self->domMarked = (int*) calloc(nbVars, sizeof(int));
         self->evBind = (ConstraintList**) calloc(nbVars, sizeof(ConstraintList*));
+        self->evChange = (ConstraintList**) calloc(nbVars, sizeof(ConstraintList*));
     } else {
         self->domSize = NULL;
         self->domain = NULL;
         self->domMap = NULL;
         self->domMarked = NULL;
         self->evBind = NULL;
+        self->evChange = NULL;
     }
 
     self->constraints = NULL;
@@ -239,6 +246,11 @@ void free_solver(Solver* self) {
         while(self->evBind[x] != NULL) {
             cl = self->evBind[x];
             self->evBind[x] = cl->next;
+            free(cl);
+        }
+        while(self->evChange[x] != NULL) {
+            cl = self->evChange[x];
+            self->evChange[x] = cl->next;
             free(cl);
         }
     }
@@ -309,15 +321,12 @@ void queue_constraint(Solver* self, Constraint* c) {
 }
 
 /**
- * Queue all constraints that are registered for the bind event of variable x
+ * Queue all constraints of a constraint list
  *
  * @param self a solver instance
- * @param x variable number
+ * @param cl the constraint list
  */
-void queue_bind_event(Solver* self, int x) {
-    ConstraintList *cl;
-
-    cl = self->evBind[x];
+void queue_constraints(Solver* self, ConstraintList *cl) {
     while(cl != NULL) {
         queue_constraint(self, cl->cstr);
         cl = cl->next;
@@ -357,6 +366,15 @@ void solver_register_bind(Solver* self, Constraint* c, int x) {
     cl->cstr = c;
     cl->next = self->evBind[x];
     self->evBind[x] = cl;
+}
+
+void solver_register_change(Solver* self, Constraint* c, int x) {
+    ConstraintList *cl;
+
+    cl = (ConstraintList*) malloc(sizeof(ConstraintList));
+    cl->cstr = c;
+    cl->next = self->evChange[x];
+    self->evChange[x] = cl;
 }
 
 void solver_label(Solver* self, int x, int v) {
@@ -498,6 +516,11 @@ int solver_discard_search(Solver* self) {
                 self->evBind[x] = cl->next;
                 free(cl);
             }
+            if(self->evChange[x] != NULL && self->evChange[x]->cstr == c) {
+                cl = self->evChange[x];
+                self->evChange[x] = cl->next;
+                free(cl);
+            }
         }
         if(c->free != NULL)
             c->free(self, c);
@@ -632,7 +655,8 @@ bool solver_var_bind(Solver* self, int x, int v) {
         self->domMap[x][v] = 0;
     }
     self->domSize[x] = 1;
-    queue_bind_event(self, x);
+    queue_constraints(self, self->evChange[x]);
+    queue_constraints(self, self->evBind[x]);
     return true;
 }
 
@@ -657,8 +681,9 @@ bool solver_var_remove(Solver* self, int x, int v) {
         self->domMap[x][v] = sz;
     }
     self->domSize[x] = sz;
+    queue_constraints(self, self->evChange[x]);
     if(sz == 1)
-        queue_bind_event(self, x);
+        queue_constraints(self, self->evBind[x]);
     return true;
 }
 
@@ -671,8 +696,9 @@ bool solver_var_restrict_to_marks(Solver* self, int x) {
         self->domSize[x] = m;
         if(m == 0)
             return false;
+        queue_constraints(self, self->evChange[x]);
         if(m == 1)
-            queue_bind_event(self, x);
+            queue_constraints(self, self->evBind[x]);
     }
     return true;
 }

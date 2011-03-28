@@ -111,6 +111,17 @@ void solver_post(Solver* self, Constraint* c);
 void solver_register_bind(Solver* self, Constraint* c, int x);
 
 /**
+ * Register constraint c to the change event of constraint x. A constraint must
+ * not register twice for the same variable.
+ * This should be called just before solver_post.
+ *
+ * @param self a solver instance
+ * @param c the constraint
+ * @param x variable number
+ */
+void solver_register_change(Solver* self, Constraint* c, int x);
+
+/**
  * Post the constraint x == v.
  * This has no effect once the search has begun.
  * Note that propagators have other means of manipulating the variables and
