@@ -265,9 +265,12 @@ void free_solver(Solver* self) {
 // Propagating
 
 /**
- * Dummy non-null pointer to indicate a constraint is currently propagating.
+ * Dummy non-null pointer to indicate a constraint is not currently queued for
+ * for propagation.
+ * This value is used in the nextPropag field. We use the address of a function,
+ * so we are sure no Constraint object will have this value.
  */
-#define CSTR_PROPAGATING ((Constraint*) &propagate)
+#define CSTR_UNQUEUED ((Constraint*) &propagate)
 
 /**
  * Perform propagation of the constraints in the queue. After this call, either
@@ -283,12 +286,11 @@ bool propagate(Solver* self) {
     while(self->propagQueue != NULL) {
         c = self->propagQueue;
         self->propagQueue = c->nextPropag;
-        c->nextPropag = CSTR_PROPAGATING;
         if(!c->propagate(self, c)) {
-            c->nextPropag = NULL;
+            c->nextPropag = CSTR_UNQUEUED;
             return false;
         }
-        c->nextPropag = NULL;
+        c->nextPropag = CSTR_UNQUEUED;
     }
     return true;
 }
@@ -300,7 +302,7 @@ bool propagate(Solver* self) {
  * @param c the constraint
  */
 void queue_constraint(Solver* self, Constraint* c) {
-    if(c->nextPropag == NULL) {
+    if(c->nextPropag == CSTR_UNQUEUED) {
         c->nextPropag = self->propagQueue;
         self->propagQueue = c;
     }
@@ -333,16 +335,16 @@ void solver_post(Solver* self, Constraint* c) {
         return;
     }
     c->next = self->constraints;
-    c->nextPropag = NULL;
+    c->nextPropag = CSTR_UNQUEUED;
     self->constraints = c;
     if(c->initPropagate != NULL) {
-        c->nextPropag = CSTR_PROPAGATING; // ignore events during initial propagation
+        c->nextPropag = NULL; // ignore events during initial propagation
         if(!c->initPropagate(self, c)) {
-            c->nextPropag = NULL;
+            c->nextPropag = CSTR_UNQUEUED;
             self->inconsistent = true;
             return;
         }
-        c->nextPropag = NULL;
+        c->nextPropag = CSTR_UNQUEUED;
     }
     if(!propagate(self))
         self->inconsistent = true;
@@ -427,7 +429,7 @@ int backtrack(Solver* self) {
     while(self->propagQueue != NULL) {
         c = self->propagQueue;
         self->propagQueue = c->nextPropag;
-        c->nextPropag = NULL;
+        c->nextPropag = CSTR_UNQUEUED;
     }
     if(x >= 0) {
         // remove old (failed) choice

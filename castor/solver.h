@@ -56,8 +56,6 @@ struct TConstraint {
     /**
      * Internal use by solver. No need to initialize.
      * Next constraint in propagation queue.
-     * NULL iff the constraint has not been queued and is not currently
-     * propagating.
      */
     Constraint *nextPropag;
 };
