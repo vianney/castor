@@ -342,15 +342,45 @@ void queue_constraints(Solver* self, ConstraintList *cl) {
 ////////////////////////////////////////////////////////////////////////////////
 // Posting constraints
 
-void solver_post(Solver* self, Constraint* c) {
-    if(self->inconsistent) {
-        if(c->free != NULL)
-            c->free(self, c);
-        free(c);
-        return;
+/**
+ * Remove the top constraint and free it.
+ *
+ * @param self a solver instance
+ */
+void discard_top_constraint(Solver* self) {
+    int x;
+    Constraint *c;
+    ConstraintList *cl;
+
+    c = self->constraints;
+    self->constraints = c->next;
+    if(self->evRestore == c)
+        self->evRestore = c->nextRestore;
+    for(x = 0; x < self->nbVars; x++) {
+        if(self->evBind[x] != NULL && self->evBind[x]->cstr == c) {
+            cl = self->evBind[x];
+            self->evBind[x] = cl->next;
+            free(cl);
+        }
+        if(self->evChange[x] != NULL && self->evChange[x]->cstr == c) {
+            cl = self->evChange[x];
+            self->evChange[x] = cl->next;
+            free(cl);
+        }
     }
+    if(c->free != NULL)
+        c->free(self, c);
+    free(c);
+
+}
+
+void solver_post(Solver* self, Constraint* c) {
     c->next = self->constraints;
     self->constraints = c;
+    if(self->inconsistent) {
+        discard_top_constraint(self);
+        return;
+    }
     c->nextRestore = self->evRestore;
     if(c->restore != NULL)
         self->evRestore = c;
@@ -505,10 +535,7 @@ int solver_add_search(Solver* self, int* vars, int nbVars) {
 
 int solver_discard_search(Solver* self) {
     SubTree *sub;
-    int x;
     Checkpoint *chkp;
-    Constraint *c;
-    ConstraintList *cl;
 
     sub = self->subtree;
     if(sub == NULL)
@@ -527,25 +554,8 @@ int solver_discard_search(Solver* self) {
     }
 
     // restore constraints
-    while(self->constraints != sub->constraints) {
-        c = self->constraints;
-        self->constraints = c->next;
-        for(x = 0; x < self->nbVars; x++) {
-            if(self->evBind[x] != NULL && self->evBind[x]->cstr == c) {
-                cl = self->evBind[x];
-                self->evBind[x] = cl->next;
-                free(cl);
-            }
-            if(self->evChange[x] != NULL && self->evChange[x]->cstr == c) {
-                cl = self->evChange[x];
-                self->evChange[x] = cl->next;
-                free(cl);
-            }
-        }
-        if(c->free != NULL)
-            c->free(self, c);
-        free(c);
-    }
+    while(self->constraints != sub->constraints)
+        discard_top_constraint(self);
     self->subtree = sub->parent;
     free(sub);
     self->inconsistent = false;
