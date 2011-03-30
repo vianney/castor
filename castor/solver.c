@@ -143,6 +143,11 @@ struct TSolver {
      * Propagation stack (linked list using nextPropag field)
      */
     Constraint* propagQueue;
+    /**
+     * Linked list of posted constraints that have a non-NULL restore method
+     * (using the nextRestore field)
+     */
+    Constraint* evRestore;
 
     // Search
     /**
@@ -214,6 +219,7 @@ Solver* new_solver(int nbVars, int nbVals) {
 
     self->constraints = NULL;
     self->propagQueue = NULL;
+    self->evRestore = NULL;
 
     self->inconsistent = false;
     self->subtree = NULL;
@@ -344,8 +350,11 @@ void solver_post(Solver* self, Constraint* c) {
         return;
     }
     c->next = self->constraints;
-    c->nextPropag = CSTR_UNQUEUED;
     self->constraints = c;
+    c->nextRestore = self->evRestore;
+    if(c->restore != NULL)
+        self->evRestore = c;
+    c->nextPropag = CSTR_UNQUEUED;
     if(c->initPropagate != NULL) {
         c->nextPropag = NULL; // ignore events during initial propagation
         if(!c->initPropagate(self, c)) {
@@ -456,8 +465,19 @@ int backtrack(Solver* self) {
             self->statBacktracks--;
             return backtrack(self);
         }
+        c = self->evRestore;
+        while(c != NULL) {
+            c->restore(self, c);
+            c = c->nextRestore;
+        }
         if(!propagate(self))
             return backtrack(self);
+    } else {
+        c = self->evRestore;
+        while(c != NULL) {
+            c->restore(self, c);
+            c = c->nextRestore;
+        }
     }
     return x;
 }

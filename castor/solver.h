@@ -44,6 +44,11 @@ struct TConstraint {
      */
     bool (*propagate)(Solver* solver, Constraint* c);
     /**
+     * Restore callback. It is called after a backtrack, if it is not NULL.
+     * This is useful for resetting structures.
+     */
+    void (*restore)(Solver* solver, Constraint* c);
+    /**
      * Free callback called before the whole structure is freed. Clean up your
      * structures here.
      */
@@ -58,6 +63,11 @@ struct TConstraint {
      * Next constraint in propagation queue.
      */
     Constraint *nextPropag;
+    /**
+     * Internal use by solver. No need to initialize.
+     * Next constraint that has a non-NULL restore method.
+     */
+    Constraint *nextRestore;
 };
 
 /**
@@ -67,6 +77,7 @@ struct TConstraint {
     (var) = (Type*) malloc(sizeof(Type)); \
     ((Constraint*)(var))->initPropagate = NULL; \
     ((Constraint*)(var))->propagate = NULL; \
+    ((Constraint*)(var))->restore = NULL; \
     ((Constraint*)(var))->free = NULL;
 
 ////////////////////////////////////////////////////////////////////////////////

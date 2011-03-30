@@ -222,37 +222,63 @@ typedef struct {
     Store *store;
     int x1;
     int x2;
+    int size1;
+    int size2;
 } EqConstraint;
 
 bool cstr_eq_propagate(Solver* solver, EqConstraint* c) {
-    register int i, n, x1, x2, v;
+    register int i, n1, n2, oldn1, oldn2, x1, x2, v;
     const int *dom;
 
     x1 = c->x1;
     x2 = c->x2;
+    oldn1 = c->size1;
+    oldn2 = c->size2;
 
-    n = solver_var_size(solver, x1);
-    i = solver_var_size(solver, x2);
-    if(i < n) {
-        x1 = c->x2;
-        x2 = c->x1;
-        n = i;
-    }
-
-    solver_var_clear_marks(solver, x2);
-    dom = solver_var_domain(solver, x1);
-    for(i = 0; i < n; i++) {
-        v = dom[i];
-        if(solver_var_contains(solver, x2, v)) {
-            solver_var_mark(solver, x2, v);
-        } else {
-            if(!solver_var_remove(solver, x1, v))
+    n1 = solver_var_size(solver, x1);
+    n2 = solver_var_size(solver, x2);
+    i = (oldn1 - n1) + (oldn2 - n2);
+    if(i < n1 && i < n2) {
+        dom = solver_var_domain(solver, x1);
+        for(i = n1; i < oldn1; i++) {
+            if(!solver_var_remove(solver, x2, dom[i]))
                 return false;
-            n--;
-            i--;
         }
+        dom = solver_var_domain(solver, x2);
+        for(i = n2; i < oldn2; i++) {
+            if(!solver_var_remove(solver, x1, dom[i]))
+                return false;
+        }
+    } else {
+        if(n2 < n1) {
+            x1 = x2;
+            x2 = c->x1;
+            n1 = n2;
+        }
+        solver_var_clear_marks(solver, x2);
+        dom = solver_var_domain(solver, x1);
+        for(i = 0; i < n1; i++) {
+            v = dom[i];
+            if(solver_var_contains(solver, x2, v)) {
+                solver_var_mark(solver, x2, v);
+            } else {
+                if(!solver_var_remove(solver, x1, v))
+                    return false;
+                n1--;
+                i--;
+            }
+        }
+        if(!solver_var_restrict_to_marks(solver, x2))
+            return false;
     }
-    return solver_var_restrict_to_marks(solver, x2);
+    c->size1 = solver_var_size(solver, x1);
+    c->size2 = solver_var_size(solver, x2);
+    return true;
+}
+
+void cstr_eq_restore(Solver* solver, EqConstraint* c) {
+    c->size1 = solver_var_size(solver, c->x1);
+    c->size2 = solver_var_size(solver, c->x2);
 }
 
 void post_eq(Solver* solver, Store* store, int x1, int x2) {
@@ -267,8 +293,10 @@ void post_eq(Solver* solver, Store* store, int x1, int x2) {
         c->store = store;
         c->x1 = x1;
         c->x2 = x2;
+        cstr_eq_restore(solver, c);
         c->cstr.propagate = (bool (*)(Solver*, Constraint*)) cstr_eq_propagate;
         c->cstr.initPropagate = c->cstr.propagate;
+        c->cstr.restore = (void (*)(Solver*, Constraint*)) cstr_eq_restore;
         solver_register_change(solver, (Constraint*) c, x1);
         solver_register_change(solver, (Constraint*) c, x2);
         solver_post(solver, (Constraint*) c);
