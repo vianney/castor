@@ -64,8 +64,43 @@ FilterPattern::FilterPattern(Pattern *subpattern, Expression *condition) :
 }
 
 FilterPattern::~FilterPattern() {
-    delete subpattern;
-    delete condition;
+    if(subpattern)
+        delete subpattern;
+    if(condition)
+        delete condition;
+}
+
+/**
+ * @param expr a SPARQL expression
+ * @param pat the LeftJoin subpattern
+ * @return true if expr is of the form !BOUND(?x) where ?x in right and
+ *         not in left
+ */
+bool isNotBound(Expression *expr, LeftJoinPattern *pat) {
+// TODO recursive check + handle other parts of the condition
+    if(expr->getOp() != EXPR_OP_BANG)
+        return false;
+    BangExpression *bang = (BangExpression*) expr;
+    if(bang->getArgument()->getOp() != EXPR_OP_BOUND)
+        return false;
+    BoundExpression *bound = (BoundExpression*) bang->getArgument();
+    return pat->getRight()->getVars().contains(bound->getVariable()) &&
+            !pat->getLeft()->getVars().contains(bound->getVariable());
+}
+
+Pattern* FilterPattern::optimize() {
+    subpattern = subpattern->optimize();
+    if(subpattern->getType() == PATTERN_TYPE_LEFTJOIN &&
+       isNotBound(condition, (LeftJoinPattern*) subpattern)) {
+        LeftJoinPattern *oldpat = (LeftJoinPattern*) subpattern;
+        DiffPattern *pat = new DiffPattern(oldpat->getLeft(),
+                                           oldpat->getRight());
+        oldpat->deleteThisOnly();
+        subpattern = NULL;
+        delete this;
+        return pat;
+    }
+    return this;
 }
 
 void FilterPattern::init() {
@@ -99,8 +134,16 @@ CompoundPattern::CompoundPattern(PatternType type, Pattern *left, Pattern *right
 }
 
 CompoundPattern::~CompoundPattern() {
-    delete left;
-    delete right;
+    if(left)
+        delete left;
+    if(right)
+        delete right;
+}
+
+Pattern* CompoundPattern::optimize() {
+    left = left->optimize();
+    right = right->optimize();
+    return this;
 }
 
 void CompoundPattern::init() {

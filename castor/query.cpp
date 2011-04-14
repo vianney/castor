@@ -92,6 +92,7 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
 
         // graph pattern
         pattern = convertPattern(rasqal_query_get_query_graph_pattern(query));
+        pattern = pattern->optimize();
         pattern->init();
 
         nbSols = 0;

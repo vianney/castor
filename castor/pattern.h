@@ -98,6 +98,22 @@ public:
     VariableSet& getVars() { return vars; }
 
     /**
+     * Same effect as "delete this", but do not delete subpatterns.
+     * This is useful if the subpatterns were reused for building another
+     * pattern.
+     */
+    virtual void deleteThisOnly() { delete this; }
+
+    /**
+     * Optimize this pattern and its subpatterns. Beware: the patterns may
+     * change. You shouldn't use this object anymore, but instead use the
+     * returned pointer (which may or may not be the same as this).
+     *
+     * @return the optimized pattern
+     */
+    virtual Pattern* optimize() { return this; }
+
+    /**
      * Initialize subtree recursively.
      */
     virtual void init() = 0;
@@ -188,6 +204,9 @@ public:
      */
     Expression* getCondition() { return condition; }
 
+    void deleteThisOnly() { subpattern = NULL; condition = NULL; delete this; }
+
+    Pattern* optimize();
     void init();
     bool next();
     void discard();
@@ -213,6 +232,9 @@ public:
      */
     Pattern* getRight() { return right; }
 
+    void deleteThisOnly() { left = NULL; right = NULL; delete this; }
+
+    Pattern* optimize();
     void init();
 };
 
