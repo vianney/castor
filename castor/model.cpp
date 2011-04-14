@@ -19,6 +19,7 @@
 #include <cstdio>
 #include <sstream>
 #include "model.h"
+#include "store.h"
 
 namespace castor {
 
@@ -134,6 +135,12 @@ void Value::fillIRI(char *lexical, bool freeLexical) {
     lexical = lexical;
     if(freeLexical)
         cleanup = VALUE_CLEAN_LEXICAL;
+}
+
+void Value::fillId(Store *store) {
+    if(id > 0)
+        return;
+    id = store->getValueId(type, typeUri, lexical, languageTag);
 }
 
 int Value::compare(const Value &o) const {

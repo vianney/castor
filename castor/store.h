@@ -19,8 +19,8 @@
 #define CASTOR_STORE_H
 
 #include <sqlite3.h>
+#include <string>
 #include <exception>
-
 #include "model.h"
 
 namespace castor {

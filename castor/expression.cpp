@@ -22,6 +22,15 @@
 
 namespace castor {
 
+VarVal Expression::getVarVal() {
+    Value val;
+    if(evaluate(val))
+        val.fillId(query->getStore());
+    else
+        val.id = 0;
+    return val;
+}
+
 UnaryExpression::UnaryExpression(ExprOperator op, Expression *arg) :
         Expression(arg->getQuery(), op), arg(arg) {
     vars = arg->getVars();
@@ -417,6 +426,26 @@ bool CastExpression::evaluate(Value &result) {
 
 void Expression::post(Subtree &sub) {
     sub.add(new FilterConstraint(query->getStore(), this));
+}
+
+void AndExpression::post(Subtree &sub) {
+    arg1->post(sub);
+    arg2->post(sub);
+}
+
+void EqExpression::post(Subtree &sub) {
+    if(arg1->isVarVal() && arg2->isVarVal())
+        sub.add(new EqConstraint(query, arg1->getVarVal(), arg2->getVarVal()));
+    else
+        Expression::post(sub);
+}
+
+void NEqExpression::post(Subtree &sub) {
+    if(arg1->isVarVal() && arg2->isVarVal())
+        sub.add(new DiffConstraint(query,
+                                   arg1->getVarVal(), arg2->getVarVal()));
+    else
+        Expression::post(sub);
 }
 
 }

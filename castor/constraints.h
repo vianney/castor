@@ -61,6 +61,34 @@ public:
     bool propagate();
 };
 
+/**
+ * Difference constraint v1 != v2
+ */
+class DiffConstraint : public Constraint {
+    Query *query;
+    VarVal v1, v2;
+    VarInt *x1, *x2; //!< CP variable or NULL if fixed value
+public:
+    DiffConstraint(Query *query, VarVal v1, VarVal v2);
+    bool post();
+    bool propagate();
+};
+
+/**
+ * Equality constraint v1 = v2
+ */
+class EqConstraint : public Constraint {
+    Query *query;
+    VarVal v1, v2;
+    VarInt *x1, *x2; //!< CP variable or NULL if fixed value
+    int s1, s2; //!< previous size of the domain
+public:
+    EqConstraint(Query *query, VarVal v1, VarVal v2);
+    void restore();
+    bool post();
+    bool propagate();
+};
+
 }
 
 #endif // CASTOR_CONSTRAINTS_H

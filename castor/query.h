@@ -57,27 +57,27 @@ public:
     /**
      * @return parent query
      */
-    Query* getQuery() { return query; }
+    Query* getQuery() const { return query; }
 
     /**
      * @return id of the variable
      */
-    int getId() { return id; }
+    int getId() const { return id; }
 
     /**
      * @return the value bound to this variable or NULL if unbound
      */
-    Value* getValue() { return value; }
+    Value* getValue() const { return value; }
 
     /**
      * @return whether the variable is bound
      */
-    bool isBound() { return value != NULL; }
+    bool isBound() const { return value != NULL; }
 
     /**
      * @return the CP variable corrsponding to this variable.
      */
-    VarInt* getCPVariable() { return var; }
+    VarInt* getCPVariable() const { return var; }
 
     /**
      * Set the value of this variable.
@@ -233,8 +233,11 @@ struct VarVal {
      */
     int id;
 
-    VarVal(int id) : id(id) {}
-    VarVal(Variable *variable) : id(-variable->getId()-1) {}
+    explicit VarVal(int id) : id(id) {}
+    VarVal(const Variable &variable) : id(-variable.getId()-1) {}
+    VarVal(const Variable *variable) : id(-variable->getId()-1) {}
+    VarVal(const Value &value) : id(value.id) {}
+    VarVal(const Value *value) : id(value->id) {}
 
     /**
      * @return whether the id refers to a variable

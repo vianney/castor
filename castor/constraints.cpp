@@ -122,4 +122,118 @@ bool FilterConstraint::propagate() {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+DiffConstraint::DiffConstraint(Query *query, VarVal v1, VarVal v2) :
+        query(query), v1(v1), v2(v2) {
+    x1 = v1.isVariable() ?
+                query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
+    x2 = v2.isVariable() ?
+                query->getVariable(v2.getVariableId())->getCPVariable() : NULL;
+    if(x1 && x2) {
+        x1->registerBind(this);
+        x2->registerBind(this);
+    }
+}
+
+bool DiffConstraint::post() {
+    if(v1.isUnknown() || v2.isUnknown())
+        return false;
+    if(x1 && x2)
+        return propagate();
+    else if(x1)
+        return x1->remove(v2.getValueId());
+    else if(x2)
+        return x2->remove(v1.getValueId());
+    else
+        return v1.getValueId() != v2.getValueId();
+}
+
+bool DiffConstraint::propagate() {
+    if(x1->isBound())
+        return x2->remove(x1->getValue());
+    else if(x2->isBound())
+        return x1->remove(x2->getValue());
+    else
+        return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+EqConstraint::EqConstraint(Query *query, VarVal v1, VarVal v2) :
+        query(query), v1(v1), v2(v2) {
+    x1 = v1.isVariable() ?
+                query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
+    x2 = v2.isVariable() ?
+                query->getVariable(v2.getVariableId())->getCPVariable() : NULL;
+    if(x1 && x2) {
+        x1->registerChange(this);
+        x2->registerChange(this);
+        restore();
+    }
+}
+
+void EqConstraint::restore() {
+    if(x1 && x2) {
+        s1 = x1->getSize();
+        s2 = x2->getSize();
+    }
+}
+
+bool EqConstraint::post() {
+    if(v1.isUnknown() || v2.isUnknown())
+        return false;
+    if(x1 && x2)
+        return propagate();
+    else if(x1)
+        return x1->bind(v2.getValueId());
+    else if(x2)
+        return x2->bind(v2.getValueId());
+    else
+        return v1.getValueId() == v2.getValueId();
+}
+
+bool EqConstraint::propagate() {
+    VarInt *x1 = this->x1, *x2 = this->x2;
+    int n1 = x1->getSize(), n2 = x2->getSize();
+    int oldn1 = s1, oldn2 = s2;
+    int removed = (oldn1 - n1) + (oldn2 - n2);
+    if(removed < n1 && removed < n2) {
+        const int *dom = x1->getDomain();
+        for(int i = n1; i < oldn1; i++) {
+            if(!x2->remove(dom[i]))
+                return false;
+        }
+        dom = x2->getDomain();
+        for(int i = n2; i < oldn2; i++) {
+            if(!x1->remove(dom[i]))
+                return false;
+        }
+    } else {
+        if(n2 < n1) {
+            x1 = x2;
+            x2 = this->x1;
+            n1 = n2;
+        }
+        x2->clearMarks();
+        const int *dom = x1->getDomain();
+        for(int i = 0; i < n1; i++) {
+            int v = dom[i];
+            if(x2->contains(v)) {
+                x2->mark(v);
+            } else {
+                if(!x1->remove(v))
+                    return false;
+                n1--;
+                i--;
+            }
+        }
+        if(!x2->restrictToMarks())
+            return false;
+    }
+    s1 = x1->getSize();
+    s2 = x2->getSize();
+    return true;
+}
+
 }

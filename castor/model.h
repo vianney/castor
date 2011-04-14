@@ -50,6 +50,8 @@ namespace castor {
 
 namespace castor {
 
+class Store;
+
 /**
  * Standard value type ids. Higher ids means custom URI.
  */
@@ -261,6 +263,13 @@ struct Value {
      * @param freeLexical should the lexical form be freed on clean?
      */
     void fillIRI(char *lexical, bool freeLexical);
+
+    /**
+     * Retrieve the id of this value from the store and fill in the id field.
+     * Do nothing if id > 0.
+     * @param store the store
+     */
+    void fillId(Store *store);
 
     /**
      * @return whether this value is a blank node

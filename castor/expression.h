@@ -86,6 +86,23 @@ public:
     VariableSet& getVars() { return vars; }
 
     /**
+     * @return true if this is a constant expression
+     */
+    bool isConstant() { return vars.getSize() == 0; }
+
+    /**
+     * @return true if this expression is a single variable or a constant
+     *         expression
+     */
+    virtual bool isVarVal() { return isConstant(); }
+
+    /**
+     * @pre isVarVal() == true
+     * @return the VarVal corresponding to this variable or constant expression
+     */
+    virtual VarVal getVarVal();
+
+    /**
      * Post this expression as a constraint.
      * @param sub subtree in which to add the constraint
      */
@@ -198,6 +215,9 @@ class VariableExpression : public Expression {
 public:
     VariableExpression(Variable *variable);
     bool evaluate(Value &result);
+
+    bool isVarVal() { return true; }
+    VarVal getVarVal() { return variable; }
 
     /**
      * @return the variable
@@ -318,6 +338,7 @@ class AndExpression : public BinaryExpression {
 public:
     AndExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(EXPR_OP_AND, arg1, arg2) {}
+    void post(Subtree &sub);
     bool evaluate(Value &result);
 };
 
@@ -328,6 +349,7 @@ class EqExpression : public BinaryExpression {
 public:
     EqExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(EXPR_OP_EQ, arg1, arg2) {}
+    void post(Subtree &sub);
     bool evaluate(Value &result);
 };
 
@@ -338,6 +360,7 @@ class NEqExpression : public BinaryExpression {
 public:
     NEqExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(EXPR_OP_NEQ, arg1, arg2) {}
+    void post(Subtree &sub);
     bool evaluate(Value &result);
 };
 
