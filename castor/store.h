@@ -1,7 +1,7 @@
 /* This file is part of Castor
  *
  * Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
- * Copyright (C) 2010 - UCLouvain
+ * Copyright (C) 2010-2011, Université catholique de Louvain
  *
  * Castor is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,124 +15,155 @@
  * You should have received a copy of the GNU General Public License
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef STORE_H
-#define STORE_H
+#ifndef CASTOR_STORE_H
+#define CASTOR_STORE_H
 
-#include "defs.h"
+#include <sqlite3.h>
+#include <exception>
+
 #include "model.h"
+
+namespace castor {
+
+class StoreException : public std::exception {
+    std::string msg;
+
+public:
+    StoreException(std::string msg) : msg(msg) {}
+    StoreException(const char* msg) : msg(msg) {}
+    StoreException(const StoreException &o) : msg(o.msg) {}
+    ~StoreException() throw() {}
+
+    const char *what() const throw() { return msg.c_str(); }
+};
 
 /**
  * Store interface. Implementations may extend this structure.
  */
-typedef struct TStore Store;
-struct TStore {
+class Store {
+public:
     /**
-     * Destructor
+     * Open an existing SQLite store.
+     *
+     * @param filename location of the store
+     * @throws StoreException on database error
      */
-    void (*close)(Store* self);
+    Store(const char* filename) throw(StoreException);
+    ~Store();
 
-    // Values
     /**
      * Number of values in the store. The ids of the values will always be
      * between 1 and the returned value included.
      *
-     * @param self a store instance
      * @return the number of values in the store or -1 if error
      */
-    int (*value_count)(Store* self);
+    int getValueCount() { return nbValues; }
+
     /**
      * Get a value from the store
      *
-     * @param self a store instance
-     * @param id identifier of the value (within range 1..value_count(self))
+     * @param id identifier of the value (within range 1..getValueCount())
      * @return the value corresponding to id or NULL if error
      */
-    Value* (*value_get)(Store* self, int id);
+    Value* getValue(int id) {
+        if(id <= 0 || id > nbValues)
+            return NULL;
+        return &values[id-1];
+    }
+
     /**
      * Get the id of a value from the store.
      *
-     * @param self a store instance
      * @param type datatype of the value
      * @param typeUri URI of the datatype if type is VALUE_TYPE_UNKOWN
      * @param lexical lexical form
      * @param language language tag or NULL if none
      * @return the id of the value or 0 if not found
+     * @throws StoreException on database error
      */
-    int (*value_get_id)(Store* self, const ValueType type, const char* typeUri,
-                        const char* lexical, const char* language);
-//    /**
-//     * Get a value from the store. If it does not exist within the store, create
-//     * a new one with id -1. Such a value with id -1 should be freed by the
-//     * caller when it's not needed anymore.
-//     *
-//     * @param self a store instance
-//     * @param type datatype of the value
-//     * @param typeUri URI of the datatype if type is VALUE_TYPE_UNKOWN
-//     * @param lexical lexical form
-//     * @param language language tag or NULL if none
-//     * @return the value or NULL if error
-//     */
-//    Value* (*value_create)(Store* self, ValueType type, char* typeUri,
-//                           char* lexical, char* language);
+    int getValueId(const ValueType type, const char* typeUri,
+                   const char* lexical, const char* language)
+            throw(StoreException);
 
-    // Statements
-//    /**
-//     * Add a statement to the store
-//     *
-//     * @param self a store instance
-//     * @param source source URI (or blank node)
-//     * @param predicate predicate URI
-//     * @param object object value
-//     * @return true if all went well, false if error
-//     */
-//    bool (*statement_add)(Store* self,
-//                          Value* source, Value* predicate, Value* object);
     /**
-     * Query the store for statements. Use statement_fetch to get the results.
-     * Once the results are not needed anymore, statement_finalize should be
-     * called.
+     * Query the store for statements. Use fetchStatement to get the results.
      *
-     * @param self a store instance
      * @param subject subject id or -1 for wildcard
      * @param predicate predicate id or -1 for wildcard
      * @param object object id or -1 for wildcard
-     * @return true if all went well, false if error
+     * @throws StoreException on database error
      */
-    bool (*statement_query)(Store* self, int subject, int predicate, int object);
+    void queryStatements(int subject, int predicate, int object)
+            throw(StoreException);
+
     /**
      * Fetch the next result statement from the query initiated by
-     * statement_query.
+     * queryStatement().
      *
-     * @param self a store instance
-     * @param stmt structure in which to write the result or NULL to ignore
+     * @param[out] stmt structure in which to write the result or NULL to ignore
      * @return true if stmt contains the next result, false if there are no more
      *         results
+     * @throws StoreException on database error
      */
-    bool (*statement_fetch)(Store* self, Statement* stmt);
+    bool fetchStatement(Statement *stmt) throw(StoreException);
+
+private:
     /**
-     * Finalize the query. This should always be called after statement_query
-     * and after the potential calls to statement_fetch.
+     * Check the result of a SQLite command and throw an exception if failed.
      *
-     * @param self a store instance
-     * @return true if all went well, false if error
+     * @param rc result of the SQLite command
+     * @throws StoreException on database error
      */
-    bool (*statement_finalize)(Store* self);
+    void checkDbResult(int rc) throw(StoreException) {
+        if(rc != SQLITE_OK) throw StoreException(sqlite3_errmsg(db));
+    }
+
+private:
+    /**
+     * Handle to the database
+     */
+    sqlite3* db;
+    /**
+     * Number of values in the store
+     */
+    int nbValues;
+    /**
+     * Value cache
+     */
+    Value* values;
+    /**
+     * Number of datatypes
+     */
+    int nbDatatypes;
+    /**
+     * Datatypes cache
+     */
+    char** datatypes;
+    /**
+     * Number of languages
+     */
+    int nbLanguages;
+    /**
+     * Languages cache
+     */
+    char** languages;
+
+    /**
+     * SQL for value id retrieval. The first one is for known datatype id and
+     * language 0, the second is for known datatype id and unknown language,
+     * and the last one for unknown datatype and language id.
+     */
+    sqlite3_stmt *sqlVal, *sqlValUnkLang, *sqlValUnkTypeLang;
+    /**
+     * SQL for rdf statements currently executed
+     */
+    sqlite3_stmt* sqlStmt;
+    /**
+     * SQL for rdf statement queries
+     */
+    sqlite3_stmt* sqlStmts[8];
 };
 
-// convenience shortcuts
-inline void store_close(Store* self);
-inline int store_value_count(Store* self);
-inline Value* store_value_get(Store* self, int id);
-inline int store_value_get_id(Store* self, const ValueType type,
-                              const char* typeUri, const char* lexical,
-                              const char* language);
-//inline Value* store_value_create(Store* self, ValueType type, char* typeUri,
-//                                 char* lexical, char* language);
-//inline bool store_statement_add(Store* self, Value* source, Value* predicate,
-//                                Value* object);
-inline bool store_statement_query(Store* self, int source, int predicate,
-                                  int object);
-inline bool store_statement_fetch(Store* self, Statement* stmt);
-inline bool store_statement_finalize(Store* self);
+}
 
-#endif // STORE_H
+#endif // CASTOR_STORE_H

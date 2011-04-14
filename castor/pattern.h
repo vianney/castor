@@ -1,7 +1,7 @@
 /* This file is part of Castor
  *
  * Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
- * Copyright (C) 2010-2011, UCLouvain
+ * Copyright (C) 2010-2011, Université catholique de Louvain
  *
  * Castor is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,45 +15,33 @@
  * You should have received a copy of the GNU General Public License
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef PATTERN_H
-#define PATTERN_H
+#ifndef CASTOR_PATTERN_H
+#define CASTOR_PATTERN_H
 
-typedef struct TPattern Pattern;
-
-#include "defs.h"
-#include "model.h"
-
-/**
- * A statement pattern has the same structure as a statement, but allows
- * negative ids for designing variables. The variable number is retrieved with
- * -id - 1.
- */
-typedef Statement StatementPattern;
+namespace castor { class Pattern; }
 
 #include "query.h"
+#include "expression.h"
+#include "solver/solver.h"
+
+namespace castor {
 
 /**
- * @param id an id of a statement pattern
- * @return whether id refers to a variable
+ * Statement pattern.
  */
-#define STMTPAT_ISVAR(id) ((id) < 0)
+struct StatementPattern {
+    VarVal subject;
+    VarVal predicate;
+    VarVal object;
 
-/**
- * @param id the negative id of a statement pattern
- * @return the corresponding variable number
- */
-#define STMTPAT_IDTOVAR(id) (-(id)-1)
-
-/**
- * @param x a variable number
- * @return the corresponding negative id to be used in a statement pattern
- */
-#define STMTPAT_VARTOID(x) (-(x)-1)
+    StatementPattern(VarVal subject, VarVal predicate, VarVal object) :
+            subject(subject), predicate(predicate), object(object) {}
+};
 
 /**
  * Pattern type enumeration
  */
-typedef enum {
+enum PatternType {
     /**
      * Dummy pattern always resulting in an empty set of solutions, i.e., it
      * cannot be matched
@@ -78,22 +66,54 @@ typedef enum {
     /**
      * OPTIONAL { ... } FILTER(!bound(...))
      */
-    PATTERN_TYPE_MINUS,
+    PATTERN_TYPE_DIFF,
     /**
      * UNION
      */
-    PATTERN_TYPE_UNION,
-
-    PATTERN_TYPE_FIRST_COMPOUND = PATTERN_TYPE_FILTER
-} PatternType;
-
-#define IS_PATTERN_TYPE_COMPOUND(type) \
-    ((type) >= PATTERN_TYPE_FIRST_COMPOUND)
+    PATTERN_TYPE_UNION
+};
 
 /**
- * Structure for a SPARQL graph pattern
+ * Base class for a SPARQL graph pattern
  */
-struct TPattern {
+class Pattern {
+public:
+    Pattern(Query *query, PatternType type) :
+            query(query), type(type), vars(query) {}
+    virtual ~Pattern() {}
+
+    /**
+     * @return parent query
+     */
+    Query* getQuery() { return query; }
+
+    /**
+     * @return operator
+     */
+    PatternType getType() { return type; }
+
+    /**
+     * @return variables occuring in this pattern
+     */
+    VariableSet& getVars() { return vars; }
+
+    /**
+     * Initialize subtree recursively.
+     */
+    virtual void init() = 0;
+
+    /**
+     * Find the next solution of the subtree
+     * @return false if there are no more solution, true otherwise
+     */
+    virtual bool next() = 0;
+
+    /**
+     * Discard the rest of the subtree's solutions.
+     */
+    virtual void discard() = 0;
+
+protected:
     /**
      * Parent query
      */
@@ -103,72 +123,147 @@ struct TPattern {
      */
     PatternType type;
     /**
-     * Number of variables used in this pattern
+     * Variables occuring in this pattern.
      */
-    int nbVars;
-    /**
-     * Variables used in this pattern
-     */
-    int *vars;
-    /**
-     * Map of variables used in this pattern
-     * varMap[x] <=> x in vars
-     */
-    bool *varMap;
-    /**
-     * Operands dependent on the type
-     */
-    union {
-        /**
-         * type == PATTERN_TYPE_BASIC
-         */
-        struct {
-            int nbTriples;
-            StatementPattern *triples;
-        };
-        /**
-         * compound types
-         */
-        struct {
-            Pattern *left;
-            Pattern *right; // not for PATTERN_TYPE_FILTER
-            Expression *expr; // only for PATTERN_TYPE_FILTER and PATTERN_TYPE_LEFTJOIN
-        };
-    };
+    VariableSet vars;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-// Constructors and destructors
+/**
+ * Dummy pattern always resulting in an empty set of solutions, i.e., it
+ * cannot be matched
+ */
+class FalsePattern : public Pattern {
+public:
+    FalsePattern(Query *query) : Pattern(query, PATTERN_TYPE_FALSE) {}
+    void init() {}
+    bool next() { return false; }
+    void discard() {}
+};
 
 /**
- * @param query parent query
- * @return a new false graph pattern
+ * Basic graph pattern (set of statement patterns)
  */
-Pattern* new_pattern_false(Query *query);
+class BasicPattern : public Pattern {
+    std::vector<StatementPattern> triples;
+    Subtree *sub;
+public:
+    BasicPattern(Query *query) : Pattern(query, PATTERN_TYPE_BASIC) {}
+    ~BasicPattern();
+
+    /**
+     * Add a triple pattern
+     * @param[in] triple the triple pattern
+     */
+    void add(const StatementPattern &triple);
+
+    /**
+     * @return triple patterns
+     */
+    std::vector<StatementPattern>& getTriples() { return triples; }
+
+    void init();
+    bool next();
+    void discard();
+
+    friend class FilterPattern;
+};
 
 /**
- * @param query parent query
- * @param triples array of triple patterns (ownership is taken)
- * @param nbTriples number of triple patterns
- * @return a new basic graph pattern
+ * Filter pattern
  */
-Pattern* new_pattern_basic(Query *query, StatementPattern *triples, int nbTriples);
+class FilterPattern : public Pattern {
+    Pattern *subpattern;
+    Expression *condition;
+public:
+    FilterPattern(Pattern *subpattern, Expression *condition);
+    ~FilterPattern();
+
+    /**
+     * @return the subpattern
+     */
+    Pattern* getSubPattern() { return subpattern; }
+
+    /**
+     * @return the filter condition
+     */
+    Expression* getCondition() { return condition; }
+
+    void init();
+    bool next();
+    void discard();
+};
 
 /**
- * @param query parent query
- * @param type pattern type
- * @param left left subpattern
- * @param right right subpattern (NULL for PATTERN_TYPE_FILTER)
- * @param expr expression (NULL if not relevant)
- * @return a new compound pattern
+ * Base class for a compound pattern
  */
-Pattern* new_pattern_compound(Query *query, PatternType type,
-                              Pattern *left, Pattern *right, Expression *expr);
+class CompoundPattern : public Pattern {
+protected:
+    Pattern *left, *right;
+public:
+    CompoundPattern(PatternType type, Pattern *left, Pattern *right);
+    ~CompoundPattern();
+
+    /**
+     * @return the left subpattern
+     */
+    Pattern* getLeft() { return left; }
+
+    /**
+     * @return the right subpattern
+     */
+    Pattern* getRight() { return right; }
+
+    void init();
+};
 
 /**
- * Free a pattern and recursively all its subpatterns. Expressions will be freed
- * too.
+ * Concatenation pattern
  */
-void free_pattern(Pattern* pat);
+class JoinPattern : public CompoundPattern {
+public:
+    JoinPattern(Pattern *left, Pattern *right) :
+            CompoundPattern(PATTERN_TYPE_JOIN, left, right) {}
+    bool next();
+    void discard();
+};
 
-#endif // PATTERN_H
+/**
+ * Optional pattern
+ */
+class LeftJoinPattern : public CompoundPattern {
+    bool consistent; //!< is the right branch consistent?
+public:
+    LeftJoinPattern(Pattern *left, Pattern *right) :
+            CompoundPattern(PATTERN_TYPE_LEFTJOIN, left, right),
+            consistent(false) {}
+    bool next();
+    void discard();
+};
+
+/**
+ * OPTIONAL { ... } FILTER(!bound(...))
+ */
+class DiffPattern : public CompoundPattern {
+public:
+    DiffPattern(Pattern *left, Pattern *right) :
+            CompoundPattern(PATTERN_TYPE_DIFF, left, right) {}
+    bool next();
+    void discard();
+};
+
+/**
+ * Union pattern
+ */
+class UnionPattern : public CompoundPattern {
+    bool onRightBranch; //!< exploring the left (false) or right (true) branch
+public:
+    UnionPattern(Pattern *left, Pattern *right) :
+            CompoundPattern(PATTERN_TYPE_UNION, left, right),
+            onRightBranch(false) {}
+    bool next();
+    void discard();
+};
+
+}
+
+#endif // CASTOR_PATTERN_H

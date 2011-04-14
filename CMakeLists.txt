@@ -34,7 +34,7 @@ set(LIBS
     ${SQLITE3_LIBRARIES}
 )
 
-set(CMAKE_C_FLAGS_DEBUG "-g -Wall")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -Wall")
 
 add_subdirectory(castor)
 add_subdirectory(test)

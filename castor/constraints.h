@@ -1,7 +1,7 @@
 /* This file is part of Castor
  *
  * Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
- * Copyright (C) 2010 - UCLouvain
+ * Copyright (C) 2010-2011, Université catholique de Louvain
  *
  * Castor is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,50 +15,52 @@
  * You should have received a copy of the GNU General Public License
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef CONSTRAINTS_H
-#define CONSTRAINTS_H
+#ifndef CASTOR_CONSTRAINTS_H
+#define CASTOR_CONSTRAINTS_H
 
-#include "defs.h"
-#include "solver.h"
-#include "store.h"
-#include "query.h"
+#include "solver/constraint.h"
+#include "expression.h"
+#include "pattern.h"
 
-/**
- * Post a statement constraint
- *
- * @param solver a solver instance
- * @param store a store instance
- * @param stmt the statement pattern to match
- */
-void post_statement(Solver* solver, Store* store, StatementPattern* stmt);
+namespace castor {
 
 /**
- * Post a generic filter constraint
- *
- * @param solver a solver instance
- * @param store a store instance
- * @param expr the filter expression
+ * Ensure a SPARQL variable is bound by removing value 0 from the CP domain
  */
-void post_filter(Solver* solver, Store* store, Expression* expr);
+class BoundConstraint : public Constraint {
+    VarInt *x;
+public:
+    BoundConstraint(VarInt *x) : x(x) {}
+    bool post() { return x->remove(0); }
+};
 
 /**
- * Post the constraint x1 != x2
- *
- * @param solver a solver instance
- * @param store a store instance
- * @param x1 first variable
- * @param x2 second variable
+ * Statement constraint
  */
-void post_diff(Solver* solver, Store* store, int x1, int x2);
+class StatementConstraint : public Constraint {
+    Store *store; //!< The store containing the triples
+    StatementPattern stmt; //!< The statement pattern
+    /**
+     * CP variables corresponding to the parts of the statement pattern or
+     * NULL if the part is a fixed value.
+     */
+    VarInt *subject, *predicate, *object;
+public:
+    StatementConstraint(Query *query, StatementPattern &stmt);
+    bool propagate();
+};
 
 /**
- * Post the constraint x1 = x2
- *
- * @param solver a solver instance
- * @param store a store instance
- * @param x1 first variable
- * @param x2 second variable
+ * Generic filter constraint
  */
-void post_eq(Solver* solver, Store* store, int x1, int x2);
+class FilterConstraint : public Constraint {
+    Store *store; //!< The store containing the values
+    Expression *expr; //!< The expression
+public:
+    FilterConstraint(Store *store, Expression *expr);
+    bool propagate();
+};
 
-#endif // CONSTRAINTS_H
+}
+
+#endif // CASTOR_CONSTRAINTS_H

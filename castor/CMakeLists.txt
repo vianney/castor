@@ -15,27 +15,26 @@
 # You should have received a copy of the GNU General Public License
 # along with Castor; if not, see <http://www.gnu.org/licenses/>.
 set(CASTOR_SRCS
-    defs.h
-    castor.h
-    castor.c
-    model.h
-    model.c
+    solver/solver.h
+    solver/solver.cpp
+    solver/varint.h
+    solver/varint.cpp
+    solver/constraint.h
+    solver/subtree.h
+    solver/subtree.cpp
     xsddecimal.h
-    xsddecimal.c
+    model.h
+    model.cpp
     store.h
-    store.c
-    query.h
-    query.c
+    store.cpp
     expression.h
-    expression.c
+    expression.cpp
     pattern.h
-    pattern.c
-    solver.h
-    solver.c
+    pattern.cpp
+    query.h
+    query.cpp
     constraints.h
-    constraints.c
-    stores/store_sqlite.h
-    stores/store_sqlite.c
+    constraints.cpp
 )
 
 add_library(libcastor ${CASTOR_SRCS})

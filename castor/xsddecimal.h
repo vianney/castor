@@ -1,7 +1,7 @@
 /* This file is part of Castor
  *
  * Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
- * Copyright (C) 2010 - UCLouvain
+ * Copyright (C) 2010-2011, Université catholique de Louvain
  *
  * Castor is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,119 +15,125 @@
  * You should have received a copy of the GNU General Public License
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef XSDDECIMAL_H
-#define XSDDECIMAL_H
+#ifndef CASTOR_XSDDECIMAL_H
+#define CASTOR_XSDDECIMAL_H
 
-#include "defs.h"
+#include "model.h"
 
-/**
- * Opaque type for an xsd:decimal
- */
-typedef struct TXSDDecimal XSDDecimal;
+namespace castor {
 
 /**
- * @return a new xsd:decimal
+ * Wrapper for an xsd:decimal value.
  */
-XSDDecimal* new_xsddecimal();
+class XSDDecimal {
+    rasqal_xsd_decimal *val;
 
-/**
- * Free an xsd:decimal
- *
- * @param self an xsd:decimal instance
- */
-void free_xsddecimal(XSDDecimal* self);
+public:
+    /**
+     * Construct a new decimal.
+     */
+    XSDDecimal() {
+        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+    }
+    /**
+     * Copy constructor.
+     */
+    XSDDecimal(const XSDDecimal &o) {
+        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        rasqal_xsd_decimal_set_string(val, rasqal_xsd_decimal_as_string(o.val));
+    }
+    /**
+     * Construct a new decimal from a lexical form.
+     */
+    XSDDecimal(const char* lexical) {
+        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        rasqal_xsd_decimal_set_string(val, lexical);
+    }
+    /**
+     * Construct a new decimal from an integer.
+     */
+    XSDDecimal(long integer) {
+        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        rasqal_xsd_decimal_set_long(val, integer);
+    }
+    /**
+     * Construct a new decimal from a floating point number
+     */
+    XSDDecimal(double floating) {
+        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        rasqal_xsd_decimal_set_double(val, floating);
+    }
 
-/**
- * Copy from another decimal.
- *
- * @param self an xsd:decimal instance
- * @param original value to copy
- */
-void xsddecimal_copy(XSDDecimal* self, XSDDecimal* original);
+    ~XSDDecimal() {
+        rasqal_free_xsd_decimal(val);
+    }
 
-/**
- * @param self an xsd:decimal instance
- * @return lexical form of the decimal (caller takes ownership)
- */
-char* xsddecimal_get_string(XSDDecimal* self);
+    /**
+     * @return lexical form of the decimal
+     */
+    std::string getString() {
+        char *str;
+        size_t n;
+        str = rasqal_xsd_decimal_as_counted_string(val, &n);
+        return std::string(str, n);
+    }
 
-/**
- * @param self an xsd:decimal instance
- * @return value as a floating point number (may loose precision)
- */
-double xsddecimal_get_floating(XSDDecimal* self);
+    /**
+     * @return value as floating point number (may loose precision)
+     */
+    double getFloat() { return rasqal_xsd_decimal_get_double(val); }
 
-/**
- * Set the value from a lexical form
- *
- * @param self an xsd:decimal instance
- * @param value value
- */
-void xsddecimal_set_string(XSDDecimal* self, const char* value);
+    /**
+     * @return whether this value is zero
+     */
+    bool isZero() { return rasqal_xsd_decimal_is_zero(val); }
 
-/**
- * Set the value from an integer
- *
- * @param self an xsd:decimal instance
- * @param value value
- */
-void xsddecimal_set_integer(XSDDecimal* self, long value);
+    /**
+     * Compare two decimal numbers
+     *
+     * @param o second decimal
+     * @return <0 if this < o, 0 if this == o and >0 if this > o
+     */
+    int compare(const XSDDecimal &o) { return rasqal_xsd_decimal_compare(val, o.val); }
 
-/**
- * Set the value from a floating point value
- *
- * @param self an xsd:decimal instance
- * @param value value
- */
-void xsddecimal_set_floating(XSDDecimal* self, double value);
+    bool operator==(const XSDDecimal &o) { return rasqal_xsd_decimal_equals(val, o.val); }
+    bool operator!=(const XSDDecimal &o) { return !rasqal_xsd_decimal_equals(val, o.val); }
+    bool operator<(const XSDDecimal &o) { return compare(o) < 0; }
+    bool operator>(const XSDDecimal &o) { return compare(o) > 0; }
+    bool operator<=(const XSDDecimal &o) { return compare(o) <= 0; }
+    bool operator>=(const XSDDecimal &o) { return compare(o) >= 0; }
 
-/**
- * Compare two decimal numbers
- *
- * @param a first decimal
- * @param b second decimal
- * @return <0 if a < b, 0 if a == b and >0 if a > b
- */
-int xsddecimal_compare(XSDDecimal* a, XSDDecimal* b);
+    XSDDecimal* negate() {
+        XSDDecimal *result = new XSDDecimal();
+        rasqal_xsd_decimal_negate(result->val, val);
+        return result;
+    }
 
-/**
- * Compare two decimal numbers
- *
- * @param a first decimal
- * @param b second decimal
- * @return true if a == b, false otherwise
- */
-bool xsddecimal_equals(XSDDecimal* a, XSDDecimal* b);
+    XSDDecimal* add(const XSDDecimal &o) {
+        XSDDecimal *result = new XSDDecimal();
+        rasqal_xsd_decimal_add(result->val, val, o.val);
+        return result;
+    }
 
-/**
- * @param self a decimal number
- * @return true if self == 0
- */
-bool xsddecimal_iszero(XSDDecimal* self);
+    XSDDecimal* substract(const XSDDecimal &o) {
+        XSDDecimal *result = new XSDDecimal();
+        rasqal_xsd_decimal_subtract(result->val, val, o.val);
+        return result;
+    }
 
-/**
- * self = -self
- */
-void xsddecimal_negate(XSDDecimal* self);
+    XSDDecimal* multiply(const XSDDecimal &o) {
+        XSDDecimal *result = new XSDDecimal();
+        rasqal_xsd_decimal_multiply(result->val, val, o.val);
+        return result;
+    }
 
-/**
- * self += other
- */
-void xsddecimal_add(XSDDecimal* self, XSDDecimal* other);
+    XSDDecimal* divide(const XSDDecimal &o) {
+        XSDDecimal *result = new XSDDecimal();
+        rasqal_xsd_decimal_divide(result->val, val, o.val);
+        return result;
+    }
+};
 
-/**
- * self -= other
- */
-void xsddecimal_substract(XSDDecimal* self, XSDDecimal* other);
+}
 
-/**
- * self *= other
- */
-void xsddecimal_multiply(XSDDecimal* self, XSDDecimal* other);
-
-/**
- * self /= other
- */
-void xsddecimal_divide(XSDDecimal* self, XSDDecimal* other);
-
-#endif // XSDDECIMAL_H
+#endif // CASTOR_XSDDECIMAL_H

@@ -1,0 +1,194 @@
+/* This file is part of Castor
+ *
+ * Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
+ * Copyright (C) 2010-2011, Université catholique de Louvain
+ *
+ * Castor is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 2 of the License.
+ *
+ * Castor is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Castor; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include <cstdlib>
+#include "subtree.h"
+
+#include <iostream>
+using namespace std;
+
+namespace castor {
+
+/**
+ * Checkpoint structure for backtracking
+ */
+struct Checkpoint {
+    /**
+     * Size of the domains.
+     */
+    int *domSizes;
+    /**
+     * Variable that has been chosen.
+     */
+    VarInt *x;
+    /**
+     * Value that has been bound to the chosen variable just after the
+     * checkpoint.
+     */
+    int v;
+
+    ~Checkpoint() {
+        delete [] domSizes;
+    }
+};
+
+Subtree::Subtree(Solver *solver, VarInt **vars, int nbVars) :
+        solver(solver),
+        vars(vars),
+        nbVars(nbVars) {
+    // The depth of the subtree is at most vars.size(). Allocate trail.
+    // +1 for the root checkpoint
+    trail = new Checkpoint[nbVars + 1];
+    for(int i = 0; i <= nbVars; i++)
+        trail[i].domSizes = new int[nbVars];
+    active = false;
+}
+
+Subtree::~Subtree() {
+    // delete constraints
+    for(std::vector<Constraint*>::iterator it = constraints.begin(),
+        end = constraints.end(); it != end; ++it)
+        delete *it;
+    // delete trail
+    delete [] trail;
+}
+
+void Subtree::add(Constraint *c) {
+    c->parent = this;
+    constraints.push_back(c);
+}
+
+void Subtree::activate() {
+    if(isActive())
+        throw "Cannot activate active subtree.";
+    active = true;
+    previous = solver->current;
+    solver->current = this;
+    trailIndex = -1;
+    checkpoint(NULL, -1);
+    inconsistent = !solver->post(constraints);
+    started = false;
+}
+
+void Subtree::discard() {
+    if(!isCurrent())
+        throw "Only current active subtree can be discarded.";
+    if(trailIndex >= 0) {
+        // backtrack root checkpoint
+        trailIndex = 0;
+        backtrack();
+    }
+    solver->current = previous;
+    active = false;
+}
+
+bool Subtree::search() {
+    if(!isCurrent())
+        throw "Only current active subtree can be searched.";
+
+    if(inconsistent) {
+        discard();
+        return false;
+    }
+
+    VarInt *x = NULL;
+    if(started) { // the search has started, try to backtrack
+        x = backtrack();
+        if(!x) {
+            discard();
+            return false;
+        }
+    } else {
+        started = true;
+    }
+    while(true) {
+        // search for a variable to bind if needed
+        if(!x || x->isBound()) {
+            // find unbound variable with smallest domain
+            x = NULL;
+            int sx = -1;
+            for(int i = 0; i < nbVars; i++) {
+                VarInt *y = vars[i];
+                int sy = y->getSize();
+                if(sy > 1 && (!x || sy < sx)) {
+                    x = y;
+                    sx = sy;
+                }
+            }
+            if(!x) { // we have a solution for vars
+                return true;
+            }
+        }
+        // Take the last value of the domain
+        int v = x->getDomain()[x->getSize()-1];
+        checkpoint(x, v);
+        x->bind(v); // should always return true
+        if(!solver->propagate()) {
+            x = backtrack();
+            if(!x) {
+                discard();
+                return false;
+            }
+        }
+    }
+}
+
+void Subtree::checkpoint(VarInt *x, int v) {
+    Checkpoint *chkp = &trail[++trailIndex];
+    for(int i = 0; i < nbVars; i++)
+        chkp->domSizes[i] = vars[i]->getSize();
+    chkp->x = x;
+    chkp->v = v;
+}
+
+/**
+ * Call the restore for every constraint.
+ *
+ * @param constraints the list of constraints to restore
+ */
+inline void fireRestore(std::vector<Constraint*> &constraints) {
+    for(std::vector<Constraint*>::iterator it = constraints.begin(),
+        end = constraints.end(); it != end; ++it)
+        (*it)->restore();
+}
+
+VarInt* Subtree::backtrack() {
+    if(trailIndex < 0)
+        return NULL;
+    // restore domains
+    Checkpoint *chkp = &trail[trailIndex--];
+    for(int i = 0; i < nbVars; i++)
+        vars[i]->size = chkp->domSizes[i];
+    // clear propagation queue
+    solver->clearQueue();
+    if(chkp->x) {
+        // remove old (failed) choice
+        if(!chkp->x->remove(chkp->v)) {
+            // branch finished
+            return backtrack();
+        }
+        fireRestore(constraints);
+        if(!solver->propagate())
+            return backtrack();
+    } else {
+        fireRestore(constraints);
+    }
+    return chkp->x;
+}
+
+}

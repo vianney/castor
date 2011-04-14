@@ -1,7 +1,7 @@
 /* This file is part of Castor
  *
  * Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
- * Copyright (C) 2010 - UCLouvain
+ * Copyright (C) 2010-2011, Université catholique de Louvain
  *
  * Castor is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,217 +15,482 @@
  * You should have received a copy of the GNU General Public License
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef EXPRESSION_H
-#define EXPRESSION_H
+#ifndef CASTOR_EXPRESSION_H
+#define CASTOR_EXPRESSION_H
 
-typedef struct TExpression Expression;
+namespace castor { class Expression; }
 
-#include "defs.h"
+#include <vector>
 #include "model.h"
 #include "query.h"
+#include "solver/subtree.h"
+
+namespace castor {
 
 /**
  * Operator enumeration
  */
-typedef enum {
-    EXPR_OP_VALUE,        // literal value
-    EXPR_OP_VARIABLE,     // variable
-    EXPR_OP_BANG,         // ! arg1
-    EXPR_OP_UPLUS,        // + arg1
-    EXPR_OP_UMINUS,       // - arg1
-    EXPR_OP_BOUND,        // BOUND(arg1)
-    EXPR_OP_ISIRI,        // ISIRI(arg1)
-    EXPR_OP_ISBLANK,      // ISBLANK(arg1)
-    EXPR_OP_ISLITERAL,    // ISLITERAL(arg1)
-    EXPR_OP_STR,          // STR(arg1)
-    EXPR_OP_LANG,         // LANG(arg1)
-    EXPR_OP_DATATYPE,     // DATATYPE(arg1)
-    EXPR_OP_OR,           // arg1 || arg2
-    EXPR_OP_AND,          // arg1 && arg2
-    EXPR_OP_EQ,           // arg1 = arg2
-    EXPR_OP_NEQ,          // arg1 != arg2
-    EXPR_OP_LT,           // arg1 < arg2
-    EXPR_OP_GT,           // arg1 > arg2
-    EXPR_OP_LE,           // arg1 <= arg2
-    EXPR_OP_GE,           // arg1 >= arg2
-    EXPR_OP_STAR,         // arg1 * arg2
-    EXPR_OP_SLASH,        // arg1 / arg2
-    EXPR_OP_PLUS,         // arg1 + arg2
-    EXPR_OP_MINUS,        // arg1 - arg2
-    EXPR_OP_SAMETERM,     // SAMETERM(arg1, arg2)
-    EXPR_OP_LANGMATCHES,  // LANGMATCHES(arg1, arg2)
-    EXPR_OP_REGEX,        // REGEX(arg1, arg2, arg3)
-    EXPR_OP_CAST,         // cast
-    EXPR_OP_CALL,         // function call
-
-    EXPR_OP_FIRST_UNARY = EXPR_OP_BANG,
-    EXPR_OP_FIRST_BINARY = EXPR_OP_OR,
-    EXPR_OP_FIRST_TRINARY = EXPR_OP_REGEX,
-    EXPR_OP_LAST_TRINARY = EXPR_OP_REGEX
-} ExprOperator;
+enum ExprOperator {
+    EXPR_OP_VALUE,        //!< literal value
+    EXPR_OP_VARIABLE,     //!< variable
+    EXPR_OP_BOUND,        //!< BOUND(var)
+    EXPR_OP_BANG,         //!< ! arg1
+    EXPR_OP_UPLUS,        //!< + arg1
+    EXPR_OP_UMINUS,       //!< - arg1
+    EXPR_OP_ISIRI,        //!< ISIRI(arg1)
+    EXPR_OP_ISBLANK,      //!< ISBLANK(arg1)
+    EXPR_OP_ISLITERAL,    //!< ISLITERAL(arg1)
+    EXPR_OP_STR,          //!< STR(arg1)
+    EXPR_OP_LANG,         //!< LANG(arg1)
+    EXPR_OP_DATATYPE,     //!< DATATYPE(arg1)
+    EXPR_OP_OR,           //!< arg1 || arg2
+    EXPR_OP_AND,          //!< arg1 && arg2
+    EXPR_OP_EQ,           //!< arg1 = arg2
+    EXPR_OP_NEQ,          //!< arg1 != arg2
+    EXPR_OP_LT,           //!< arg1 < arg2
+    EXPR_OP_GT,           //!< arg1 > arg2
+    EXPR_OP_LE,           //!< arg1 <= arg2
+    EXPR_OP_GE,           //!< arg1 >= arg2
+    EXPR_OP_STAR,         //!< arg1 * arg2
+    EXPR_OP_SLASH,        //!< arg1 / arg2
+    EXPR_OP_PLUS,         //!< arg1 + arg2
+    EXPR_OP_MINUS,        //!< arg1 - arg2
+    EXPR_OP_SAMETERM,     //!< SAMETERM(arg1, arg2)
+    EXPR_OP_LANGMATCHES,  //!< LANGMATCHES(arg1, arg2)
+    EXPR_OP_REGEX,        //!< REGEX(arg1, arg2, arg3)
+    EXPR_OP_CAST          //!< cast
+};
 
 /**
- * Structure for a SPARQL expression
+ * Base class for a SPARQL expression
  */
-struct TExpression {
+class Expression {
+public:
+    Expression(Query *query, ExprOperator op) :
+            query(query), op(op), vars(query) {}
+    virtual ~Expression() {}
+
     /**
-     * Parent query
+     * @return parent query
+     */
+    Query* getQuery() { return query; }
+
+    /**
+     * @return operator
+     */
+    ExprOperator getOp() { return op; }
+
+    /**
+     * @return variables occuring in this expression
+     */
+    VariableSet& getVars() { return vars; }
+
+    /**
+     * Post this expression as a constraint.
+     * @param sub subtree in which to add the constraint
+     */
+    virtual void post(Subtree &sub);
+
+    /**
+     * Evaluate the expression given the current assignment in query. The result
+     * is written in the result argument.
+     *
+     * @param[out] result value to fill in with the result
+     * @return false on evaluation error, true otherwise
+     */
+    virtual bool evaluate(Value &result) = 0;
+
+    /**
+     * Evaluate the expression given the current assignment in query.
+     * Returns the effective boolean value (EBV).
+     *
+     * @return true if the EBV is true, false if the EBV is false or an error
+     *         occured
+     */
+    bool isTrue() {
+        Value buffer;
+        return evaluateEBV(buffer) == 1;
+    }
+
+    /**
+     * Evaluate the expression and compute its effective boolean value (EBV).
+     *
+     * @param buffer value buffer to be used during evaluation
+     * @return 1 if true, 0 if false, -1 if type error
+     */
+    int evaluateEBV(Value &buffer);
+
+protected:
+    /**
+     * Parent query.
      */
     Query *query;
     /**
-     * Operator
+     * Operator.
      */
     ExprOperator op;
     /**
-     * Number of variables occuring in this expression
+     * Variables occuring in this expression.
      */
-    int nbVars;
-    /**
-     * Variables occuring in this expression
-     */
-    int *vars;
-    /**
-     * Map of variables occuring in this expression
-     * varMap[x] <=> x in vars
-     */
-    bool *varMap;
-    /**
-     * Operands dependent on the operator
-     */
-    union {
-        /**
-         * op == EXPR_OP_VALUE
-         */
-        struct {
-            Value *value;
-            bool valueOwnership;
-        };
-        /**
-         * op == EXPR_OP_VARIABLE
-         * Id of the variable
-         */
-        Variable *variable;
-        /**
-         * EXPR_OP_FIRST_UNARY <= op <= EXPR_OP_LAST_TRINARY
-         */
-        struct {
-            Expression *arg1, *arg2, *arg3;
-        };
-        /**
-         * op == EXPR_OP_CAST
-         * Cast castArg into a destType
-         */
-        struct {
-            ValueType destType;
-            Expression *castArg;
-        };
-        /**
-         * op == EXPR_OP_CALL
-         * Call function fn with nbArgs arguments stored in array args.
-         */
-        struct {
-            int fn;
-            int nbArgs;
-            Expression **args;
-        };
-    };
+    VariableSet vars;
 };
 
-////////////////////////////////////////////////////////////////////////////////
-// Constructors and destructors
+/**
+ * Base class for unary expressions
+ */
+class UnaryExpression : public Expression {
+protected:
+    Expression *arg; //!< argument
+public:
+    UnaryExpression(ExprOperator op, Expression *arg);
+    ~UnaryExpression();
+
+    /**
+     * @return argument
+     */
+    Expression* getArgument() { return arg; }
+};
 
 /**
- * @param query parent query
- * @param value a value
- * @param valueOwnership take ownership of the value
- * @return a new expression representing the value
+ * Base class for binary expressions
  */
-Expression* new_expression_value(Query *query, Value* value, bool valueOwnership);
+class BinaryExpression : public Expression {
+protected:
+    Expression *arg1; //!< first argument
+    Expression *arg2; //!< second argument
+public:
+    BinaryExpression(ExprOperator op, Expression *arg1, Expression *arg2);
+    ~BinaryExpression();
+
+    /**
+     * @return left argument
+     */
+    Expression* getLeft() { return arg1; }
+
+    /**
+     * @return left argument
+     */
+    Expression* getRight() { return arg2; }
+};
 
 /**
- * @param query parent query
- * @param variable variable
- * @return a new expression representing the variable
+ * Literal value
  */
-Expression* new_expression_variable(Query *query, Variable *variable);
+class ValueExpression : public Expression {
+    Value *value; //!< the value
+    bool ownership; //!< whether to take over ownership of the value
+public:
+    ValueExpression(Query *query, Value *value, bool ownership);
+    ~ValueExpression();
+    bool evaluate(Value &result);
+
+    /**
+     * @return the value
+     */
+    Value* getValue() { return value; }
+};
 
 /**
- * @param query parent query
- * @param op unary operator (EXPR_OP_FIRST_UNARY <= op < EXPR_OP_FIRST_BINARY)
- * @param arg1 first argument
- * @return a new expression
+ * Variable
  */
-Expression* new_expression_unary(Query *query, ExprOperator op, Expression* arg1);
+class VariableExpression : public Expression {
+    Variable *variable; //!< the variable
+public:
+    VariableExpression(Variable *variable);
+    bool evaluate(Value &result);
+
+    /**
+     * @return the variable
+     */
+    Variable* getVariable() { return variable; }
+};
 
 /**
- * @param query parent query
- * @param op binary operator (EXPR_OP_FIRST_BINARY <= op < EXPR_OP_FIRST_TRINARY)
- * @param arg1 first argument
- * @param arg2 second argument
- * @return a new expression
+ * BOUND(arg)
  */
-Expression* new_expression_binary(Query *query, ExprOperator op,
-                                  Expression* arg1, Expression* arg2);
+class BoundExpression : public Expression {
+    Variable *variable; //!< the variable
+public:
+    BoundExpression(Variable *variable);
+    bool evaluate(Value &result);
+
+    /**
+     * @return the variable
+     */
+    Variable* getVariable() { return variable; }
+};
 
 /**
- * @param query parent query
- * @param op trinary operator (EXPR_OP_FIRST_TRINARY <= op < EXPR_OP_LAST_TRINARY)
- * @param arg1 first argument
- * @param arg2 second argument
- * @param arg3 third argument
- * @return a new expression
+ * ! arg
  */
-Expression* new_expression_trinary(Query *query, ExprOperator op,
-                                   Expression* arg1, Expression* arg2,
-                                   Expression* arg3);
+class BangExpression : public UnaryExpression {
+public:
+    BangExpression(Expression *arg) : UnaryExpression(EXPR_OP_BANG, arg) {}
+    bool evaluate(Value &result);
+};
 
 /**
- * @param query parent query
- * @param destType type to which to cast
- * @param castArg expression to cast
- * @return a new expression
+ * + arg
  */
-Expression* new_expression_cast(Query *query, ValueType destType,
-                                Expression* castArg);
+class UPlusExpression : public UnaryExpression {
+public:
+    UPlusExpression(Expression *arg) : UnaryExpression(EXPR_OP_UPLUS, arg) {}
+    bool evaluate(Value &result);
+};
 
 /**
- * @param query parent query
- * @param fn function id
- * @param nbArgs number of arguments
- * @param args array of arguments, ownership is taken
- * @return a new expression
+ * - arg
  */
-Expression* new_expression_call(Query *query, int fn, int nbArgs,
-                                Expression* args[]);
+class UMinusExpression : public UnaryExpression {
+public:
+    UMinusExpression(Expression *arg) : UnaryExpression(EXPR_OP_UMINUS, arg) {}
+    bool evaluate(Value &result);
+};
 
 /**
- * Free an expression and recursively all its children expressions. Values for
- * which the ownership has been taken and args arrays will be freed too.
+ * ISIRI(arg)
  */
-void free_expression(Expression* expr);
-
-////////////////////////////////////////////////////////////////////////////////
-// Evaluation
+class IsIRIExpression : public UnaryExpression {
+public:
+    IsIRIExpression(Expression *arg) : UnaryExpression(EXPR_OP_ISIRI, arg) {}
+    bool evaluate(Value &result);
+};
 
 /**
- * Evaluate an expression given the current assignment in query. The result is
- * written in the result argument. This may need to be cleaned. In case of
- * evaluation error, result may have changed, but nothing needs to be cleaned.
- *
- * @param expr the expression to evaluate
- * @param result value to fill in with the result
- * @return false on evaluation error, true otherwise
+ * ISBLANK(arg)
  */
-bool expression_evaluate(Expression* expr, Value* result);
+class IsBlankExpression : public UnaryExpression {
+public:
+    IsBlankExpression(Expression *arg) : UnaryExpression(EXPR_OP_ISBLANK, arg) {}
+    bool evaluate(Value &result);
+};
 
 /**
- * Evaluate an expression given the current assignment in query. Returns the
- * effective boolean value (EBV).
- *
- * @param expr the expression to evaluate
- * @return true if the EBV is true, false if the EBV is false or an error
- *         occured
+ * ISLITERAL(arg)
  */
-bool expression_is_true(Expression* expr);
+class IsLiteralExpression : public UnaryExpression {
+public:
+    IsLiteralExpression(Expression *arg) : UnaryExpression(EXPR_OP_ISLITERAL, arg) {}
+    bool evaluate(Value &result);
+};
 
-#endif // EXPRESSION_H
+/**
+ * STR(arg)
+ */
+class StrExpression : public UnaryExpression {
+public:
+    StrExpression(Expression *arg) : UnaryExpression(EXPR_OP_STR, arg) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * LANG(arg)
+ */
+class LangExpression : public UnaryExpression {
+public:
+    LangExpression(Expression *arg) : UnaryExpression(EXPR_OP_LANG, arg) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * DATATYPE(arg)
+ */
+class DatatypeExpression : public UnaryExpression {
+public:
+    DatatypeExpression(Expression *arg) : UnaryExpression(EXPR_OP_DATATYPE, arg) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 || arg2
+ */
+class OrExpression : public BinaryExpression {
+public:
+    OrExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_OR, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 && arg2
+ */
+class AndExpression : public BinaryExpression {
+public:
+    AndExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_AND, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 = arg2
+ */
+class EqExpression : public BinaryExpression {
+public:
+    EqExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_EQ, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 != arg2
+ */
+class NEqExpression : public BinaryExpression {
+public:
+    NEqExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_NEQ, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 < arg2
+ */
+class LTExpression : public BinaryExpression {
+public:
+    LTExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_LT, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 > arg2
+ */
+class GTExpression : public BinaryExpression {
+public:
+    GTExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_GT, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 <= arg2
+ */
+class LEExpression : public BinaryExpression {
+public:
+    LEExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_LE, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 >= arg2
+ */
+class GEExpression : public BinaryExpression {
+public:
+    GEExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_GE, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 * arg2
+ */
+class StarExpression : public BinaryExpression {
+public:
+    StarExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_STAR, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 / arg2
+ */
+class SlashExpression : public BinaryExpression {
+public:
+    SlashExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_SLASH, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 + arg2
+ */
+class PlusExpression : public BinaryExpression {
+public:
+    PlusExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_PLUS, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * arg1 - arg2
+ */
+class MinusExpression : public BinaryExpression {
+public:
+    MinusExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_MINUS, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * SAMETERM(arg1, arg2)
+ */
+class SameTermExpression : public BinaryExpression {
+public:
+    SameTermExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_SAMETERM, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * LANGMATCHES(arg1, arg2)
+ */
+class LangMatchesExpression : public BinaryExpression {
+public:
+    LangMatchesExpression(Expression *arg1, Expression *arg2) :
+            BinaryExpression(EXPR_OP_LANGMATCHES, arg1, arg2) {}
+    bool evaluate(Value &result);
+};
+
+/**
+ * REGEX(arg1, arg2, arg3)
+ */
+class RegExExpression : public Expression {
+    Expression *arg1; //!< first argument
+    Expression *arg2; //!< second argument
+    Expression *arg3; //!< third argument
+public:
+    RegExExpression(Expression *arg1, Expression *arg2, Expression* arg3);
+    ~RegExExpression();
+    bool evaluate(Value &result);
+
+    /**
+     * @return the first argument
+     */
+    Expression* getArg1() { return arg1; }
+
+    /**
+     * @return the first argument
+     */
+    Expression* getArg2() { return arg2; }
+
+    /**
+     * @return the first argument
+     */
+    Expression* getArg3() { return arg3; }
+};
+
+/**
+ * Cast expression
+ */
+class CastExpression : public Expression {
+    ValueType destination; //!< destination type
+    Expression *arg; //!< argument to cast
+public:
+    CastExpression(ValueType destination, Expression *arg);
+    ~CastExpression();
+    bool evaluate(Value &result);
+
+    /**
+     * @return destination type
+     */
+    ValueType getDestination() { return destination; }
+
+    /**
+     * @return argument
+     */
+    Expression* getArgument() { return arg; }
+};
+
+}
+
+#endif // CASTOR_EXPRESSION_H

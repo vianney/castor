@@ -1,7 +1,7 @@
 # This file is part of Castor
 #
 # Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
-# Copyright (C) 2010 - UCLouvain
+# Copyright (C) 2010-2011, UCLouvain
 #
 # Castor is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -16,11 +16,11 @@
 # along with Castor; if not, see <http://www.gnu.org/licenses/>.
 include_directories(../castor)
 
-add_executable(nqueens nqueens.c ../castor/solver.c)
-target_link_libraries(nqueens)
+add_executable(nqueens nqueens.cpp)
+target_link_libraries(nqueens libcastor)
 
-add_executable(createsqlite createsqlite.c ../castor/model.c ../castor/xsddecimal.c)
-target_link_libraries(createsqlite ${LIBS})
+#add_executable(createsqlite createsqlite.c ../castor/model.c ../castor/xsddecimal.c)
+#target_link_libraries(createsqlite ${LIBS})
 
-add_executable(castor main.c)
-target_link_libraries(castor libcastor ${LIBS})
+add_executable(castor castor.cpp)
+target_link_libraries(castor libcastor)
