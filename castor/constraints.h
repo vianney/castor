@@ -30,7 +30,7 @@ namespace castor {
 class BoundConstraint : public Constraint {
     VarInt *x;
 public:
-    BoundConstraint(VarInt *x) : x(x) {}
+    BoundConstraint(VarInt *x) : Constraint(CSTR_PRIOR_HIGH), x(x) {}
     bool post() { return x->remove(0); }
 };
 

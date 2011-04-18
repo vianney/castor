@@ -58,16 +58,17 @@ Subtree::Subtree(Solver *solver, VarInt **vars, int nbVars) :
 
 Subtree::~Subtree() {
     // delete constraints
-    for(std::vector<Constraint*>::iterator it = constraints.begin(),
-        end = constraints.end(); it != end; ++it)
-        delete *it;
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+        for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
+            end = constraints[p].end(); it != end; ++it)
+            delete *it;
     // delete trail
     delete [] trail;
 }
 
 void Subtree::add(Constraint *c) {
     c->parent = this;
-    constraints.push_back(c);
+    constraints[c->getPriority()].push_back(c);
 }
 
 void Subtree::activate() {
@@ -79,7 +80,11 @@ void Subtree::activate() {
     solver->statSubtrees++;
     trailIndex = -1;
     checkpoint(NULL, -1);
-    inconsistent = !solver->post(constraints);
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+        inconsistent = !solver->post(constraints[p]);
+        if(inconsistent)
+            break;
+    }
     started = false;
 }
 
@@ -182,7 +187,8 @@ VarInt* Subtree::backtrack() {
             solver->statBacktracks--;
             return backtrack();
         }
-        fireRestore(constraints);
+        for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+            fireRestore(constraints[p]);
         if(!solver->propagate())
             return backtrack();
     }

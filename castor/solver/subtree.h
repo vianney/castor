@@ -141,7 +141,7 @@ private:
     /**
      * Posted constraints.
      */
-    std::vector<Constraint*> constraints;
+    std::vector<Constraint*> constraints[CSTR_PRIOR_COUNT];
 
     /**
      * Trail to backtrack.

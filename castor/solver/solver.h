@@ -89,7 +89,7 @@ private:
     /**
      * Propagation stack (linked list using nextPropag field)
      */
-    Constraint *propagQueue;
+    Constraint *propagQueue[CSTR_PRIOR_COUNT];
 
     /**
      * Current active subtree.

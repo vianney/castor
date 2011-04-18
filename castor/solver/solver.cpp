@@ -22,10 +22,12 @@
 namespace castor {
 
 Solver::Solver() {
-    propagQueue = NULL;
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+        propagQueue[p] = NULL;
     current = NULL;
     statBacktracks = 0;
     statSubtrees = 0;
+    statPropagate = 0;
 }
 
 /**
@@ -41,8 +43,9 @@ void Solver::enqueue(std::vector<Constraint*> &constraints) {
         end = constraints.end(); it != end; ++it) {
         Constraint *c = *it;
         if(c->nextPropag == CSTR_UNQUEUED && c->parent == current) {
-            c->nextPropag = propagQueue;
-            propagQueue = c;
+            ConstraintPriority p = c->getPriority();
+            c->nextPropag = propagQueue[p];
+            propagQueue[p] = c;
         }
     }
 }
@@ -69,24 +72,29 @@ bool Solver::post(std::vector<Constraint *> &constraints) {
 }
 
 bool Solver::propagate() {
-    while(propagQueue) {
-        Constraint *c = propagQueue;
-        propagQueue = c->nextPropag;
-        statPropagate++;
-        if(!c->propagate()) {
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+        if(propagQueue[p] != NULL) {
+            Constraint *c = propagQueue[p];
+            propagQueue[p] = c->nextPropag;
+            statPropagate++;
+            if(!c->propagate()) {
+                c->nextPropag = CSTR_UNQUEUED;
+                return false;
+            }
             c->nextPropag = CSTR_UNQUEUED;
-            return false;
+            return propagate();
         }
-        c->nextPropag = CSTR_UNQUEUED;
     }
     return true;
 }
 
 void Solver::clearQueue() {
-    while(propagQueue) {
-        Constraint *c = propagQueue;
-        propagQueue = c->nextPropag;
-        c->nextPropag = CSTR_UNQUEUED;
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+        while(propagQueue[p]) {
+            Constraint *c = propagQueue[p];
+            propagQueue[p] = c->nextPropag;
+            c->nextPropag = CSTR_UNQUEUED;
+        }
     }
 }
 

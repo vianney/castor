@@ -23,13 +23,46 @@ namespace castor {
 class Solver;
 class Subtree;
 
+/**
+ * Constraint propagation priority
+ */
+enum ConstraintPriority {
+    /**
+     * High priority, will be propagated first. Use this for value-based
+     * constraints or very quick constraints.
+     */
+    CSTR_PRIOR_HIGH,
+    /**
+     * Medium priority. Use this for bound consistent constraints.
+     */
+    CSTR_PRIOR_MEDIUM,
+    /**
+     * Low priority. Use this for heavy constraints that should be called after
+     * as many values as possible have been removed.
+     */
+    CSTR_PRIOR_LOW,
+
+    CSTR_PRIOR_FIRST = CSTR_PRIOR_HIGH,
+    CSTR_PRIOR_LAST = CSTR_PRIOR_LOW
+};
+#define CSTR_PRIOR_COUNT (CSTR_PRIOR_LAST - CSTR_PRIOR_FIRST + 1)
+inline ConstraintPriority& operator++(ConstraintPriority &p) {
+    return p = (ConstraintPriority)(p + 1);
+}
 
 /**
  * Constraint base class
  */
 class Constraint {
 public:
+    Constraint() : priority(CSTR_PRIOR_MEDIUM) {}
+    Constraint(ConstraintPriority priority) : priority(priority) {}
     virtual ~Constraint() {}
+
+    /**
+     * Priority of this constraint.
+     */
+    ConstraintPriority getPriority() { return priority; }
 
     /**
      * Initial propagation callback. It is called during solver_post. It should
@@ -59,6 +92,10 @@ protected:
     Subtree *parent;
 
 private:
+    /**
+     * Constraint priority. The priority is constant for a constraint.
+     */
+    ConstraintPriority priority;
     /**
      * Internal use by solver.
      * Next constraint in propagation queue.
