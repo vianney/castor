@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
     getrusage(RUSAGE_SELF, &ru[0]);
 
     // disable sqlite mutexes, assuming we are single-threaded
-//    sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
+    sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
 
     Store store(dbpath);
 
