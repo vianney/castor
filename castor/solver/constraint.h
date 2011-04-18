@@ -18,12 +18,11 @@
 #ifndef CASTOR_CONSTRAINT_H
 #define CASTOR_CONSTRAINT_H
 
-namespace castor { class Constraint; }
-
-#include "solver.h"
-#include "subtree.h"
-
 namespace castor {
+
+class Solver;
+class Subtree;
+
 
 /**
  * Constraint base class
@@ -71,5 +70,7 @@ private:
 };
 
 }
+
+#include "solver.h"
 
 #endif // CASTOR_CONSTRAINT_H

@@ -20,13 +20,10 @@
 
 #include <vector>
 
-namespace castor { class VarInt; }
-
-#include "solver.h"
-#include "constraint.h"
-#include "subtree.h"
-
 namespace castor {
+
+class Solver;
+class Constraint;
 
 /**
  * Integer variable.

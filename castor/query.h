@@ -28,6 +28,7 @@ namespace castor {
 }
 
 #include <string>
+#include <iostream>
 #include <rasqal.h>
 #include "store.h"
 #include "solver/solver.h"
@@ -128,34 +129,34 @@ public:
     /**
      * @return the number of variables
      */
-    int getVariablesCount() { return nbVars; }
+    int getVariablesCount() const { return nbVars; }
     /**
      * @return the number of requested variables
      */
-    int getRequestedCount() { return nbRequestedVars; }
+    int getRequestedCount() const { return nbRequestedVars; }
     /**
      * @param id id of a variable (within 0..getVariablesCount())
      * @return the variable with identifier id
      */
-    Variable* getVariable(int id) { return &vars[id]; }
+    Variable* getVariable(int id) const { return &vars[id]; }
     /**
      * @return array of variables
      */
-    Variable* getVariables() { return vars; }
+    Variable* getVariables() const { return vars; }
     /**
      * @return the graph pattern
      */
-    Pattern* getPattern() { return pattern; }
+    Pattern* getPattern() const { return pattern; }
     /**
      * @return the limit on the number of solutions to return or
      *         -1 to return all
      */
-    int getLimit() { return limit; }
+    int getLimit() const { return limit; }
 
     /**
      * @return the number of solutions found so far
      */
-    int getSolutionCount() { return nbSols; }
+    int getSolutionCount() const { return nbSols; }
 
     /**
      * Find the next solution
@@ -223,6 +224,8 @@ private:
     int nbSols;
 };
 
+std::ostream& operator<<(std::ostream &out, const Query &q);
+
 /**
  * Small structure containing a value or variable id.
  */
@@ -257,6 +260,9 @@ struct VarVal {
      * @return the variable id
      */
     int getVariableId() const { return -id-1; }
+
+    bool operator==(const VarVal &o) { return id == o.id; }
+    bool operator!=(const VarVal &o) { return id != o.id; }
 };
 
 /**
@@ -323,19 +329,19 @@ public:
         return *this;
     }
 
-    int getSize() { return size; }
+    int getSize() const { return size; }
     Variable* operator[](int i) { return vars[i]; }
 
     /**
      * @param v a variable
      * @return whether v is in this set
      */
-    bool contains(Variable *v) { return varMap[v->getId()]; }
+    bool contains(Variable *v) const { return varMap[v->getId()]; }
 
     /**
      * @return the list of variables
      */
-    const Variable** getList() { return (const Variable**) vars; }
+    const Variable** getList() const { return (const Variable**) vars; }
 
     /**
      * @return the list of CP variables corresponding to the variables in the

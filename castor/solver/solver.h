@@ -20,14 +20,11 @@
 #define CASTOR_SOLVER_H
 
 #include <vector>
+#include "constraint.h"
 
 namespace castor {
-    class Solver;
-    class Subtree;
-    class Constraint;
-}
 
-namespace castor {
+class Subtree;
 
 /**
  * Main solver class
@@ -51,6 +48,19 @@ public:
      * @return the current subtree
      */
     Subtree* getCurrent() { return current; }
+
+    /**
+     * @return the number of backtracks so far
+     */
+    int getStatBacktracks() { return statBacktracks; }
+    /**
+     * @return the number of subtree activations so far
+     */
+    int getStatSubtrees() { return statSubtrees; }
+    /**
+     * @return number of times a constraint's propagate method has been called
+     */
+    int getStatPropagate() { return statPropagate; }
 
 private: // for subtree
     /**
@@ -85,6 +95,21 @@ private:
      * Current active subtree.
      */
     Subtree *current;
+
+    /**
+     * Number of backtracks so far
+     */
+    int statBacktracks;
+
+    /**
+     * Number of subtree activiations so far
+     */
+    int statSubtrees;
+
+    /**
+     * Number of times a constraint's propagate method has been called
+     */
+    int statPropagate;
 
     friend class Subtree;
 };

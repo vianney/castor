@@ -500,6 +500,11 @@ VarVal Query::getVarVal(rasqal_literal* literal) throw(QueryParseException) {
     }
 }
 
+std::ostream& operator<<(std::ostream &out, const Query &q) {
+    out << *q.getPattern();
+    return out;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // Search
 

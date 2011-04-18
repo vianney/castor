@@ -20,6 +20,11 @@
 
 namespace castor {
 
+std::ostream& operator<<(std::ostream &out, const Pattern &p) {
+    p.print(out);
+    return out;
+}
+
 BasicPattern::~BasicPattern() {
     if(sub)
         delete sub;

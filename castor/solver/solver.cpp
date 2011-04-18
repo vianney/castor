@@ -24,6 +24,8 @@ namespace castor {
 Solver::Solver() {
     propagQueue = NULL;
     current = NULL;
+    statBacktracks = 0;
+    statSubtrees = 0;
 }
 
 /**
@@ -70,6 +72,7 @@ bool Solver::propagate() {
     while(propagQueue) {
         Constraint *c = propagQueue;
         propagQueue = c->nextPropag;
+        statPropagate++;
         if(!c->propagate()) {
             c->nextPropag = CSTR_UNQUEUED;
             return false;

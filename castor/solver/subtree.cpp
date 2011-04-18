@@ -19,9 +19,6 @@
 #include <cstdlib>
 #include "subtree.h"
 
-#include <iostream>
-using namespace std;
-
 namespace castor {
 
 /**
@@ -79,6 +76,7 @@ void Subtree::activate() {
     active = true;
     previous = solver->current;
     solver->current = this;
+    solver->statSubtrees++;
     trailIndex = -1;
     checkpoint(NULL, -1);
     inconsistent = !solver->post(constraints);
@@ -168,6 +166,7 @@ inline void fireRestore(std::vector<Constraint*> &constraints) {
 }
 
 VarInt* Subtree::backtrack() {
+    solver->statBacktracks++;
     if(trailIndex < 0)
         return NULL;
     // restore domains
@@ -179,14 +178,13 @@ VarInt* Subtree::backtrack() {
     if(chkp->x) {
         // remove old (failed) choice
         if(!chkp->x->remove(chkp->v)) {
-            // branch finished
+            // branch finished: does not count as backtrack
+            solver->statBacktracks--;
             return backtrack();
         }
         fireRestore(constraints);
         if(!solver->propagate())
             return backtrack();
-    } else {
-        fireRestore(constraints);
     }
     return chkp->x;
 }

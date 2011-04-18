@@ -16,6 +16,7 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "varint.h"
+#include "solver.h"
 
 namespace castor {
 

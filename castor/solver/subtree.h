@@ -20,8 +20,6 @@
 
 #include <vector>
 
-namespace castor { class Subtree; }
-
 #include "solver.h"
 #include "varint.h"
 #include "constraint.h"

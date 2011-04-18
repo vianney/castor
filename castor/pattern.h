@@ -18,6 +18,9 @@
 #ifndef CASTOR_PATTERN_H
 #define CASTOR_PATTERN_H
 
+#include <string>
+#include <iostream>
+
 namespace castor { class Pattern; }
 
 #include "query.h"
@@ -129,6 +132,22 @@ public:
      */
     virtual void discard() = 0;
 
+    /**
+     * For debugging purpose, get the name of the pattern's type
+     */
+    virtual std::string getName() const = 0;
+
+    /**
+     * For debugging purpose
+     */
+    void print(std::ostream &out) const { print(out, 0); }
+
+    /**
+     * For debugging purpose
+     * @param indent indent level to add in front of the string representation
+     */
+    virtual void print(std::ostream &out, int indent) const = 0;
+
 protected:
     /**
      * Parent query
@@ -142,7 +161,16 @@ protected:
      * Variables occuring in this pattern.
      */
     VariableSet vars;
+
+    /**
+     * For debugging purpose, return a string of whitespace corresponding to the
+     * indent.
+     * @param indent indent level
+     */
+    std::string ws(int indent) const { return std::string(2*indent, ' '); }
 };
+
+std::ostream& operator<<(std::ostream &out, const Pattern &p);
 
 /**
  * Dummy pattern always resulting in an empty set of solutions, i.e., it
@@ -154,6 +182,10 @@ public:
     void init() {}
     bool next() { return false; }
     void discard() {}
+    std::string getName() const { return "False"; }
+    void print(std::ostream &out, int indent) const {
+        out << ws(indent) << getName();
+    }
 };
 
 /**
@@ -180,6 +212,11 @@ public:
     void init();
     bool next();
     void discard();
+
+    std::string getName() const { return "Basic"; }
+    void print(std::ostream &out, int indent) const {
+        out << ws(indent) << getName() << "(" << triples.size() << " triples)";
+    }
 
     friend class FilterPattern;
 };
@@ -210,6 +247,13 @@ public:
     void init();
     bool next();
     void discard();
+
+    std::string getName() const { return "Filter"; }
+    void print(std::ostream &out, int indent) const {
+        out << ws(indent) << getName()
+            << "(" << vars.getSize() << " variables)" << std::endl;
+        subpattern->print(out, indent+1);
+    }
 };
 
 /**
@@ -236,6 +280,12 @@ public:
 
     Pattern* optimize();
     void init();
+
+    void print(std::ostream &out, int indent) const {
+        out << ws(indent) << getName() << std::endl;
+        left->print(out, indent+1); out << std::endl;
+        right->print(out, indent+1);
+    }
 };
 
 /**
@@ -247,6 +297,7 @@ public:
             CompoundPattern(PATTERN_TYPE_JOIN, left, right) {}
     bool next();
     void discard();
+    std::string getName() const { return "Join"; }
 };
 
 /**
@@ -260,6 +311,7 @@ public:
             consistent(false) {}
     bool next();
     void discard();
+    std::string getName() const { return "LeftJoin"; }
 };
 
 /**
@@ -271,6 +323,7 @@ public:
             CompoundPattern(PATTERN_TYPE_DIFF, left, right) {}
     bool next();
     void discard();
+    std::string getName() const { return "Diff"; }
 };
 
 /**
@@ -284,6 +337,7 @@ public:
             onRightBranch(false) {}
     bool next();
     void discard();
+    std::string getName() const { return "Union"; }
 };
 
 }

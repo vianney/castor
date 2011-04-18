@@ -99,7 +99,7 @@ bool FilterConstraint::propagate() {
             x->setValue(NULL);
         else if(x->getCPVariable()->isBound())
             x->setValue(store->getValue(x->getCPVariable()->getValue()));
-        else if(unbound >= 0)
+        else if(unbound)
             return true; // too many unbound variables (> 1)
         else
             unbound = x;
@@ -146,7 +146,7 @@ bool DiffConstraint::post() {
     else if(x2)
         return x2->remove(v1.getValueId());
     else
-        return v1.getValueId() != v2.getValueId();
+        return v1 != v2;
 }
 
 bool DiffConstraint::propagate() {
@@ -169,7 +169,6 @@ EqConstraint::EqConstraint(Query *query, VarVal v1, VarVal v2) :
     if(x1 && x2) {
         x1->registerChange(this);
         x2->registerChange(this);
-        restore();
     }
 }
 
@@ -183,14 +182,16 @@ void EqConstraint::restore() {
 bool EqConstraint::post() {
     if(v1.isUnknown() || v2.isUnknown())
         return false;
-    if(x1 && x2)
+    if(x1 && x2) {
+        restore();
         return propagate();
-    else if(x1)
+    } else if(x1) {
         return x1->bind(v2.getValueId());
-    else if(x2)
+    } else if(x2) {
         return x2->bind(v2.getValueId());
-    else
-        return v1.getValueId() == v2.getValueId();
+    } else {
+        return v1 == v2;
+    }
 }
 
 bool EqConstraint::propagate() {
@@ -198,7 +199,10 @@ bool EqConstraint::propagate() {
     int n1 = x1->getSize(), n2 = x2->getSize();
     int oldn1 = s1, oldn2 = s2;
     int removed = (oldn1 - n1) + (oldn2 - n2);
-    if(removed < n1 && removed < n2) {
+    /* removed is 0 on initial propagation. In such case, we must compute the
+     * union of both domains.
+     */
+    if(removed > 0 && removed < n1 && removed < n2) {
         const int *dom = x1->getDomain();
         for(int i = n1; i < oldn1; i++) {
             if(!x2->remove(dom[i]))

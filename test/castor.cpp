@@ -64,6 +64,9 @@ int main(int argc, char *argv[]) {
     rusage ru[4];
     getrusage(RUSAGE_SELF, &ru[0]);
 
+    // disable sqlite mutexes, assuming we are single-threaded
+//    sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
+
     Store store(dbpath);
 
     getrusage(RUSAGE_SELF, &ru[1]);
@@ -71,6 +74,7 @@ int main(int argc, char *argv[]) {
 
     Query query(&store, queryString);
     delete queryString;
+    cout << query << endl;
 
     getrusage(RUSAGE_SELF, &ru[2]);
     printTime("Query init", diffTime(ru[1], ru[2]));
@@ -99,6 +103,10 @@ int main(int argc, char *argv[]) {
     cout << "Found: " << query.getSolutionCount() << endl;
     cout << "Time: " << diffTime(ru[1], ru[3]) << endl;
     cout << "Memory: " << ru[3].ru_maxrss << endl;
+
+    cout << "Backtracks: " << query.getSolver()->getStatBacktracks() << endl;
+    cout << "Subtrees: " << query.getSolver()->getStatSubtrees() << endl;
+    cout << "Propagate: " << query.getSolver()->getStatPropagate() << endl;
 
     return 0;
 }
