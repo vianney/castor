@@ -51,26 +51,31 @@ void Solver::enqueue(std::vector<Constraint*> &constraints) {
     }
 }
 
-bool Solver::post(std::vector<Constraint *> &constraints) {
+bool Solver::post(std::vector<Constraint *> *constraints) {
     // mark all constraints as propagating
-    for(std::vector<Constraint*>::iterator it = constraints.begin(),
-        end = constraints.end(); it != end; ++it)
-        (*it)->nextPropag = NULL;
-    // call initial propagation
-    for(std::vector<Constraint*>::iterator it = constraints.begin(),
-        end = constraints.end(); it != end; ++it) {
-        Constraint *c = *it;
-        statPost++;
-        if(!c->post())
-            /* Beware that some constraints are left in "propagating" state
-             * while they are not in queue. As we are in initial propagation,
-             * the subtree will be inconsistent and be discarded.
-             */
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+        for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
+            end = constraints[p].end(); it != end; ++it)
+            (*it)->nextPropag = NULL;
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+        // call initial propagation
+        for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
+            end = constraints[p].end(); it != end; ++it) {
+            Constraint *c = *it;
+            statPost++;
+            if(!c->post())
+                /* Beware that some constraints are left in "propagating" state
+                 * while they are not in queue. As we are in initial propagation,
+                 * the subtree will be inconsistent and be discarded.
+                 */
+                return false;
+            c->nextPropag = CSTR_UNQUEUED;
+        }
+        // propagate
+        if(!propagate())
             return false;
-        c->nextPropag = CSTR_UNQUEUED;
     }
-    // propagate
-    return propagate();
+    return true;
 }
 
 bool Solver::propagate() {

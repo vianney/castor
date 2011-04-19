@@ -71,9 +71,10 @@ private: // for subtree
      * Post a list of constraints. Perform initial propagation on all the
      * constraints.
      *
+     * @param array of constraint lists by priority
      * @return false if there is a failure, true otherwise
      */
-    bool post(std::vector<Constraint*> &constraints);
+    bool post(std::vector<Constraint*> *constraints);
 
     /**
      * Perform propagation of the constraints in the queue. After this call,

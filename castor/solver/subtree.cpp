@@ -80,11 +80,7 @@ void Subtree::activate() {
     solver->statSubtrees++;
     trailIndex = -1;
     checkpoint(NULL, -1);
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
-        inconsistent = !solver->post(constraints[p]);
-        if(inconsistent)
-            break;
-    }
+    inconsistent = !solver->post(constraints);
     started = false;
 }
 
