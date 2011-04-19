@@ -181,14 +181,14 @@ VarInt* Subtree::backtrack() {
     // clear propagation queue
     solver->clearQueue();
     if(chkp->x) {
+        for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+            fireRestore(constraints[p]);
         // remove old (failed) choice
         if(!chkp->x->remove(chkp->v)) {
             // branch finished: does not count as backtrack
             solver->statBacktracks--;
             return backtrack();
         }
-        for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
-            fireRestore(constraints[p]);
         if(!solver->propagate())
             return backtrack();
     }
