@@ -47,6 +47,7 @@ class StatementConstraint : public StatelessConstraint {
     VarInt *subject, *predicate, *object;
 public:
     StatementConstraint(Query *query, StatementPattern &stmt);
+    void restore();
     bool propagate();
 };
 
@@ -58,6 +59,7 @@ class FilterConstraint : public StatelessConstraint {
     Expression *expr; //!< The expression
 public:
     FilterConstraint(Store *store, Expression *expr);
+    void restore();
     bool propagate();
 };
 
@@ -70,6 +72,7 @@ class DiffConstraint : public StatelessConstraint {
     VarInt *x1, *x2; //!< CP variable or NULL if fixed value
 public:
     DiffConstraint(Query *query, VarVal v1, VarVal v2);
+    void restore();
     bool post();
     bool propagate();
 };

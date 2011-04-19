@@ -68,7 +68,7 @@ public:
      * Constraint (re)initialization. Called when parent subtree is activated
      * and before any propagation occurs. Should not propagate anything.
      */
-    virtual void init() {}
+    virtual void init() { done = false; }
 
     /**
      * Initial propagation callback. It should perform the initial propagation
@@ -95,6 +95,13 @@ protected:
      * This variable is initialized by the Subtree.
      */
     Subtree *parent;
+
+    /**
+     * If this variable is set to true, the constraint will not react to further
+     * events. The restore callback will still be called, such that done can
+     * be reset to false when appropriate.
+     */
+    bool done;
 
 private:
     /**
@@ -125,7 +132,7 @@ public:
     StatelessConstraint() : Constraint() {}
     StatelessConstraint(ConstraintPriority priority) : Constraint(priority) {}
 
-    void init() { posted = false; }
+    void init() { Constraint::init(); posted = false; }
     bool post() { return posted ? true : propagate(); }
     bool propagate() { posted = true; return true; }
 };

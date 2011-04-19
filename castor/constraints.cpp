@@ -36,30 +36,43 @@ StatementConstraint::StatementConstraint(Query *query, StatementPattern &stmt) :
 #undef REGISTER
 }
 
+void StatementConstraint::restore() {
+    int bound = 0;
+    if(subject == NULL || subject->isBound()) bound++;
+    if(predicate == NULL || predicate->isBound()) bound++;
+    if(object == NULL || object->isBound()) bound++;
+    done = (bound >= 2);
+}
+
 bool StatementConstraint::propagate() {
     StatelessConstraint::propagate();
 
     int vs, vp, vo;
+    int bound = 3;
 #define INIT(p, part) \
-    if(part == NULL) \
+    if(part == NULL) { \
         v##p = stmt.part.getValueId(); \
-    else if(part->isBound()) \
+    } else if(part->isBound()) { \
         v##p = part->getValue(); \
-    else \
-        v##p = -1;
+    } else { \
+        v##p = -1; \
+        bound--; \
+    }
     INIT(s, subject)
     INIT(p, predicate)
     INIT(o, object)
 #undef INIT
 
-    if(vs < 0 && vp < 0 && vo < 0) {
+    if(bound == 0)
         // nothing bound, we do not want to check all triples
         return true;
-    }
+
+    if(bound >= 2)
+        done = true;
 
     store->queryStatements(vs, vp, vo);
 
-    if(vs >= 0 && vp >= 0 && vo >= 0) {
+    if(bound == 3) {
         // all variables are bound, just check
         return store->fetchStatement(NULL);
     }
@@ -92,6 +105,24 @@ FilterConstraint::FilterConstraint(Store *store, Expression *expr) :
         vars[i]->registerBind(this);
 }
 
+void FilterConstraint::restore() {
+    done = false;
+    VariableSet &vars = expr->getVars();
+    for(int i = 0; i < vars.getSize(); i++) {
+        VarInt *x = vars[i]->getCPVariable();
+        if(!x->contains(0) && !x->isBound()) {
+            if(done) {
+                // more than one unbound variable, we are not done
+                done = false;
+                return;
+            } else {
+                // first encountered unbound variable
+                done = true;
+            }
+        }
+    }
+}
+
 bool FilterConstraint::propagate() {
     StatelessConstraint::propagate();
     VariableSet &vars = expr->getVars();
@@ -107,6 +138,7 @@ bool FilterConstraint::propagate() {
         else
             unbound = x;
     }
+    done = true;
     if(!unbound) {
         // all variables are bound -> check
         return expr->isTrue();
@@ -139,6 +171,11 @@ DiffConstraint::DiffConstraint(Query *query, VarVal v1, VarVal v2) :
     }
 }
 
+void DiffConstraint::restore() {
+    if(x1 && x2)
+        done = (x1->isBound() || x2->isBound());
+}
+
 bool DiffConstraint::post() {
     if(v1.isUnknown() || v2.isUnknown())
         return false;
@@ -154,12 +191,15 @@ bool DiffConstraint::post() {
 
 bool DiffConstraint::propagate() {
     StatelessConstraint::propagate();
-    if(x1->isBound())
+    if(x1->isBound()) {
+        done = true;
         return x2->remove(x1->getValue());
-    else if(x2->isBound())
+    } else if(x2->isBound()) {
+        done = true;
         return x1->remove(x2->getValue());
-    else
+    } else {
         return true;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

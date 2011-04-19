@@ -43,7 +43,7 @@ void Solver::enqueue(std::vector<Constraint*> &constraints) {
     for(std::vector<Constraint*>::iterator it = constraints.begin(),
         end = constraints.end(); it != end; ++it) {
         Constraint *c = *it;
-        if(c->nextPropag == CSTR_UNQUEUED && c->parent == current) {
+        if(!c->done && c->nextPropag == CSTR_UNQUEUED && c->parent == current) {
             ConstraintPriority p = c->getPriority();
             c->nextPropag = propagQueue[p];
             propagQueue[p] = c;
