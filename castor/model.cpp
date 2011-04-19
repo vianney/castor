@@ -138,7 +138,8 @@ void Value::fillIRI(char *lexical, bool freeLexical) {
 void Value::fillId(Store *store) {
     if(id > 0)
         return;
-    id = store->getValueId(type, typeUri, lexical, languageTag);
+    id = store->getValueId(type, typeUri, lexical,
+                           isPlain() ? languageTag : NULL);
 }
 
 int Value::compare(const Value &o) const {
