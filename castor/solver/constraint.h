@@ -45,7 +45,7 @@ enum ConstraintPriority {
     CSTR_PRIOR_FIRST = CSTR_PRIOR_HIGH,
     CSTR_PRIOR_LAST = CSTR_PRIOR_LOW
 };
-#define CSTR_PRIOR_COUNT (CSTR_PRIOR_LAST - CSTR_PRIOR_FIRST + 1)
+const int CSTR_PRIOR_COUNT = CSTR_PRIOR_LAST - CSTR_PRIOR_FIRST + 1;
 inline ConstraintPriority& operator++(ConstraintPriority &p) {
     return p = (ConstraintPriority)(p + 1);
 }
@@ -55,8 +55,8 @@ inline ConstraintPriority& operator++(ConstraintPriority &p) {
  */
 class Constraint {
 public:
-    Constraint() : priority(CSTR_PRIOR_MEDIUM) {}
-    Constraint(ConstraintPriority priority) : priority(priority) {}
+    Constraint(ConstraintPriority priority = CSTR_PRIOR_MEDIUM) :
+            priority(priority) {}
     virtual ~Constraint() {}
 
     /**

@@ -341,7 +341,9 @@ public:
     /**
      * @return the list of variables
      */
-    const Variable** getList() const { return (const Variable**) vars; }
+    const Variable** getList() const {
+        return const_cast<const Variable**>(vars);
+    }
 
     /**
      * @return the list of CP variables corresponding to the variables in the

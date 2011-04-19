@@ -63,7 +63,7 @@ void BasicPattern::discard() {
 }
 
 FilterPattern::FilterPattern(Pattern *subpattern, Expression *condition) :
-        Pattern(subpattern->getQuery(), PATTERN_TYPE_FILTER),
+        Pattern(subpattern->getQuery()),
         subpattern(subpattern), condition(condition) {
     vars = subpattern->getVars();
 }
@@ -83,24 +83,23 @@ FilterPattern::~FilterPattern() {
  */
 bool isNotBound(Expression *expr, LeftJoinPattern *pat) {
 // TODO recursive check + handle other parts of the condition
-    if(expr->getOp() != EXPR_OP_BANG)
-        return false;
-    BangExpression *bang = (BangExpression*) expr;
-    if(bang->getArgument()->getOp() != EXPR_OP_BOUND)
-        return false;
-    BoundExpression *bound = (BoundExpression*) bang->getArgument();
-    return pat->getRight()->getVars().contains(bound->getVariable()) &&
-            !pat->getLeft()->getVars().contains(bound->getVariable());
+    if(BangExpression *bang = dynamic_cast<BangExpression*>(expr)) {
+        if(BoundExpression *bound =
+                dynamic_cast<BoundExpression*>(bang->getArgument())) {
+            return pat->getRight()->getVars().contains(bound->getVariable()) &&
+                    !pat->getLeft()->getVars().contains(bound->getVariable());
+        }
+    }
+    return false;
 }
 
 Pattern* FilterPattern::optimize() {
     subpattern = subpattern->optimize();
-    if(subpattern->getType() == PATTERN_TYPE_LEFTJOIN &&
-       isNotBound(condition, (LeftJoinPattern*) subpattern)) {
-        LeftJoinPattern *oldpat = (LeftJoinPattern*) subpattern;
-        DiffPattern *pat = new DiffPattern(oldpat->getLeft(),
-                                           oldpat->getRight());
-        oldpat->deleteThisOnly();
+    LeftJoinPattern *subpat = dynamic_cast<LeftJoinPattern*>(subpattern);
+    if(subpat && isNotBound(condition, subpat)) {
+        DiffPattern *pat = new DiffPattern(subpat->getLeft(),
+                                           subpat->getRight());
+        subpat->deleteThisOnly();
         subpattern = NULL;
         delete this;
         return pat;
@@ -110,12 +109,12 @@ Pattern* FilterPattern::optimize() {
 
 void FilterPattern::init() {
     subpattern->init();
-    if(subpattern->getType() == PATTERN_TYPE_BASIC)
-        condition->post(*((BasicPattern*) subpattern)->sub);
+    if(BasicPattern *subpat = dynamic_cast<BasicPattern*>(subpattern))
+        condition->post(*subpat->sub);
 }
 
 bool FilterPattern::next() {
-    if(subpattern->getType() == PATTERN_TYPE_BASIC) {
+    if(dynamic_cast<BasicPattern*>(subpattern)) {
         return subpattern->next();
     } else {
         while(subpattern->next()) {
@@ -132,8 +131,8 @@ void FilterPattern::discard() {
     subpattern->discard();
 }
 
-CompoundPattern::CompoundPattern(PatternType type, Pattern *left, Pattern *right) :
-        Pattern(left->getQuery(), type), left(left), right(right) {
+CompoundPattern::CompoundPattern(Pattern *left, Pattern *right) :
+        Pattern(left->getQuery()), left(left), right(right) {
     vars = left->getVars();
     vars += right->getVars();
 }

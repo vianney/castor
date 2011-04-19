@@ -20,6 +20,7 @@
 
 #include <string>
 #include <iostream>
+#include <typeinfo>
 
 namespace castor { class Pattern; }
 
@@ -42,58 +43,17 @@ struct StatementPattern {
 };
 
 /**
- * Pattern type enumeration
- */
-enum PatternType {
-    /**
-     * Dummy pattern always resulting in an empty set of solutions, i.e., it
-     * cannot be matched
-     */
-    PATTERN_TYPE_FALSE,
-    /**
-     * Basic graph pattern (set of statement patterns)
-     */
-    PATTERN_TYPE_BASIC,
-    /**
-     * Filter expression
-     */
-    PATTERN_TYPE_FILTER,
-    /**
-     * Concatenation
-     */
-    PATTERN_TYPE_JOIN,
-    /**
-     * OPTIONAL
-     */
-    PATTERN_TYPE_LEFTJOIN,
-    /**
-     * OPTIONAL { ... } FILTER(!bound(...))
-     */
-    PATTERN_TYPE_DIFF,
-    /**
-     * UNION
-     */
-    PATTERN_TYPE_UNION
-};
-
-/**
  * Base class for a SPARQL graph pattern
  */
 class Pattern {
 public:
-    Pattern(Query *query, PatternType type) :
-            query(query), type(type), vars(query) {}
+    Pattern(Query *query) : query(query), vars(query) {}
     virtual ~Pattern() {}
 
     /**
      * @return parent query
      */
     Query* getQuery() { return query; }
-
-    /**
-     * @return operator
-     */
-    PatternType getType() { return type; }
 
     /**
      * @return variables occuring in this pattern
@@ -133,11 +93,6 @@ public:
     virtual void discard() = 0;
 
     /**
-     * For debugging purpose, get the name of the pattern's type
-     */
-    virtual std::string getName() const = 0;
-
-    /**
      * For debugging purpose
      */
     void print(std::ostream &out) const { print(out, 0); }
@@ -153,10 +108,6 @@ protected:
      * Parent query
      */
     Query *query;
-    /**
-     * Type
-     */
-    PatternType type;
     /**
      * Variables occuring in this pattern.
      */
@@ -178,13 +129,12 @@ std::ostream& operator<<(std::ostream &out, const Pattern &p);
  */
 class FalsePattern : public Pattern {
 public:
-    FalsePattern(Query *query) : Pattern(query, PATTERN_TYPE_FALSE) {}
+    FalsePattern(Query *query) : Pattern(query) {}
     void init() {}
     bool next() { return false; }
     void discard() {}
-    std::string getName() const { return "False"; }
     void print(std::ostream &out, int indent) const {
-        out << ws(indent) << getName();
+        out << ws(indent) << "FalsePattern";
     }
 };
 
@@ -195,7 +145,7 @@ class BasicPattern : public Pattern {
     std::vector<StatementPattern> triples;
     Subtree *sub;
 public:
-    BasicPattern(Query *query) : Pattern(query, PATTERN_TYPE_BASIC) {}
+    BasicPattern(Query *query) : Pattern(query) {}
     ~BasicPattern();
 
     /**
@@ -213,9 +163,8 @@ public:
     bool next();
     void discard();
 
-    std::string getName() const { return "Basic"; }
     void print(std::ostream &out, int indent) const {
-        out << ws(indent) << getName() << "(" << triples.size() << " triples)";
+        out << ws(indent) << "BasicPattern(" << triples.size() << " triples)";
     }
 
     friend class FilterPattern;
@@ -248,10 +197,9 @@ public:
     bool next();
     void discard();
 
-    std::string getName() const { return "Filter"; }
     void print(std::ostream &out, int indent) const {
-        out << ws(indent) << getName()
-            << "(" << vars.getSize() << " variables)" << std::endl;
+        out << ws(indent) << "FilterPattern("
+            << vars.getSize() << " variables)" << std::endl;
         subpattern->print(out, indent+1);
     }
 };
@@ -263,7 +211,7 @@ class CompoundPattern : public Pattern {
 protected:
     Pattern *left, *right;
 public:
-    CompoundPattern(PatternType type, Pattern *left, Pattern *right);
+    CompoundPattern(Pattern *left, Pattern *right);
     ~CompoundPattern();
 
     /**
@@ -282,7 +230,7 @@ public:
     void init();
 
     void print(std::ostream &out, int indent) const {
-        out << ws(indent) << getName() << std::endl;
+        out << ws(indent) << typeid(*this).name() << std::endl;
         left->print(out, indent+1); out << std::endl;
         right->print(out, indent+1);
     }
@@ -294,10 +242,9 @@ public:
 class JoinPattern : public CompoundPattern {
 public:
     JoinPattern(Pattern *left, Pattern *right) :
-            CompoundPattern(PATTERN_TYPE_JOIN, left, right) {}
+            CompoundPattern(left, right) {}
     bool next();
     void discard();
-    std::string getName() const { return "Join"; }
 };
 
 /**
@@ -307,11 +254,9 @@ class LeftJoinPattern : public CompoundPattern {
     bool consistent; //!< is the right branch consistent?
 public:
     LeftJoinPattern(Pattern *left, Pattern *right) :
-            CompoundPattern(PATTERN_TYPE_LEFTJOIN, left, right),
-            consistent(false) {}
+            CompoundPattern(left, right), consistent(false) {}
     bool next();
     void discard();
-    std::string getName() const { return "LeftJoin"; }
 };
 
 /**
@@ -320,10 +265,9 @@ public:
 class DiffPattern : public CompoundPattern {
 public:
     DiffPattern(Pattern *left, Pattern *right) :
-            CompoundPattern(PATTERN_TYPE_DIFF, left, right) {}
+            CompoundPattern(left, right) {}
     bool next();
     void discard();
-    std::string getName() const { return "Diff"; }
 };
 
 /**
@@ -333,11 +277,9 @@ class UnionPattern : public CompoundPattern {
     bool onRightBranch; //!< exploring the left (false) or right (true) branch
 public:
     UnionPattern(Pattern *left, Pattern *right) :
-            CompoundPattern(PATTERN_TYPE_UNION, left, right),
-            onRightBranch(false) {}
+            CompoundPattern(left, right), onRightBranch(false) {}
     bool next();
     void discard();
-    std::string getName() const { return "Union"; }
 };
 
 }

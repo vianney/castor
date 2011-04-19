@@ -23,31 +23,29 @@
 
 namespace castor {
 
-Redland REDLAND = Redland();
-
 char *VALUETYPE_URIS[] = {
     NULL,
     NULL,
     NULL,
-    (char*) "http://www.w3.org/2001/XMLSchema#string",
-    (char*) "http://www.w3.org/2001/XMLSchema#boolean",
-    (char*) "http://www.w3.org/2001/XMLSchema#integer",
-    (char*) "http://www.w3.org/2001/XMLSchema#positiveInteger",
-    (char*) "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
-    (char*) "http://www.w3.org/2001/XMLSchema#negativeInteger",
-    (char*) "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
-    (char*) "http://www.w3.org/2001/XMLSchema#byte",
-    (char*) "http://www.w3.org/2001/XMLSchema#short",
-    (char*) "http://www.w3.org/2001/XMLSchema#int",
-    (char*) "http://www.w3.org/2001/XMLSchema#long",
-    (char*) "http://www.w3.org/2001/XMLSchema#unsignedByte",
-    (char*) "http://www.w3.org/2001/XMLSchema#unsignedShort",
-    (char*) "http://www.w3.org/2001/XMLSchema#unsignedInt",
-    (char*) "http://www.w3.org/2001/XMLSchema#unsignedLong",
-    (char*) "http://www.w3.org/2001/XMLSchema#float",
-    (char*) "http://www.w3.org/2001/XMLSchema#double",
-    (char*) "http://www.w3.org/2001/XMLSchema#decimal",
-    (char*) "http://www.w3.org/2001/XMLSchema#dateTime"
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#string"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#boolean"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#integer"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#positiveInteger"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#nonPositiveInteger"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#negativeInteger"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#nonNegativeInteger"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#byte"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#short"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#int"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#long"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#unsignedByte"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#unsignedShort"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#unsignedInt"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#unsignedLong"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#float"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#double"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#decimal"),
+    const_cast<char*>("http://www.w3.org/2001/XMLSchema#dateTime")
 };
 
 void Value::clean() {
@@ -154,9 +152,9 @@ int Value::compare(const Value &o) const {
             return decimal->compare(*o.decimal);
         } else {
             double d1 = isFloating() ? floating :
-                        (isDecimal() ? decimal->getFloat() : (double) integer);
+                        (isDecimal() ? decimal->getFloat() : integer);
             double d2 = o.isFloating() ? o.floating :
-                        (o.isDecimal() ? o.decimal->getFloat() : (double) o.integer);
+                        (o.isDecimal() ? o.decimal->getFloat() : o.integer);
             double diff = d1 - d2;
             if(diff < .0) return -1;
             else if(diff > .0) return 1;
@@ -208,7 +206,8 @@ void Value::ensureLexical() {
         return;
 
     if(isBoolean()) {
-        lexical = boolean ? (char*) "true" : (char*) "false";
+        lexical = boolean ? const_cast<char*>("true") :
+                            const_cast<char*>("false");
     } else if(isInteger()) {
         int len = snprintf(NULL, 0, "%ld", integer);
         lexical = new char[len+1];
@@ -226,9 +225,9 @@ void Value::ensureLexical() {
         addCleanFlag(VALUE_CLEAN_LEXICAL);
     } else if(isDateTime()) {
         // TODO
-        lexical = (char*) "";
+        lexical = const_cast<char*>("");
     } else {
-        lexical = (char*) "";
+        lexical = const_cast<char*>("");
     }
 }
 
@@ -280,13 +279,13 @@ void promoteNumericType(Value &v1, Value &v2) {
         v1.fillDecimal(new XSDDecimal(v1.integer));
     else if(v1.isFloating() && v2.isInteger())
         // convert v2 to xsd:double
-        v2.fillFloating((double) v2.integer);
+        v2.fillFloating(v2.integer);
     else if(v1.isFloating() && v2.isDecimal())
         // convert v2 to xsd:double
         v2.fillFloating(v2.decimal->getFloat());
     else if(v2.isFloating() && v1.isInteger())
         // convert v1 to xsd:double
-        v1.fillFloating((double) v1.integer);
+        v1.fillFloating(v1.integer);
     else if(v2.isFloating() && v1.isDecimal())
         v1.fillFloating(v1.decimal->getFloat());
 }

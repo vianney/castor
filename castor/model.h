@@ -22,30 +22,6 @@
 #include <string>
 #include <rasqal.h>
 
-namespace castor {
-    /**
-     * Structure for global redland worlds
-     */
-    struct Redland {
-        raptor_world *raptor;
-        rasqal_world *rasqal;
-
-        Redland() {
-            rasqal = rasqal_new_world();
-            raptor = rasqal_world_get_raptor(rasqal);
-        }
-
-        ~Redland() {
-            rasqal_free_world(rasqal);
-        }
-    };
-
-    /**
-     * Singleton instance of Redland
-     */
-    extern Redland REDLAND;
-}
-
 #include "xsddecimal.h"
 
 namespace castor {
@@ -83,8 +59,6 @@ enum ValueType {
     VALUE_TYPE_UNKOWN = -1,
 
     // internal values
-    VALUE_TYPE_FIRST_XSD = VALUE_TYPE_TYPED_STRING,
-    VALUE_TYPE_LAST_XSD = VALUE_TYPE_DATETIME,
     VALUE_TYPE_FIRST_NUMERIC = VALUE_TYPE_INTEGER,
     VALUE_TYPE_LAST_NUMERIC = VALUE_TYPE_DECIMAL,
     VALUE_TYPE_FIRST_INTEGER = VALUE_TYPE_INTEGER,
@@ -92,15 +66,6 @@ enum ValueType {
     VALUE_TYPE_FIRST_FLOATING = VALUE_TYPE_FLOAT,
     VALUE_TYPE_LAST_FLOATING = VALUE_TYPE_DOUBLE
 };
-
-#define IS_VALUE_TYPE_XSD(type) \
-    ((type) >= VALUE_TYPE_FIRST_XSD && (type) <= VALUE_TYPE_LAST_XSD)
-#define IS_VALUE_TYPE_NUMERIC(type) \
-    ((type) >= VALUE_TYPE_FIRST_NUMERIC && (type) <= VALUE_TYPE_LAST_NUMERIC)
-#define IS_VALUE_TYPE_INTEGER(type) \
-    ((type) >= VALUE_TYPE_FIRST_INTEGER && (type) <= VALUE_TYPE_LAST_INTEGER)
-#define IS_VALUE_TYPE_FLOATING(type) \
-    ((type) >= VALUE_TYPE_FIRST_FLOATING && (type) <= VALUE_TYPE_LAST_FLOATING)
 
 /**
  * URIs corresponding to the value types
@@ -206,11 +171,15 @@ struct Value {
     /**
      * Add a cleanup flag
      */
-    void addCleanFlag(ValueCleanFlags flag) { cleanup = (ValueCleanFlags)(cleanup | flag); }
+    void addCleanFlag(ValueCleanFlags flag) {
+        cleanup = static_cast<ValueCleanFlags>(cleanup | flag);
+    }
     /**
      * Remove a cleanup flag
      */
-    void removeCleanFlag(ValueCleanFlags flag) { cleanup = (ValueCleanFlags)(cleanup & ~flag); }
+    void removeCleanFlag(ValueCleanFlags flag) {
+        cleanup = static_cast<ValueCleanFlags>(cleanup & ~flag);
+    }
     /**
      * Clean this structure according to cleanup.
      */
@@ -298,15 +267,18 @@ struct Value {
     /**
      * @return whether this value is a numeric literal
      */
-    bool isNumeric() const { return IS_VALUE_TYPE_NUMERIC(type); }
+    bool isNumeric() const { return type >= VALUE_TYPE_FIRST_NUMERIC &&
+                                    type <= VALUE_TYPE_LAST_NUMERIC; }
     /**
      * @return whether this value is an integer literal
      */
-    bool isInteger() const { return IS_VALUE_TYPE_INTEGER(type); }
+    bool isInteger() const { return type >= VALUE_TYPE_FIRST_INTEGER &&
+                                    type <= VALUE_TYPE_LAST_INTEGER; }
     /**
      * @return whether this value is a floating literal
      */
-    bool isFloating() const { return IS_VALUE_TYPE_FLOATING(type); }
+    bool isFloating() const { return type >= VALUE_TYPE_FIRST_FLOATING &&
+                                     type <= VALUE_TYPE_LAST_FLOATING; }
     /**
      * @return whether this value is a decimal literal
      */

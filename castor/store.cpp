@@ -70,7 +70,7 @@ Store::Store(const char* filename) throw(StoreException) {
         if(rc != SQLITE_ROW)
             goto cleansql;
         i = sqlite3_column_int(sql, 0);
-        str = (const char*) sqlite3_column_text(sql, 1);
+        str = reinterpret_cast<const char*>(sqlite3_column_text(sql, 1));
         datatypes[i] = new char[strlen(str) + 1];
         strcpy(datatypes[i], str);
     }
@@ -98,7 +98,7 @@ Store::Store(const char* filename) throw(StoreException) {
         if(rc != SQLITE_ROW)
             goto cleansql;
         i = sqlite3_column_int(sql, 0);
-        str = (const char*) sqlite3_column_text(sql, 1);
+        str = reinterpret_cast<const char*>(sqlite3_column_text(sql, 1));
         languages[i] = new char[strlen(str) + 1];
         strcpy(languages[i], str);
     }
@@ -128,7 +128,7 @@ Store::Store(const char* filename) throw(StoreException) {
         v->id = i;
         v->type = (ValueType) sqlite3_column_int(sql, 1);
         v->typeUri = datatypes[v->type];
-        str = (const char*) sqlite3_column_text(sql, 2);
+        str = reinterpret_cast<const char*>(sqlite3_column_text(sql, 2));
         v->lexical = new char[strlen(str) + 1];
         strcpy(v->lexical, str);
         v->cleanup = VALUE_CLEAN_LEXICAL;

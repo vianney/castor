@@ -18,6 +18,7 @@
 
 #include <sstream>
 #include "query.h"
+#include "librdf.h"
 
 namespace castor {
 
@@ -28,22 +29,26 @@ void Variable::setValueFromCP() {
         value = query->getStore()->getValue(var->getValue());
 }
 
+using librdf::Sequence;
+
 Query::Query(Store *store, char *queryString) throw(QueryParseException) :
         store(store) {
-    rasqal_query *query = rasqal_new_query(REDLAND.rasqal, "sparql", NULL);
+    rasqal_query *query = rasqal_new_query(librdf::WORLD.rasqal, "sparql", NULL);
     vars = NULL;
     pattern = NULL;
     try {
-        if(rasqal_query_prepare(query, (unsigned char*) queryString, NULL))
+        if(rasqal_query_prepare(query,
+                                reinterpret_cast<unsigned char*>(queryString),
+                                NULL))
             throw QueryParseException("unable to parse query");
 
         // variables
-        raptor_sequence *seq;
+        Sequence<rasqal_variable> seq;
         switch(rasqal_query_get_verb(query)) {
         case RASQAL_QUERY_VERB_SELECT:
-            limit = rasqal_query_get_limit(query); // TODO check if no limit
+            limit = rasqal_query_get_limit(query);
             seq = rasqal_query_get_bound_variable_sequence(query);
-            nbRequestedVars = raptor_sequence_size(seq);
+            nbRequestedVars = seq.size();
             break;
         case RASQAL_QUERY_VERB_ASK:
             limit = 1;
@@ -54,16 +59,18 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
             msg << "unsupported rasqal verb " << rasqal_query_get_verb(query);
             throw QueryParseException(msg.str());
         }
-        raptor_sequence *seqVars = rasqal_query_get_all_variable_sequence(query);
-        int nbReal = raptor_sequence_size(seqVars);
-        raptor_sequence *seqAnon = rasqal_query_get_anonymous_variable_sequence(query);
-        int nbAnon = raptor_sequence_size(seqAnon);
+        Sequence<rasqal_variable> seqVars =
+                rasqal_query_get_all_variable_sequence(query);
+        int nbReal = seqVars.size();
+        Sequence<rasqal_variable> seqAnon =
+                rasqal_query_get_anonymous_variable_sequence(query);
+        int nbAnon = seqAnon.size();
 
         nbVars = nbReal + nbAnon;
         vars = new Variable[nbVars];
         int i;
         for(i = 0; i < nbRequestedVars; i++) {
-            rasqal_variable *var = (rasqal_variable*) raptor_sequence_get_at(seq, i);
+            rasqal_variable *var = seq[i];
             var->user_data = &vars[i];
             vars[i].query = this;
             vars[i].id = i;
@@ -71,7 +78,7 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
             vars[i].var = new VarInt(&solver, 0, store->getValueCount());
         }
         for(int j = 0; j < nbReal; j++) {
-            rasqal_variable *var = (rasqal_variable*) raptor_sequence_get_at(seqVars, j);
+            rasqal_variable *var = seqVars[j];
             if(var->user_data == NULL) {
                 var->user_data = &vars[i];
                 vars[i].query = this;
@@ -82,7 +89,7 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
             }
         }
         for(int j = 0; j < nbAnon; j++) {
-            rasqal_variable *var = (rasqal_variable*) raptor_sequence_get_at(seqAnon, j);
+            rasqal_variable *var = seqAnon[j];
             var->user_data = &vars[i];
             vars[i].query = this;
             vars[i].id = i;
@@ -142,14 +149,14 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
     case RASQAL_GRAPH_PATTERN_OPERATOR_UNION:
     {
         Pattern *pat = NULL;
-        raptor_sequence *seq = rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp);
-        int n = raptor_sequence_size(seq);
+        Sequence<rasqal_graph_pattern> seq =
+                rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp);
+        int n = seq.size();
         try {
             for(int i = 0; i < n; i++) {
-                rasqal_graph_pattern *subgp =
-                        (rasqal_graph_pattern*) raptor_sequence_get_at(seq, i);
+                rasqal_graph_pattern *subgp = seq[i];
                 Pattern *subpat = convertPattern(subgp);
-                if(subpat->getType() == PATTERN_TYPE_FALSE) {
+                if(dynamic_cast<FalsePattern*>(subpat)) {
                     delete subpat;
                     continue;
                 }
@@ -171,12 +178,12 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
     {
         Expression *expr = NULL;
         Pattern *pat = NULL;
-        raptor_sequence *seq = rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp);
-        int n = raptor_sequence_size(seq);
+        Sequence<rasqal_graph_pattern> seq =
+                rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp);
+        int n = seq.size();
         try {
             for(int i = 0; i < n; i++) {
-                rasqal_graph_pattern *subgp =
-                        (rasqal_graph_pattern*) raptor_sequence_get_at(seq, i);
+                rasqal_graph_pattern *subgp = seq[i];
                 switch(rasqal_graph_pattern_get_operator(subgp)) {
                 case RASQAL_GRAPH_PATTERN_OPERATOR_FILTER:
                 {
@@ -200,7 +207,7 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
                     }
                     Pattern *subpat = convertPattern(
                             rasqal_graph_pattern_get_sub_graph_pattern(subgp, 0));
-                    if(subpat->getType() == PATTERN_TYPE_FALSE) {
+                    if(dynamic_cast<FalsePattern*>(subpat)) {
                         delete subpat;
                         break;
                     }
@@ -211,7 +218,7 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
                 }
                 default:
                     Pattern *subpat = convertPattern(subgp);
-                    if(subpat->getType() == PATTERN_TYPE_FALSE) {
+                    if(dynamic_cast<FalsePattern*>(subpat)) {
                         // one false pattern in a join makes the whole group false
                         if(pat)
                             delete pat;
@@ -252,7 +259,7 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
         Pattern *subpat = convertPattern(
                 rasqal_graph_pattern_get_sub_graph_pattern(gp, 0));
         Pattern *pat = new BasicPattern(this); // empty pattern
-        if(subpat->getType() == PATTERN_TYPE_FALSE) {
+        if(dynamic_cast<FalsePattern*>(subpat)) {
             delete subpat;
             return pat;
         }
@@ -282,7 +289,7 @@ Expression* Query::convertExpression(rasqal_expression *expr)
         rasqal_literal *lit = expr->literal;
         if(lit->type == RASQAL_LITERAL_VARIABLE) {
             return new VariableExpression(
-                    (Variable*) lit->value.variable->user_data);
+                reinterpret_cast<Variable*>(lit->value.variable->user_data));
         } else {
             VarVal v = getVarVal(lit);
             if(!v.isUnknown())
@@ -305,7 +312,7 @@ Expression* Query::convertExpression(rasqal_expression *expr)
                 val->type = VALUE_TYPE_PLAIN_STRING;
                 if(lit->language == NULL || lit->language[0] == '\0') {
                     val->language = 0;
-                    val->languageTag = (char*) "";
+                    val->languageTag = const_cast<char*>("");
                 } else {
                     val->language = -1;
                     val->languageTag = new char[strlen(lit->language)+1];
@@ -319,7 +326,8 @@ Expression* Query::convertExpression(rasqal_expression *expr)
             case RASQAL_LITERAL_BOOLEAN:
                 val->type = VALUE_TYPE_BOOLEAN;
                 val->boolean = lit->value.integer;
-                val->lexical = val->boolean ? (char*) "true" : (char*) "false";
+                val->lexical = val->boolean ? const_cast<char*>("true") :
+                                              const_cast<char*>("false");
                 break;
             case RASQAL_LITERAL_INTEGER:
                 val->type = VALUE_TYPE_INTEGER;
@@ -335,7 +343,7 @@ Expression* Query::convertExpression(rasqal_expression *expr)
                 break;
             case RASQAL_LITERAL_DECIMAL:
                 val->type = VALUE_TYPE_DECIMAL;
-                val->decimal = new XSDDecimal((const char*) lit->string);
+                val->decimal = new XSDDecimal(reinterpret_cast<const char*>(lit->string));
                 val->addCleanFlag(VALUE_CLEAN_DATA);
                 break;
             case RASQAL_LITERAL_DATETIME:
@@ -360,7 +368,7 @@ Expression* Query::convertExpression(rasqal_expression *expr)
                 val->typeUri = VALUETYPE_URIS[val->type];
             if(val->lexical == NULL) {
                 val->lexical = new char[lit->string_len + 1];
-                strcpy(val->lexical, (const char*) lit->string);
+                strcpy(val->lexical, reinterpret_cast<const char*>(lit->string));
                 val->addCleanFlag(VALUE_CLEAN_LEXICAL);
             }
             return new ValueExpression(this, val, true);
@@ -442,7 +450,7 @@ Expression* Query::convertExpression(rasqal_expression *expr)
 }
 
 char* Query::convertURI(raptor_uri *uri) {
-    char *str = (char*) raptor_uri_as_string(uri);
+    char *str = reinterpret_cast<char*>(raptor_uri_as_string(uri));
     char *result = new char[strlen(str) + 1];
     strcpy(result, str);
     return result;
@@ -452,7 +460,7 @@ VarVal Query::getVarVal(rasqal_literal* literal) throw(QueryParseException) {
     if(literal->type == RASQAL_LITERAL_VARIABLE) {
         return VarVal((Variable*) literal->value.variable->user_data);
     } else {
-        const char *lexical = (const char*) literal->string;
+        const char *lexical = reinterpret_cast<const char*>(literal->string);
         const char *typeUri = NULL;
         ValueType type;
         switch(literal->type) {
@@ -461,7 +469,7 @@ VarVal Query::getVarVal(rasqal_literal* literal) throw(QueryParseException) {
             break;
         case RASQAL_LITERAL_URI:
             type = VALUE_TYPE_IRI;
-            lexical = (const char*) raptor_uri_as_string(literal->value.uri);
+            lexical = reinterpret_cast<const char*>(raptor_uri_as_string(literal->value.uri));
             break;
         case RASQAL_LITERAL_STRING:
             type = VALUE_TYPE_PLAIN_STRING;
@@ -487,7 +495,7 @@ VarVal Query::getVarVal(rasqal_literal* literal) throw(QueryParseException) {
         case RASQAL_LITERAL_INTEGER: // what kind of integer precisely?
         case RASQAL_LITERAL_UDT:
             type = VALUE_TYPE_UNKOWN;
-            typeUri = (const char*) raptor_uri_as_string(literal->datatype);
+            typeUri = reinterpret_cast<const char*>(raptor_uri_as_string(literal->datatype));
             break;
         default:
             std::ostringstream msg;

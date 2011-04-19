@@ -31,8 +31,8 @@ VarVal Expression::getVarVal() {
     return val;
 }
 
-UnaryExpression::UnaryExpression(ExprOperator op, Expression *arg) :
-        Expression(arg->getQuery(), op), arg(arg) {
+UnaryExpression::UnaryExpression(Expression *arg) :
+        Expression(arg->getQuery()), arg(arg) {
     vars = arg->getVars();
 }
 
@@ -40,9 +40,8 @@ UnaryExpression::~UnaryExpression() {
     delete arg;
 }
 
-BinaryExpression::BinaryExpression(ExprOperator op,
-                                   Expression *arg1, Expression *arg2) :
-        Expression(arg1->getQuery(), op), arg1(arg1), arg2(arg2) {
+BinaryExpression::BinaryExpression(Expression *arg1, Expression *arg2) :
+        Expression(arg1->getQuery()), arg1(arg1), arg2(arg2) {
     vars = arg1->getVars();
     vars += arg2->getVars();
 }
@@ -53,7 +52,7 @@ BinaryExpression::~BinaryExpression() {
 }
 
 ValueExpression::ValueExpression(Query *query, Value *value, bool ownership) :
-        Expression(query, EXPR_OP_VALUE), value(value), ownership(ownership) {
+        Expression(query), value(value), ownership(ownership) {
 }
 
 ValueExpression::~ValueExpression() {
@@ -62,19 +61,18 @@ ValueExpression::~ValueExpression() {
 }
 
 VariableExpression::VariableExpression(Variable *variable) :
-        Expression(variable->getQuery(), EXPR_OP_VARIABLE), variable(variable) {
+        Expression(variable->getQuery()), variable(variable) {
     vars += variable;
 }
 
 BoundExpression::BoundExpression(Variable *variable) :
-        Expression(variable->getQuery(), EXPR_OP_BOUND), variable(variable) {
+        Expression(variable->getQuery()), variable(variable) {
     vars += variable;
 }
 
 RegExExpression::RegExExpression(Expression *arg1, Expression *arg2,
                                  Expression *arg3) :
-        Expression(arg1->getQuery(), EXPR_OP_REGEX),
-        arg1(arg1), arg2(arg2), arg3(arg3) {
+        Expression(arg1->getQuery()), arg1(arg1), arg2(arg2), arg3(arg3) {
     vars = arg1->getVars();
     vars += arg2->getVars();
     vars += arg3->getVars();
@@ -87,8 +85,7 @@ RegExExpression::~RegExExpression() {
 }
 
 CastExpression::CastExpression(ValueType destination, Expression *arg) :
-        Expression(arg->getQuery(), EXPR_OP_CAST),
-        destination(destination), arg(arg) {
+        Expression(arg->getQuery()), destination(destination), arg(arg) {
     vars = arg->getVars();
 }
 
@@ -198,7 +195,7 @@ bool LangExpression::evaluate(Value &result) {
         return false;
     char *lang = result.languageTag;
     if(lang == NULL)
-        lang = (char*) "";
+        lang = const_cast<char*>("");
     bool freeLex = result.hasCleanFlag(VALUE_CLEAN_DATA);
     result.removeCleanFlag(VALUE_CLEAN_DATA);
     result.fillSimpleLiteral(lang, freeLex);

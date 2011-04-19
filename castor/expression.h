@@ -28,57 +28,17 @@ namespace castor { class Expression; }
 namespace castor {
 
 /**
- * Operator enumeration
- */
-enum ExprOperator {
-    EXPR_OP_VALUE,        //!< literal value
-    EXPR_OP_VARIABLE,     //!< variable
-    EXPR_OP_BOUND,        //!< BOUND(var)
-    EXPR_OP_BANG,         //!< ! arg1
-    EXPR_OP_UPLUS,        //!< + arg1
-    EXPR_OP_UMINUS,       //!< - arg1
-    EXPR_OP_ISIRI,        //!< ISIRI(arg1)
-    EXPR_OP_ISBLANK,      //!< ISBLANK(arg1)
-    EXPR_OP_ISLITERAL,    //!< ISLITERAL(arg1)
-    EXPR_OP_STR,          //!< STR(arg1)
-    EXPR_OP_LANG,         //!< LANG(arg1)
-    EXPR_OP_DATATYPE,     //!< DATATYPE(arg1)
-    EXPR_OP_OR,           //!< arg1 || arg2
-    EXPR_OP_AND,          //!< arg1 && arg2
-    EXPR_OP_EQ,           //!< arg1 = arg2
-    EXPR_OP_NEQ,          //!< arg1 != arg2
-    EXPR_OP_LT,           //!< arg1 < arg2
-    EXPR_OP_GT,           //!< arg1 > arg2
-    EXPR_OP_LE,           //!< arg1 <= arg2
-    EXPR_OP_GE,           //!< arg1 >= arg2
-    EXPR_OP_STAR,         //!< arg1 * arg2
-    EXPR_OP_SLASH,        //!< arg1 / arg2
-    EXPR_OP_PLUS,         //!< arg1 + arg2
-    EXPR_OP_MINUS,        //!< arg1 - arg2
-    EXPR_OP_SAMETERM,     //!< SAMETERM(arg1, arg2)
-    EXPR_OP_LANGMATCHES,  //!< LANGMATCHES(arg1, arg2)
-    EXPR_OP_REGEX,        //!< REGEX(arg1, arg2, arg3)
-    EXPR_OP_CAST          //!< cast
-};
-
-/**
  * Base class for a SPARQL expression
  */
 class Expression {
 public:
-    Expression(Query *query, ExprOperator op) :
-            query(query), op(op), vars(query) {}
+    Expression(Query *query) : query(query), vars(query) {}
     virtual ~Expression() {}
 
     /**
      * @return parent query
      */
     Query* getQuery() { return query; }
-
-    /**
-     * @return operator
-     */
-    ExprOperator getOp() { return op; }
 
     /**
      * @return variables occuring in this expression
@@ -143,10 +103,6 @@ protected:
      */
     Query *query;
     /**
-     * Operator.
-     */
-    ExprOperator op;
-    /**
      * Variables occuring in this expression.
      */
     VariableSet vars;
@@ -159,7 +115,7 @@ class UnaryExpression : public Expression {
 protected:
     Expression *arg; //!< argument
 public:
-    UnaryExpression(ExprOperator op, Expression *arg);
+    UnaryExpression(Expression *arg);
     ~UnaryExpression();
 
     /**
@@ -176,7 +132,7 @@ protected:
     Expression *arg1; //!< first argument
     Expression *arg2; //!< second argument
 public:
-    BinaryExpression(ExprOperator op, Expression *arg1, Expression *arg2);
+    BinaryExpression(Expression *arg1, Expression *arg2);
     ~BinaryExpression();
 
     /**
@@ -245,7 +201,7 @@ public:
  */
 class BangExpression : public UnaryExpression {
 public:
-    BangExpression(Expression *arg) : UnaryExpression(EXPR_OP_BANG, arg) {}
+    BangExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -254,7 +210,7 @@ public:
  */
 class UPlusExpression : public UnaryExpression {
 public:
-    UPlusExpression(Expression *arg) : UnaryExpression(EXPR_OP_UPLUS, arg) {}
+    UPlusExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -263,7 +219,7 @@ public:
  */
 class UMinusExpression : public UnaryExpression {
 public:
-    UMinusExpression(Expression *arg) : UnaryExpression(EXPR_OP_UMINUS, arg) {}
+    UMinusExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -272,7 +228,7 @@ public:
  */
 class IsIRIExpression : public UnaryExpression {
 public:
-    IsIRIExpression(Expression *arg) : UnaryExpression(EXPR_OP_ISIRI, arg) {}
+    IsIRIExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -281,7 +237,7 @@ public:
  */
 class IsBlankExpression : public UnaryExpression {
 public:
-    IsBlankExpression(Expression *arg) : UnaryExpression(EXPR_OP_ISBLANK, arg) {}
+    IsBlankExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -290,7 +246,7 @@ public:
  */
 class IsLiteralExpression : public UnaryExpression {
 public:
-    IsLiteralExpression(Expression *arg) : UnaryExpression(EXPR_OP_ISLITERAL, arg) {}
+    IsLiteralExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -299,7 +255,7 @@ public:
  */
 class StrExpression : public UnaryExpression {
 public:
-    StrExpression(Expression *arg) : UnaryExpression(EXPR_OP_STR, arg) {}
+    StrExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -308,7 +264,7 @@ public:
  */
 class LangExpression : public UnaryExpression {
 public:
-    LangExpression(Expression *arg) : UnaryExpression(EXPR_OP_LANG, arg) {}
+    LangExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -317,7 +273,7 @@ public:
  */
 class DatatypeExpression : public UnaryExpression {
 public:
-    DatatypeExpression(Expression *arg) : UnaryExpression(EXPR_OP_DATATYPE, arg) {}
+    DatatypeExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
 };
 
@@ -327,7 +283,7 @@ public:
 class OrExpression : public BinaryExpression {
 public:
     OrExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_OR, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -337,7 +293,7 @@ public:
 class AndExpression : public BinaryExpression {
 public:
     AndExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_AND, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     void post(Subtree &sub);
     bool evaluate(Value &result);
 };
@@ -348,7 +304,7 @@ public:
 class EqExpression : public BinaryExpression {
 public:
     EqExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_EQ, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     void post(Subtree &sub);
     bool evaluate(Value &result);
 };
@@ -359,7 +315,7 @@ public:
 class NEqExpression : public BinaryExpression {
 public:
     NEqExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_NEQ, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     void post(Subtree &sub);
     bool evaluate(Value &result);
 };
@@ -370,7 +326,7 @@ public:
 class LTExpression : public BinaryExpression {
 public:
     LTExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_LT, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -380,7 +336,7 @@ public:
 class GTExpression : public BinaryExpression {
 public:
     GTExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_GT, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -390,7 +346,7 @@ public:
 class LEExpression : public BinaryExpression {
 public:
     LEExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_LE, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -400,7 +356,7 @@ public:
 class GEExpression : public BinaryExpression {
 public:
     GEExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_GE, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -410,7 +366,7 @@ public:
 class StarExpression : public BinaryExpression {
 public:
     StarExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_STAR, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -420,7 +376,7 @@ public:
 class SlashExpression : public BinaryExpression {
 public:
     SlashExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_SLASH, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -430,7 +386,7 @@ public:
 class PlusExpression : public BinaryExpression {
 public:
     PlusExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_PLUS, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -440,7 +396,7 @@ public:
 class MinusExpression : public BinaryExpression {
 public:
     MinusExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_MINUS, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -450,7 +406,7 @@ public:
 class SameTermExpression : public BinaryExpression {
 public:
     SameTermExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_SAMETERM, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 
@@ -460,7 +416,7 @@ public:
 class LangMatchesExpression : public BinaryExpression {
 public:
     LangMatchesExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(EXPR_OP_LANGMATCHES, arg1, arg2) {}
+            BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
 };
 

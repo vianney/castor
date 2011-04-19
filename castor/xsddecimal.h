@@ -18,7 +18,7 @@
 #ifndef CASTOR_XSDDECIMAL_H
 #define CASTOR_XSDDECIMAL_H
 
-#include "model.h"
+#include "librdf.h"
 
 namespace castor {
 
@@ -33,34 +33,34 @@ public:
      * Construct a new decimal.
      */
     XSDDecimal() {
-        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
     }
     /**
      * Copy constructor.
      */
     XSDDecimal(const XSDDecimal &o) {
-        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
         rasqal_xsd_decimal_set_string(val, rasqal_xsd_decimal_as_string(o.val));
     }
     /**
      * Construct a new decimal from a lexical form.
      */
     XSDDecimal(const char* lexical) {
-        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
         rasqal_xsd_decimal_set_string(val, lexical);
     }
     /**
      * Construct a new decimal from an integer.
      */
     XSDDecimal(long integer) {
-        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
         rasqal_xsd_decimal_set_long(val, integer);
     }
     /**
      * Construct a new decimal from a floating point number
      */
     XSDDecimal(double floating) {
-        val = rasqal_new_xsd_decimal(REDLAND.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
         rasqal_xsd_decimal_set_double(val, floating);
     }
 
@@ -72,9 +72,8 @@ public:
      * @return lexical form of the decimal
      */
     std::string getString() {
-        char *str;
         size_t n;
-        str = rasqal_xsd_decimal_as_counted_string(val, &n);
+        char *str = rasqal_xsd_decimal_as_counted_string(val, &n);
         return std::string(str, n);
     }
 
