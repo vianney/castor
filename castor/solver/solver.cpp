@@ -52,12 +52,21 @@ void Solver::enqueue(std::vector<Constraint*> &constraints) {
 }
 
 bool Solver::post(std::vector<Constraint *> *constraints) {
-    // mark all constraints as propagating
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+    // mark all constraints as propagating or unqueued if they are stateless
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+        for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
+            end = constraints[p].end(); it != end; ++it) {
+            Constraint *c = *it;
+            c->nextPropag = dynamic_cast<StatelessConstraint*>(c) ?
+                        CSTR_UNQUEUED : NULL;
+            c->init();
+        }
+    }
+    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+        // mark constraints as propagating
         for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
             end = constraints[p].end(); it != end; ++it)
             (*it)->nextPropag = NULL;
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
         // call initial propagation
         for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
             end = constraints[p].end(); it != end; ++it) {

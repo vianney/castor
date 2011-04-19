@@ -65,9 +65,14 @@ public:
     ConstraintPriority getPriority() { return priority; }
 
     /**
-     * Initial propagation callback. It is called during solver_post. It should
-     * perform the initial propagation and return true if all went well or false
-     * if the propagation failed.
+     * Constraint (re)initialization. Called when parent subtree is activated
+     * and before any propagation occurs. Should not propagate anything.
+     */
+    virtual void init() {}
+
+    /**
+     * Initial propagation callback. It should perform the initial propagation
+     * and return true if all went well or false if the propagation failed.
      */
     virtual bool post() { return propagate(); }
 
@@ -104,6 +109,25 @@ private:
 
     friend class Solver;
     friend class Subtree;
+};
+
+/**
+ * A stateless constraint does not do anything in his post method apart from
+ * calling propagate. As such, it can react to variable events before being
+ * "posted".
+ *
+ * @note Implementations should not forget to call the parent class
+ *       implementation when overriding methods.
+ */
+class StatelessConstraint : public Constraint {
+    bool posted; //!< true if initial propagation has been performed
+public:
+    StatelessConstraint() : Constraint() {}
+    StatelessConstraint(ConstraintPriority priority) : Constraint(priority) {}
+
+    void init() { posted = false; }
+    bool post() { return posted ? true : propagate(); }
+    bool propagate() { posted = true; return true; }
 };
 
 }

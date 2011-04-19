@@ -37,7 +37,7 @@ public:
 /**
  * Statement constraint
  */
-class StatementConstraint : public Constraint {
+class StatementConstraint : public StatelessConstraint {
     Store *store; //!< The store containing the triples
     StatementPattern stmt; //!< The statement pattern
     /**
@@ -53,7 +53,7 @@ public:
 /**
  * Generic filter constraint
  */
-class FilterConstraint : public Constraint {
+class FilterConstraint : public StatelessConstraint {
     Store *store; //!< The store containing the values
     Expression *expr; //!< The expression
 public:
@@ -64,7 +64,7 @@ public:
 /**
  * Difference constraint v1 != v2
  */
-class DiffConstraint : public Constraint {
+class DiffConstraint : public StatelessConstraint {
     Query *query;
     VarVal v1, v2;
     VarInt *x1, *x2; //!< CP variable or NULL if fixed value

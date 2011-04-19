@@ -22,7 +22,7 @@ namespace castor {
 ////////////////////////////////////////////////////////////////////////////////
 
 StatementConstraint::StatementConstraint(Query *query, StatementPattern &stmt) :
-        Constraint(CSTR_PRIOR_LOW), store(query->getStore()), stmt(stmt) {
+        StatelessConstraint(CSTR_PRIOR_LOW), store(query->getStore()), stmt(stmt) {
 #define REGISTER(part) \
     if(stmt.part.isVariable()) { \
         part = query->getVariable(stmt.part.getVariableId())->getCPVariable(); \
@@ -37,6 +37,8 @@ StatementConstraint::StatementConstraint(Query *query, StatementPattern &stmt) :
 }
 
 bool StatementConstraint::propagate() {
+    StatelessConstraint::propagate();
+
     int vs, vp, vo;
 #define INIT(p, part) \
     if(part == NULL) \
@@ -91,6 +93,7 @@ FilterConstraint::FilterConstraint(Store *store, Expression *expr) :
 }
 
 bool FilterConstraint::propagate() {
+    StatelessConstraint::propagate();
     VariableSet &vars = expr->getVars();
     Variable* unbound = NULL;
     for(int i = 0; i < vars.getSize(); i++) {
@@ -125,7 +128,7 @@ bool FilterConstraint::propagate() {
 ////////////////////////////////////////////////////////////////////////////////
 
 DiffConstraint::DiffConstraint(Query *query, VarVal v1, VarVal v2) :
-        Constraint(CSTR_PRIOR_HIGH), query(query), v1(v1), v2(v2) {
+        StatelessConstraint(CSTR_PRIOR_HIGH), query(query), v1(v1), v2(v2) {
     x1 = v1.isVariable() ?
                 query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
     x2 = v2.isVariable() ?
@@ -140,7 +143,7 @@ bool DiffConstraint::post() {
     if(v1.isUnknown() || v2.isUnknown())
         return false;
     if(x1 && x2)
-        return propagate();
+        return StatelessConstraint::post();
     else if(x1)
         return x1->remove(v2.getValueId());
     else if(x2)
@@ -150,6 +153,7 @@ bool DiffConstraint::post() {
 }
 
 bool DiffConstraint::propagate() {
+    StatelessConstraint::propagate();
     if(x1->isBound())
         return x2->remove(x1->getValue());
     else if(x2->isBound())
