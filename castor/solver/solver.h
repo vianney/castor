@@ -58,6 +58,10 @@ public:
      */
     int getStatSubtrees() { return statSubtrees; }
     /**
+     * @return number of times a constraint's post method has been called
+     */
+    int getStatPost() { return statPost; }
+    /**
      * @return number of times a constraint's propagate method has been called
      */
     int getStatPropagate() { return statPropagate; }
@@ -105,6 +109,11 @@ private:
      * Number of subtree activiations so far
      */
     int statSubtrees;
+
+    /**
+     * Number of times a constraint's post method has been called
+     */
+    int statPost;
 
     /**
      * Number of times a constraint's propagate method has been called

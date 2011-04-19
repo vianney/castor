@@ -106,6 +106,7 @@ int main(int argc, char *argv[]) {
 
     cout << "Backtracks: " << query.getSolver()->getStatBacktracks() << endl;
     cout << "Subtrees: " << query.getSolver()->getStatSubtrees() << endl;
+    cout << "Post: " << query.getSolver()->getStatPost() << endl;
     cout << "Propagate: " << query.getSolver()->getStatPropagate() << endl;
 
     return 0;

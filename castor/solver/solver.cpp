@@ -27,6 +27,7 @@ Solver::Solver() {
     current = NULL;
     statBacktracks = 0;
     statSubtrees = 0;
+    statPost = 0;
     statPropagate = 0;
 }
 
@@ -59,6 +60,7 @@ bool Solver::post(std::vector<Constraint *> &constraints) {
     for(std::vector<Constraint*>::iterator it = constraints.begin(),
         end = constraints.end(); it != end; ++it) {
         Constraint *c = *it;
+        statPost++;
         if(!c->post())
             /* Beware that some constraints are left in "propagating" state
              * while they are not in queue. As we are in initial propagation,
