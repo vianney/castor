@@ -270,6 +270,17 @@ std::string Value::getString() const {
     return str.str();
 }
 
+std::ostream& operator<<(std::ostream &out, const Value &val) {
+    return out << val.getString();
+}
+
+std::ostream& operator<<(std::ostream &out, const Value *val) {
+    if(val)
+        return out << val->getString();
+    else
+        return out;
+}
+
 void promoteNumericType(Value &v1, Value &v2) {
     if(v1.isDecimal() && v2.isInteger())
         // convert v2 to xsd:decimal

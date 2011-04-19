@@ -84,7 +84,7 @@ int main(int argc, char *argv[]) {
             *fsol << "YES" << endl;
         } else {
             for(int i = 0; i < query.getRequestedCount(); i++)
-                *fsol << query.getVariable(i)->getValue()->getString() << " ";
+                *fsol << query.getVariable(i)->getValue() << " ";
             *fsol << endl;
         }
     }

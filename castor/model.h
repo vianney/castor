@@ -20,6 +20,7 @@
 
 #include <cstring>
 #include <string>
+#include <iostream>
 #include <rasqal.h>
 
 #include "xsddecimal.h"
@@ -322,6 +323,9 @@ struct Value {
      */
     std::string getString() const;
 };
+
+std::ostream& operator<<(std::ostream &out, const Value &val);
+std::ostream& operator<<(std::ostream &out, const Value *val);
 
 /**
  * Apply numeric type promotion rules to make v1 and v2 the same type to
