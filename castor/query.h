@@ -99,6 +99,10 @@ private:
     Value *value;       //!< Value
 
     Variable() : var(NULL), value(NULL) {}
+    ~Variable() {
+        if(var != NULL)
+            delete var;
+    }
 
     friend class Query;
 };

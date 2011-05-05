@@ -400,6 +400,12 @@ Expression* Query::convertExpression(rasqal_expression *expr)
         return new LangExpression(convertExpression(expr->arg1));
     case RASQAL_EXPR_DATATYPE:
         return new DatatypeExpression(convertExpression(expr->arg1));
+
+    /* The following cases have potential memory leaks when an exception occurs
+     * in a recursive call of convertExpression after the first subexpression
+     * has already been created. This only happens if rasqal produces an
+     * incorrect SPARQL expression, which should not happen.
+     */
     case RASQAL_EXPR_OR:
         return new OrExpression(convertExpression(expr->arg1),
                                 convertExpression(expr->arg2));

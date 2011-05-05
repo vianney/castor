@@ -73,7 +73,7 @@ int main(int argc, char *argv[]) {
     printTime("Store open", diffTime(ru[0], ru[1]));
 
     Query query(&store, queryString);
-    delete queryString;
+    delete [] queryString;
     cout << query << endl;
 
     getrusage(RUSAGE_SELF, &ru[2]);
