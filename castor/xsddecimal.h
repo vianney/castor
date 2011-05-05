@@ -33,34 +33,34 @@ public:
      * Construct a new decimal.
      */
     XSDDecimal() {
-        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
     }
     /**
      * Copy constructor.
      */
     XSDDecimal(const XSDDecimal &o) {
-        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
         rasqal_xsd_decimal_set_string(val, rasqal_xsd_decimal_as_string(o.val));
     }
     /**
      * Construct a new decimal from a lexical form.
      */
     XSDDecimal(const char* lexical) {
-        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
         rasqal_xsd_decimal_set_string(val, lexical);
     }
     /**
      * Construct a new decimal from an integer.
      */
     XSDDecimal(long integer) {
-        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
         rasqal_xsd_decimal_set_long(val, integer);
     }
     /**
      * Construct a new decimal from a floating point number
      */
     XSDDecimal(double floating) {
-        val = rasqal_new_xsd_decimal(librdf::WORLD.rasqal);
+        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
         rasqal_xsd_decimal_set_double(val, floating);
     }
 

@@ -33,7 +33,8 @@ using librdf::Sequence;
 
 Query::Query(Store *store, char *queryString) throw(QueryParseException) :
         store(store) {
-    rasqal_query *query = rasqal_new_query(librdf::WORLD.rasqal, "sparql", NULL);
+    rasqal_query *query = rasqal_new_query(librdf::World::instance().rasqal,
+                                           "sparql", NULL);
     vars = NULL;
     pattern = NULL;
     try {
@@ -101,6 +102,9 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
         pattern = convertPattern(rasqal_query_get_query_graph_pattern(query));
         pattern = pattern->optimize();
         pattern->init();
+
+        // cleanup
+        rasqal_free_query(query);
 
         nbSols = 0;
 

@@ -21,7 +21,10 @@
 namespace castor {
 namespace librdf {
 
-World WORLD = World();
+World& World::instance() {
+    static World world;
+    return world;
+}
 
 }
 }

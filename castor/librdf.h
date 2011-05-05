@@ -34,20 +34,23 @@ struct World {
     raptor_world *raptor;
     rasqal_world *rasqal;
 
+    /**
+     * Return the singleton World instance
+     */
+    static World& instance();
+
+private:
     World() {
         rasqal = rasqal_new_world();
-        raptor = rasqal_world_get_raptor(rasqal);
+        raptor = raptor_new_world();
+        rasqal_world_set_raptor(rasqal, raptor);
     }
 
     ~World() {
         rasqal_free_world(rasqal);
+        raptor_free_world(raptor);
     }
 };
-
-/**
- * Singleton instance of World
- */
-extern World WORLD;
 
 /**
  * Wrapper around raptor_sequence

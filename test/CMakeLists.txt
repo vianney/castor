@@ -19,8 +19,8 @@ include_directories(../castor)
 add_executable(nqueens nqueens.cpp)
 target_link_libraries(nqueens libcastor)
 
-#add_executable(createsqlite createsqlite.c ../castor/model.c ../castor/xsddecimal.c)
-#target_link_libraries(createsqlite ${LIBS})
+add_executable(createsqlite createsqlite.cpp)
+target_link_libraries(createsqlite libcastor)
 
 add_executable(castor castor.cpp)
 target_link_libraries(castor libcastor)
