@@ -17,6 +17,7 @@
  */
 
 #include <cstdio>
+#include <cassert>
 #include <sstream>
 #include "model.h"
 #include "store.h"
@@ -120,7 +121,7 @@ void Value::fillSimpleLiteral(char *lexical, bool freeLexical) {
     id = 0;
     type = VALUE_TYPE_PLAIN_STRING;
     typeUri = NULL;
-    lexical = lexical;
+    this->lexical = lexical;
     if(freeLexical)
         cleanup = VALUE_CLEAN_LEXICAL;
 }
@@ -130,7 +131,7 @@ void Value::fillIRI(char *lexical, bool freeLexical) {
     id = 0;
     type = VALUE_TYPE_IRI;
     typeUri = NULL;
-    lexical = lexical;
+    this->lexical = lexical;
     if(freeLexical)
         cleanup = VALUE_CLEAN_LEXICAL;
 }
@@ -150,6 +151,7 @@ int Value::compare(const Value &o) const {
             else if(diff > 0) return 1;
             else return 0;
         } else if(isDecimal() && o.isDecimal()) {
+            // FIXME compare decimal with integer??
             return decimal->compare(*o.decimal);
         } else {
             double d1 = isFloating() ? floating :
@@ -172,6 +174,62 @@ int Value::compare(const Value &o) const {
     } else {
         return -2; // TODO datetime
     }
+}
+
+bool Value::operator<(const Value &o) const {
+    ValueClass cls = getClass();
+    ValueClass ocls = o.getClass();
+    int cmp;
+    if(cls < ocls) {
+        return true;
+    } else if(cls > ocls) {
+        return false;
+    } else {
+        switch(cls) {
+        case VALUE_CLASS_BLANK:
+        case VALUE_CLASS_IRI:
+        case VALUE_CLASS_SIMPLE_LITERAL:
+        case VALUE_CLASS_TYPED_STRING:
+            return strcmp(lexical, o.lexical) < 0;
+        case VALUE_CLASS_BOOLEAN:
+            if(boolean == o.boolean)
+                return strcmp(lexical, o.lexical);
+            else
+                return !boolean && o.boolean;
+        case VALUE_CLASS_NUMERIC:
+            cmp = compare(o);
+            if(cmp == -1)
+                return true;
+            else if(cmp == 1)
+                return false;
+            else if(type == o.type)
+                return strcmp(lexical, o.lexical) < 0;
+            else
+                return type < o.type;
+        case VALUE_CLASS_DATETIME:
+            // TODO
+            return strcmp(lexical, o.lexical) < 0;
+        case VALUE_CLASS_OTHER:
+            if(isPlain() && o.isPlain()) {
+                // plain literals with language tags
+                cmp = strcmp(languageTag, o.languageTag);
+                if(cmp == 0)
+                    return strcmp(lexical, o.lexical) < 0;
+                else
+                    return cmp < 0;
+            } else {
+                const char *uri1 = typeUri == NULL ? "" : typeUri;
+                const char *uri2 = o.typeUri == NULL ? "" : o.typeUri;
+                cmp = strcmp(uri1, uri2);
+                if(cmp == 0)
+                    return strcmp(lexical, o.lexical) < 0;
+                else
+                    return cmp < 0;
+            }
+        }
+    }
+    assert(false); // should not happen
+    return false;
 }
 
 int Value::rdfequals(const Value &o) const {

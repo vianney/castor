@@ -20,8 +20,11 @@
 #include <iostream>
 #include <sstream>
 
+#include <set>
+
 #include <cstdlib>
 #include <cstring>
+#include <cassert>
 #include <unistd.h>
 
 #include <sqlite3.h>
@@ -53,6 +56,13 @@ ValueType get_type(char *uri) {
             return t;
     }
     return VALUE_TYPE_UNKOWN;
+}
+
+char* convertURI(raptor_uri *uri) {
+    char *str = reinterpret_cast<char*>(raptor_uri_as_string(uri));
+    char *result = new char[strlen(str) + 1];
+    strcpy(result, str);
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -100,14 +110,6 @@ public:
         sqlite3_finalize(stmt);
     }
 
-    void reset() throw(SqliteException) {
-        if(sqlite3_reset(stmt) != SQLITE_OK)
-            throw SqliteException(stmt);
-    }
-    void done() throw(SqliteException) {
-        if(sqlite3_step(stmt) != SQLITE_DONE)
-            throw SqliteException(stmt);
-    }
     void bindStr(int col, const char *str) throw(SqliteException) {
         if(sqlite3_bind_text(stmt, col, str, -1, SQLITE_STATIC) != SQLITE_OK)
             throw SqliteException(stmt);
@@ -137,220 +139,45 @@ public:
             bindNull(col);
         }
     }
-};
 
-////////////////////////////////////////////////////////////////////////////////
-// Store class
-
-class ConvertException : public std::exception {
-    string msg;
-
-public:
-    ConvertException(string msg) : msg(msg) {}
-    ConvertException(const char* msg) : msg(msg) {}
-    ConvertException(const char* msg, int val) {
-        ostringstream str;
-        str << msg << " " << val;
-        this->msg = str.str();
+    void reset() throw(SqliteException) {
+        if(sqlite3_reset(stmt) != SQLITE_OK)
+            throw SqliteException(stmt);
     }
-    ConvertException(const ConvertException &o) : msg(o.msg) {}
-    ~ConvertException() throw() {}
 
-    const char *what() const throw() { return msg.c_str(); }
-};
-
-class AppendStore {
-    SqliteDb *db;
-    SqliteStatement sqlInsertDatatype;
-    SqliteStatement sqlInsertLanguage;
-    SqliteStatement sqlInsertVal;
-    SqliteStatement sqlInsertValUnkLang;
-    SqliteStatement sqlInsertValUnkTypeLang;
-    SqliteStatement sqlInsertStmt;
-    SqliteStatement sqlInsertStmtUnkLang;
-    SqliteStatement sqlInsertStmtUnkTypeLang;
-
-    int count;
-
-public:
-    AppendStore(SqliteDb *db) : db(db),
-        sqlInsertDatatype(db, "INSERT INTO datatypes (uri) VALUES (?1)"),
-        sqlInsertLanguage(db, "INSERT INTO languages (tag) VALUES (?1)"),
-        sqlInsertVal(db,
-            "INSERT INTO vals (type, lexical, language, value) "
-            "    VALUES (?1, ?2, ?3, ?4)"),
-        sqlInsertValUnkLang(db,
-            "INSERT INTO vals (type, lexical, language, value) "
-            "    SELECT ?1, ?2, id, ?4 FROM languages WHERE tag = ?3"),
-        sqlInsertValUnkTypeLang(db,
-            "INSERT INTO vals (type, lexical, language)"
-            "    SELECT datatypes.id, ?2, languages.id"
-            "    FROM datatypes, languages"
-            "    WHERE datatypes.uri = ?1 AND languages.tag = ?3"),
-        sqlInsertStmt(db,
-            "INSERT INTO statements (subject, predicate, object)"
-            "    SELECT s.id, p.id, o.id"
-            "    FROM vals AS s, vals AS p, vals AS o"
-            "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
-            "          p.lexical = ?3 AND p.type = ?4 AND"
-            "          o.lexical = ?5 AND o.type = ?6 AND o.language = ?7"),
-        sqlInsertStmtUnkLang(db,
-            "INSERT INTO statements (subject, predicate, object)"
-            "    SELECT s.id, p.id, o.id"
-            "    FROM vals AS s, vals AS p, vals AS o,"
-            "         languages ON languages.id = o.language"
-            "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
-            "          p.lexical = ?3 AND p.type = ?4 AND"
-            "          o.lexical = ?5 AND o.type = ?6 AND languages.tag = ?7;"),
-        sqlInsertStmtUnkTypeLang(db,
-            "INSERT INTO statements (subject, predicate, object)"
-            "    SELECT s.id, p.id, o.id"
-            "    FROM vals AS s, vals AS p, vals AS o,"
-            "         datatypes ON datatypes.id = o.type,"
-            "         languages ON languages.id = o.language"
-            "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
-            "          p.lexical = ?3 AND p.type = ?4 AND"
-            "          o.lexical = ?5 AND datatypes.uri = ?6 AND languages.tag = ?7;"),
-        count(0) {}
-
-    int getCount() { return count; }
-
-    void addTriple(raptor_statement* triple) {
-        count++;
-        if(count % 10000 == 0)
-            cerr << '.';
-
-        // Add subject value
-        ValueType ts;
-        char *lexs;
-        switch(triple->subject->type) {
-        case RAPTOR_TERM_TYPE_BLANK:
-            ts = VALUE_TYPE_BLANK;
-            lexs = reinterpret_cast<char*>(triple->subject->value.blank.string);
-            break;
-        case RAPTOR_TERM_TYPE_URI:
-            ts = VALUE_TYPE_IRI;
-            lexs = reinterpret_cast<char*>(raptor_uri_as_string(triple->subject->value.uri));
-            break;
+    bool next() throw(SqliteException) {
+        switch(sqlite3_step(stmt)) {
+        case SQLITE_ROW:
+            return true;
+        case SQLITE_DONE:
+            return false;
         default:
-            throw ConvertException("Unknown subject type", triple->subject->type);
+            throw SqliteException(stmt);
         }
-        sqlInsertVal.reset();
-        sqlInsertVal.bindInt(1, ts);
-        sqlInsertVal.bindStr(2, lexs);
-        sqlInsertVal.bindInt(3, 0);
-        sqlInsertVal.bindNull(4);
-        sqlInsertVal.done();
+    }
 
-        // Add predicate value
-        if(triple->predicate->type != RAPTOR_TERM_TYPE_URI)
-            throw ConvertException("Unknown predicate type", triple->predicate->type);
-        char *lexp = reinterpret_cast<char*>(raptor_uri_as_string(triple->predicate->value.uri));
-        sqlInsertVal.reset();
-        sqlInsertVal.bindInt(1, VALUE_TYPE_IRI);
-        sqlInsertVal.bindStr(2, lexp);
-        sqlInsertVal.bindInt(3, 0);
-        sqlInsertVal.bindNull(4);
-        sqlInsertVal.done();
-
-        // Add object value and statement
-        ValueType to;
-        char *typeUri = NULL;
-        char *lexo;
-        int lang = 0;
-        char *langTag = NULL;
-        switch(triple->object->type) {
-        case RAPTOR_TERM_TYPE_BLANK:
-            to = VALUE_TYPE_BLANK;
-            lexo = reinterpret_cast<char*>(triple->object->value.blank.string);
-            break;
-        case RAPTOR_TERM_TYPE_URI:
-            to = VALUE_TYPE_IRI;
-            lexo = reinterpret_cast<char*>(raptor_uri_as_string(triple->object->value.uri));
-            break;
-        case RAPTOR_TERM_TYPE_LITERAL:
-            if(triple->object->value.literal.datatype != NULL)
-                typeUri = reinterpret_cast<char*>(raptor_uri_as_string(triple->object->value.literal.datatype));
-            to = get_type(typeUri);
-            lexo = reinterpret_cast<char*>(triple->object->value.literal.string);
-            if(triple->object->value.literal.language != NULL &&
-               triple->object->value.literal.language[0] != '\0') {
-                lang = -1;
-                langTag = reinterpret_cast<char*>(triple->object->value.literal.language);
-            }
-            break;
-        default:
-            throw ConvertException("Unknown object type", triple->object->type);
-        }
-
-        if(to == VALUE_TYPE_UNKOWN) {
-            sqlInsertDatatype.reset();
-            sqlInsertDatatype.bindStr(1, typeUri);
-            sqlInsertDatatype.done();
-        }
-
-        if(lang == -1) {
-            sqlInsertLanguage.reset();
-            sqlInsertLanguage.bindStr(1, langTag);
-            sqlInsertLanguage.done();
-        }
-
-        if(to == VALUE_TYPE_UNKOWN) {
-            sqlInsertValUnkTypeLang.reset();
-            sqlInsertValUnkTypeLang.bindStr(1, typeUri);
-            sqlInsertValUnkTypeLang.bindStr(2, lexo);
-            sqlInsertValUnkTypeLang.bindStr(3, langTag);
-            sqlInsertValUnkTypeLang.done();
-            sqlInsertStmtUnkTypeLang.reset();
-            sqlInsertStmtUnkTypeLang.bindStr(1, lexs);
-            sqlInsertStmtUnkTypeLang.bindInt(2, ts);
-            sqlInsertStmtUnkTypeLang.bindStr(3, lexp);
-            sqlInsertStmtUnkTypeLang.bindInt(4, VALUE_TYPE_IRI);
-            sqlInsertStmtUnkTypeLang.bindStr(5, lexo);
-            sqlInsertStmtUnkTypeLang.bindStr(6, typeUri);
-            sqlInsertStmtUnkTypeLang.bindStr(7, langTag);
-            sqlInsertStmtUnkTypeLang.done();
-        } else if(lang == 0) {
-            sqlInsertVal.reset();
-            sqlInsertVal.bindInt(1, to);
-            sqlInsertVal.bindStr(2, lexo);
-            sqlInsertVal.bindInt(3, lang);
-            sqlInsertVal.bindVal(4, to, lexo);
-            sqlInsertVal.done();
-            sqlInsertStmt.reset();
-            sqlInsertStmt.bindStr(1, lexs);
-            sqlInsertStmt.bindInt(2, ts);
-            sqlInsertStmt.bindStr(3, lexp);
-            sqlInsertStmt.bindInt(4, VALUE_TYPE_IRI);
-            sqlInsertStmt.bindStr(5, lexo);
-            sqlInsertStmt.bindInt(6, to);
-            sqlInsertStmt.bindInt(7, lang);
-            sqlInsertStmt.done();
-        } else {
-            sqlInsertValUnkLang.reset();
-            sqlInsertValUnkLang.bindInt(1, to);
-            sqlInsertValUnkLang.bindStr(2, lexo);
-            sqlInsertValUnkLang.bindStr(3, langTag);
-            sqlInsertValUnkLang.bindVal(4, to, lexo);
-            sqlInsertValUnkLang.done();
-            sqlInsertStmtUnkLang.reset();
-            sqlInsertStmtUnkLang.bindStr(1, lexs);
-            sqlInsertStmtUnkLang.bindInt(2, ts);
-            sqlInsertStmtUnkLang.bindStr(3, lexp);
-            sqlInsertStmtUnkLang.bindInt(4, VALUE_TYPE_IRI);
-            sqlInsertStmtUnkLang.bindStr(5, lexo);
-            sqlInsertStmtUnkLang.bindInt(6, to);
-            sqlInsertStmtUnkLang.bindStr(7, langTag);
-            sqlInsertStmtUnkLang.done();
-        }
+    const char* getStr(int col) {
+        return reinterpret_cast<const char*>(sqlite3_column_text(stmt, col));
+    }
+    const int getInt(int col) {
+        return sqlite3_column_int(stmt, col);
+    }
+    const double getFloat(int col) {
+        return sqlite3_column_double(stmt, col);
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 // Raptor parser wrapper
 
+class RDFParseHandler {
+public:
+    virtual ~RDFParseHandler() {};
+    virtual void parseTriple(raptor_statement* triple) = 0;
+};
+
 void stmt_handler(void* user_data, raptor_statement* triple) {
-    static_cast<AppendStore*>(user_data)->addTriple(triple);
+    static_cast<RDFParseHandler*>(user_data)->parseTriple(triple);
 }
 
 class ParseException : public std::exception {
@@ -383,9 +210,305 @@ public:
         raptor_free_uri(fileURI);
         raptor_free_memory(fileURIstr);
     }
-    void parse(AppendStore *store) {
-        raptor_parser_set_statement_handler(parser, store, stmt_handler);
+    void parse(RDFParseHandler *handler) {
+        raptor_parser_set_statement_handler(parser, handler, stmt_handler);
         raptor_parser_parse_file(parser, fileURI, NULL);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+// Get values
+
+class ConvertException : public std::exception {
+    string msg;
+
+public:
+    ConvertException(string msg) : msg(msg) {}
+    ConvertException(const char* msg) : msg(msg) {}
+    ConvertException(const char* msg, int val) {
+        ostringstream str;
+        str << msg << " " << val;
+        this->msg = str.str();
+    }
+    ConvertException(const ConvertException &o) : msg(o.msg) {}
+    ~ConvertException() throw() {}
+
+    const char *what() const throw() { return msg.c_str(); }
+};
+
+struct DereferenceLess {
+    template <typename T>
+    bool operator()(T a, T b) const { return *a < *b; }
+};
+
+typedef set<Value*, DereferenceLess> ValueSet;
+
+class ValuesStore : public RDFParseHandler {
+    SqliteDb *db;
+    SqliteStatement sqlDatatype, sqlInsertDatatype;
+    SqliteStatement sqlLanguage, sqlInsertLanguage;
+    SqliteStatement sqlInsertVal;
+
+    ValueSet values;
+
+public:
+    ValuesStore(SqliteDb *db) : db(db),
+        sqlDatatype(db, "SELECT id FROM datatypes WHERE uri = ?1"),
+        sqlInsertDatatype(db, "INSERT INTO datatypes (uri) VALUES (?1)"),
+        sqlLanguage(db, "SELECT id FROM languages WHERE tag = ?1"),
+        sqlInsertLanguage(db, "INSERT INTO languages (tag) VALUES (?1)"),
+        sqlInsertVal(db,
+            "INSERT INTO vals (type, lexical, language, value) "
+            "    VALUES (?1, ?2, ?3, ?4)") {}
+
+    int getCount() { return values.size(); }
+
+    ValueType getDatatypeId(const char* uri) {
+        sqlInsertDatatype.reset();
+        sqlInsertDatatype.bindStr(1, uri);
+        sqlInsertDatatype.next();
+        sqlDatatype.reset();
+        sqlDatatype.bindStr(1, uri);
+        assert(sqlDatatype.next());
+        return static_cast<ValueType>(sqlDatatype.getInt(0));
+    }
+
+    int getLanguageId(const char* tag) {
+        sqlInsertLanguage.reset();
+        sqlInsertLanguage.bindStr(1, tag);
+        sqlInsertLanguage.next();
+        sqlLanguage.reset();
+        sqlLanguage.bindStr(1, tag);
+        assert(sqlLanguage.next());
+        return sqlLanguage.getInt(0);
+    }
+
+    void parseTriple(raptor_statement* triple) {
+        insertValue(triple->subject);
+        insertValue(triple->predicate);
+        insertValue(triple->object);
+    }
+
+    void finish() {
+        for(ValueSet::iterator it = values.begin(), end = values.end();
+            it != end; ++it) {
+            Value* val = *it;
+            sqlInsertVal.reset();
+            sqlInsertVal.bindInt(1, val->type);
+            sqlInsertVal.bindStr(2, val->lexical);
+            sqlInsertVal.bindInt(3, val->isPlain() ? val->language : 0);
+            if(val->isBoolean())
+                sqlInsertVal.bindInt(4, val->boolean);
+            else if(val->isInteger())
+                sqlInsertVal.bindInt(4, val->integer);
+            else if(val->isFloating())
+                sqlInsertVal.bindFloat(4, val->floating);
+            else if(val->isDecimal())
+                sqlInsertVal.bindFloat(4, val->decimal->getFloat());
+            // TODO datetime
+            else
+                sqlInsertVal.bindNull(4);
+            sqlInsertVal.next();
+        }
+    }
+
+private:
+
+    void insertValue(raptor_term *term) throw(ConvertException) {
+        char *typeUri;
+        Value *val = new Value;
+        val->id = 0;
+        switch(term->type) {
+        case RAPTOR_TERM_TYPE_BLANK:
+            val->type = VALUE_TYPE_BLANK;
+            val->typeUri = NULL;
+            val->lexical = new char[term->value.blank.string_len + 1];
+            strcpy(val->lexical, reinterpret_cast<char*>(term->value.blank.string));
+            val->addCleanFlag(VALUE_CLEAN_LEXICAL);
+            break;
+        case RAPTOR_TERM_TYPE_URI:
+            val->fillIRI(convertURI(term->value.uri), true);
+            break;
+        case RAPTOR_TERM_TYPE_LITERAL:
+            val->lexical = new char[term->value.literal.string_len + 1];
+            strcpy(val->lexical, reinterpret_cast<char*>(term->value.literal.string));
+            val->addCleanFlag(VALUE_CLEAN_LEXICAL);
+            if(term->value.literal.datatype == NULL) {
+                val->type = VALUE_TYPE_PLAIN_STRING;
+                val->typeUri = NULL;
+                if(term->value.literal.language == NULL ||
+                   term->value.literal.language_len == 0) {
+                    val->language = 0;
+                    val->languageTag = NULL;
+                } else {
+                    val->languageTag = new char[term->value.literal.language_len + 1];
+                    strcpy(val->languageTag, reinterpret_cast<char*>(term->value.literal.language));
+                    val->addCleanFlag(VALUE_CLEAN_DATA);
+                    val->language = getLanguageId(val->languageTag);
+                }
+            } else {
+                typeUri = convertURI(term->value.literal.datatype);
+                val->type = get_type(typeUri);
+                if(val->type == VALUE_TYPE_UNKOWN) {
+                    val->typeUri = typeUri;
+                    val->addCleanFlag(VALUE_CLEAN_TYPE_URI);
+                    val->type = getDatatypeId(val->typeUri);
+                } else {
+                    val->typeUri = VALUETYPE_URIS[val->type];
+                    delete typeUri;
+                }
+                if(val->isBoolean()) {
+                    val->boolean = strcmp(val->lexical, "true") == 0 ||
+                            strcmp(val->lexical, "1") == 0;
+                } else if(val->isInteger()) {
+                    val->integer = atoi(val->lexical);
+                } else if(val->isFloating()) {
+                    val->floating = atof(val->lexical);
+                } else if(val->isDecimal()) {
+                    val->decimal = new XSDDecimal(val->lexical);
+                    val->addCleanFlag(VALUE_CLEAN_DATA);
+                } else if(val->isDateTime()) {
+                    // TODO
+                }
+            }
+            break;
+        default:
+            throw ConvertException("Unknown term type", term->type);
+        }
+        if(!values.insert(val).second)
+            delete val;
+    }
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Store class
+
+class AppendStore : public RDFParseHandler {
+    SqliteDb *db;
+    SqliteStatement sqlInsertStmt;
+    SqliteStatement sqlInsertStmtUnkLang;
+    SqliteStatement sqlInsertStmtUnkTypeLang;
+
+    int count;
+
+public:
+    AppendStore(SqliteDb *db) : db(db),
+        sqlInsertStmt(db,
+            "INSERT INTO statements (subject, predicate, object)"
+            "    SELECT s.id, p.id, o.id"
+            "    FROM vals AS s, vals AS p, vals AS o"
+            "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
+            "          p.lexical = ?3 AND p.type = ?4 AND"
+            "          o.lexical = ?5 AND o.type = ?6 AND o.language = ?7"),
+        sqlInsertStmtUnkLang(db,
+            "INSERT INTO statements (subject, predicate, object)"
+            "    SELECT s.id, p.id, o.id"
+            "    FROM vals AS s, vals AS p, vals AS o,"
+            "         languages ON languages.id = o.language"
+            "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
+            "          p.lexical = ?3 AND p.type = ?4 AND"
+            "          o.lexical = ?5 AND o.type = ?6 AND languages.tag = ?7;"),
+        sqlInsertStmtUnkTypeLang(db,
+            "INSERT INTO statements (subject, predicate, object)"
+            "    SELECT s.id, p.id, o.id"
+            "    FROM vals AS s, vals AS p, vals AS o,"
+            "         datatypes ON datatypes.id = o.type,"
+            "         languages ON languages.id = o.language"
+            "    WHERE s.lexical = ?1 AND s.type = ?2 AND"
+            "          p.lexical = ?3 AND p.type = ?4 AND"
+            "          o.lexical = ?5 AND datatypes.uri = ?6 AND languages.tag = ?7;"),
+        count(0) {}
+
+    int getCount() { return count; }
+
+    void parseTriple(raptor_statement* triple) {
+        count++;
+        if(count % 10000 == 0)
+            cerr << '.';
+
+        // Subject value
+        ValueType ts;
+        char *lexs;
+        switch(triple->subject->type) {
+        case RAPTOR_TERM_TYPE_BLANK:
+            ts = VALUE_TYPE_BLANK;
+            lexs = reinterpret_cast<char*>(triple->subject->value.blank.string);
+            break;
+        case RAPTOR_TERM_TYPE_URI:
+            ts = VALUE_TYPE_IRI;
+            lexs = reinterpret_cast<char*>(raptor_uri_as_string(triple->subject->value.uri));
+            break;
+        default:
+            throw ConvertException("Unknown subject type", triple->subject->type);
+        }
+
+        // Predicate value
+        if(triple->predicate->type != RAPTOR_TERM_TYPE_URI)
+            throw ConvertException("Unknown predicate type", triple->predicate->type);
+        char *lexp = reinterpret_cast<char*>(raptor_uri_as_string(triple->predicate->value.uri));
+
+        // Object value and statement
+        ValueType to;
+        char *typeUri = NULL;
+        char *lexo;
+        int lang = 0;
+        char *langTag = NULL;
+        switch(triple->object->type) {
+        case RAPTOR_TERM_TYPE_BLANK:
+            to = VALUE_TYPE_BLANK;
+            lexo = reinterpret_cast<char*>(triple->object->value.blank.string);
+            break;
+        case RAPTOR_TERM_TYPE_URI:
+            to = VALUE_TYPE_IRI;
+            lexo = reinterpret_cast<char*>(raptor_uri_as_string(triple->object->value.uri));
+            break;
+        case RAPTOR_TERM_TYPE_LITERAL:
+            if(triple->object->value.literal.datatype != NULL)
+                typeUri = reinterpret_cast<char*>(raptor_uri_as_string(triple->object->value.literal.datatype));
+            to = get_type(typeUri);
+            lexo = reinterpret_cast<char*>(triple->object->value.literal.string);
+            if(triple->object->value.literal.language != NULL &&
+               triple->object->value.literal.language[0] != '\0') {
+                lang = -1;
+                langTag = reinterpret_cast<char*>(triple->object->value.literal.language);
+            }
+            break;
+        default:
+            throw ConvertException("Unknown object type", triple->object->type);
+        }
+
+        if(to == VALUE_TYPE_UNKOWN) {
+            sqlInsertStmtUnkTypeLang.reset();
+            sqlInsertStmtUnkTypeLang.bindStr(1, lexs);
+            sqlInsertStmtUnkTypeLang.bindInt(2, ts);
+            sqlInsertStmtUnkTypeLang.bindStr(3, lexp);
+            sqlInsertStmtUnkTypeLang.bindInt(4, VALUE_TYPE_IRI);
+            sqlInsertStmtUnkTypeLang.bindStr(5, lexo);
+            sqlInsertStmtUnkTypeLang.bindStr(6, typeUri);
+            sqlInsertStmtUnkTypeLang.bindStr(7, langTag);
+            sqlInsertStmtUnkTypeLang.next();
+        } else if(lang == 0) {
+            sqlInsertStmt.reset();
+            sqlInsertStmt.bindStr(1, lexs);
+            sqlInsertStmt.bindInt(2, ts);
+            sqlInsertStmt.bindStr(3, lexp);
+            sqlInsertStmt.bindInt(4, VALUE_TYPE_IRI);
+            sqlInsertStmt.bindStr(5, lexo);
+            sqlInsertStmt.bindInt(6, to);
+            sqlInsertStmt.bindInt(7, lang);
+            sqlInsertStmt.next();
+        } else {
+            sqlInsertStmtUnkLang.reset();
+            sqlInsertStmtUnkLang.bindStr(1, lexs);
+            sqlInsertStmtUnkLang.bindInt(2, ts);
+            sqlInsertStmtUnkLang.bindStr(3, lexp);
+            sqlInsertStmtUnkLang.bindInt(4, VALUE_TYPE_IRI);
+            sqlInsertStmtUnkLang.bindStr(5, lexo);
+            sqlInsertStmtUnkLang.bindInt(6, to);
+            sqlInsertStmtUnkLang.bindStr(7, langTag);
+            sqlInsertStmtUnkLang.next();
+        }
     }
 };
 
@@ -436,6 +559,7 @@ int main(int argc, char* argv[]) {
     SqliteDb db(dbpath, append);
 
     if(!append) {
+        cout << "Creating database" << endl;
         db.execute("CREATE TABLE datatypes ("
                    "  id INTEGER PRIMARY KEY NOT NULL,"
                    "  uri TEXT UNIQUE ON CONFLICT IGNORE"
@@ -468,7 +592,6 @@ int main(int argc, char* argv[]) {
                    "    ON statements (object, subject, predicate);"
                    "CREATE INDEX statements_ops"
                    "    ON statements (object, predicate, subject);"
-                   "BEGIN TRANSACTION;"
                    "INSERT INTO languages (id, tag) VALUES (0, '');");
 
         SqliteStatement stmt(&db,
@@ -481,13 +604,23 @@ int main(int argc, char* argv[]) {
                 stmt.bindNull(2);
             else
                 stmt.bindStr(2, VALUETYPE_URIS[t]);
-            stmt.done();
+            stmt.next();
         }
-    } else {
-        db.execute("BEGIN TRANSACTION;");
     }
 
+    db.execute("BEGIN TRANSACTION;");
+
     // Parse RDF dataset
+    {
+        cout << "Loading values" << endl;
+        ValuesStore vals(&db);
+        RDFParser parser(syntax, rdfpath);
+        parser.parse(&vals);
+        cout << "Writing values" << endl;
+        vals.finish();
+    }
+
+    cout << "Loading triples" << endl;
     AppendStore store(&db);
     RDFParser parser(syntax, rdfpath);
     parser.parse(&store);
@@ -497,6 +630,7 @@ int main(int argc, char* argv[]) {
         cerr << endl;
     cout << "Imported " << store.getCount() << " triples." << endl;
 
+    cout << "Commiting" << endl;
     db.execute("COMMIT;");
     return 0;
 }

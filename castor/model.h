@@ -30,6 +30,20 @@ namespace castor {
 class Store;
 
 /**
+ * Value class ids
+ */
+enum ValueClass {
+    VALUE_CLASS_BLANK,
+    VALUE_CLASS_IRI,
+    VALUE_CLASS_SIMPLE_LITERAL,
+    VALUE_CLASS_TYPED_STRING,
+    VALUE_CLASS_BOOLEAN,
+    VALUE_CLASS_NUMERIC,
+    VALUE_CLASS_DATETIME,
+    VALUE_CLASS_OTHER
+};
+
+/**
  * Standard value type ids. Higher ids means custom URI.
  */
 enum ValueType {
@@ -260,6 +274,10 @@ struct Value {
      */
     bool isPlain() const { return type == VALUE_TYPE_PLAIN_STRING; }
     /**
+     * @return whether this value is a simple literal
+     */
+    bool isSimple() const { return isPlain() && language == 0; }
+    /**
      * @return whether this value is a typed string
      */
     bool isXSDString() const { return type == VALUE_TYPE_TYPED_STRING; }
@@ -292,6 +310,20 @@ struct Value {
     bool isDateTime() const { return type == VALUE_TYPE_DATETIME; }
 
     /**
+     * @return the class of this value
+     */
+    ValueClass getClass() const {
+        if(isBlank()) return VALUE_CLASS_BLANK;
+        else if(isIRI()) return VALUE_CLASS_IRI;
+        else if(isSimple()) return VALUE_CLASS_SIMPLE_LITERAL;
+        else if(isXSDString()) return VALUE_CLASS_TYPED_STRING;
+        else if(isBoolean()) return VALUE_CLASS_BOOLEAN;
+        else if(isNumeric()) return VALUE_CLASS_NUMERIC;
+        else if(isDateTime()) return VALUE_CLASS_DATETIME;
+        else return VALUE_CLASS_OTHER;
+    }
+
+    /**
      * Compare this value with another.
      *
      * @param o second value
@@ -300,8 +332,8 @@ struct Value {
      */
     int compare(const Value &o) const;
 
-    bool operator<(const Value &o) const { return compare(o) == -1; }
-    bool operator>(const Value &o) const { return compare(o) == 1; }
+    bool operator<(const Value &o) const;
+    bool operator>(const Value &o) const { return o < *this; }
     bool operator==(const Value &o) const { return compare(o) == 0; }
     bool operator!=(const Value &o) const { return compare(o) != 0; }
 
