@@ -52,11 +52,11 @@ public:
     /**
      * Maintain lower bound
      */
-    void maintainMin() { if(min < minVal) min = searchNextMin(); }
+    void maintainMin();
     /**
      * Maintain upper bound
      */
-    void maintainMax() { if(max > maxVal) max = searchNextMax(); }
+    void maintainMax();
 
     /**
      * @return the current size of the domain of this variable

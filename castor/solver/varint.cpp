@@ -43,6 +43,16 @@ VarInt::~VarInt() {
     delete[] map;
 }
 
+void VarInt::maintainMin() {
+    if(min < minVal)
+        min = searchNextMin();
+}
+
+void VarInt::maintainMax() {
+    if(max > maxVal)
+        max = searchNextMax();
+}
+
 void VarInt::mark(int v) {
     if(v < minVal || v > maxVal)
         return;
