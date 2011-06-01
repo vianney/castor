@@ -265,8 +265,8 @@ struct VarVal {
      */
     int getVariableId() const { return -id-1; }
 
-    bool operator==(const VarVal &o) { return id == o.id; }
-    bool operator!=(const VarVal &o) { return id != o.id; }
+    bool operator==(const VarVal &o) const { return id == o.id; }
+    bool operator!=(const VarVal &o) const { return id != o.id; }
 };
 
 /**

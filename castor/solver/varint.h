@@ -50,6 +50,15 @@ public:
     Solver* getSolver() { return solver; }
 
     /**
+     * Maintain lower bound
+     */
+    void maintainMin() { if(min < minVal) min = searchNextMin(); }
+    /**
+     * Maintain upper bound
+     */
+    void maintainMax() { if(max > maxVal) max = searchNextMax(); }
+
+    /**
      * @return the current size of the domain of this variable
      */
     int getSize() { return size; }
@@ -82,6 +91,17 @@ public:
     bool contains(int v) { return map[v-minVal] < size; }
 
     /**
+     * @pre maintainMin() has been called
+     * @return the lower bound
+     */
+    int getMin() { return min; }
+    /**
+     * @pre maintainMax() has been called
+     * @return the upper bound
+     */
+    int getMax() { return max; }
+
+    /**
      * Mark a value in the domain. Do nothing if the value is not in
      * the domain.
      *
@@ -92,7 +112,11 @@ public:
     /**
      * Clear marks of a variable.
      */
-    void clearMarks() { marked = 0; }
+    void clearMarks() {
+        marked = 0;
+        markedmin = maxVal + 1;
+        markedmax = minVal - 1;
+    }
 
     /**
      * Bind a value to a variable. This also clear the marks of the variable.
@@ -126,6 +150,28 @@ public:
     bool restrictToMarks();
 
     /**
+     * Remove all values < v from the domain of the variable. This also clears
+     * the marks of the variable.
+     *
+     * @note Should only be called during constraint propagation.
+     *
+     * @param v the new lower bound
+     * @return false if the domain becomes empty, true otherwise
+     */
+    bool updateMin(int v);
+
+    /**
+     * Remove all values > v from the domain of the variable. This also clears
+     * the marks of the variable.
+     *
+     * @note Should only be called during constraint propagation.
+     *
+     * @param v the new upper bound
+     * @return false if the domain becomes empty, true otherwise
+     */
+    bool updateMax(int v);
+
+    /**
      * Register constraint c to the bind event of this variable. A constraint
      * must not register twice for the same variable.
      *
@@ -140,6 +186,24 @@ public:
      * @param c the constraint
      */
     void registerChange(Constraint *c) { evChange.push_back(c); }
+
+    /**
+     * Register constraint c to the update min event of this variable.
+     * A constraint must not register twice for the same variable.
+     * @note This automatically calls maintainMin().
+     *
+     * @param c the constraint
+     */
+    void registerMin(Constraint *c) { maintainMin(); evMin.push_back(c); }
+
+    /**
+     * Register constraint c to the update max event of this variable.
+     * A constraint must not register twice for the same variable.
+     * @note This automatically calls maintainMax().
+     *
+     * @param c the constraint
+     */
+    void registerMax(Constraint *c) { maintainMax(); evMax.push_back(c); }
 
 private:
     /**
@@ -156,6 +220,12 @@ private:
      * Current size of the domain.
      */
     int size;
+
+    /**
+     * Lowest and highest value in the current domain.
+     * Set to minVal-1 (resp. maxVal+1) if not maintained.
+     */
+    int min, max;
 
     /**
      * @invariant domain[0..size-1] = domain of the variable
@@ -178,14 +248,45 @@ private:
     int marked;
 
     /**
+     * Lowest and highest marked values.
+     */
+    int markedmin, markedmax;
+
+    /**
      * List of constraints registered to the bind event.
      */
     std::vector<Constraint*> evBind;
-
     /**
      * List of constraints registered to the change event.
      */
     std::vector<Constraint*> evChange;
+    /**
+     * List of constraints registered to the update min event
+     */
+    std::vector<Constraint*> evMin;
+    /**
+     * List of constraints registered to the update max event
+     */
+    std::vector<Constraint*> evMax;
+
+    /**
+     * Removes a value from the domain. Does not update the bounds, nor does it
+     * enqueue any events.
+     *
+     * @param v the value to remove
+     * @return 0 if the domain becomes empty, -1 if nothing has changed,
+     *         1 otherwise
+     */
+    int _remove(int v);
+
+    /**
+     * @return the lowest value > min in the domain
+     */
+    int searchNextMin();
+    /**
+     * @return the highest value < max in the domain
+     */
+    int searchNextMax();
 
     friend class Subtree;
 };

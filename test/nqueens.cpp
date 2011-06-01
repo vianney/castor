@@ -27,7 +27,7 @@ using namespace castor;
 /**
  * Constraint x != y + d
  */
-class DiffConstraint : public Constraint {
+class DiffConstraint : public StatelessConstraint {
     VarInt *x, *y;
     int d;
 
@@ -38,18 +38,42 @@ public:
         y->registerBind(this);
     }
 
-    bool post() {
-        if(x->isBound() || y->isBound())
-            return propagate();
-        else
-            return true;
-    }
-
     bool propagate() {
         if(x->isBound())
             return y->remove(x->getValue() - d);
-        else
+        else if(y->isBound())
             return x->remove(y->getValue() + d);
+        return true;
+    }
+};
+
+/**
+ * Constraint x < y
+ */
+class LessConstraint : public StatelessConstraint {
+    VarInt *x, *y;
+
+public:
+    LessConstraint(VarInt *x, VarInt *y) : x(x), y(y) {
+        x->registerMin(this);
+        x->registerMax(this);
+        y->registerMin(this);
+        y->registerMax(this);
+    }
+
+    void restore() {
+        done = x->getMax() < y->getMin();
+    }
+
+    bool propagate() {
+        StatelessConstraint::propagate();
+        if(x->getMax() < y->getMin()) {
+            done = true;
+            return true;
+        }
+        if(!x->updateMax(y->getMax() - 1))
+            return false;
+        return y->updateMin(x->getMin() + 1);
     }
 };
 
@@ -71,6 +95,8 @@ int main(int argc, const char* argv[]) {
             sub.add(new DiffConstraint(vars[i], vars[j], j - i));
         }
     }
+
+    sub.add(new LessConstraint(vars[0], vars[1]));
 
     sub.activate();
     int nbSols = 0;

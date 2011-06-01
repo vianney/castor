@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
+#include <cassert>
+
 #include "varint.h"
 #include "solver.h"
 
@@ -31,7 +33,9 @@ VarInt::VarInt(Solver *solver, int minVal, int maxVal) :
         domain[i] = v;
         map[v] = i;
     }
-    marked = 0;
+    min = minVal - 1;
+    max = maxVal + 1;
+    clearMarks();
 }
 
 VarInt::~VarInt() {
@@ -53,6 +57,10 @@ void VarInt::mark(int v) {
         map[v-minVal] = marked;
     }
     marked++;
+    if(v < markedmin)
+        markedmin = v;
+    if(v > markedmax)
+        markedmax = v;
 }
 
 bool VarInt::bind(int v) {
@@ -72,20 +80,27 @@ bool VarInt::bind(int v) {
         map[v-minVal] = 0;
     }
     size = 1;
+    if(min >= minVal && v != min) {
+        min = v;
+        solver->enqueue(evMin);
+    }
+    if(max <= maxVal && v != max) {
+        max = v;
+        solver->enqueue(evMax);
+    }
     solver->enqueue(evChange);
     solver->enqueue(evBind);
     return true;
 }
 
-bool VarInt::remove(int v) {
-    clearMarks();
+inline int VarInt::_remove(int v) {
     if(v < minVal || v > maxVal)
-        return true;
+        return -1;
     int i = map[v-minVal];
     if(i >= size)
-        return true;
+        return -1;
     if(size <= 1)
-        return false;
+        return 0;
     size--;
     if(i != size) {
         int v2 = domain[size];
@@ -94,6 +109,23 @@ bool VarInt::remove(int v) {
         map[v2-minVal] = i;
         map[v-minVal] = size;
     }
+    return 1;
+}
+
+bool VarInt::remove(int v) {
+    clearMarks();
+    switch(_remove(v)) {
+    case -1: return true;
+    case 0: return false;
+    }
+    if(v == min) {
+        min = searchNextMin();
+        solver->enqueue(evMin);
+    }
+    if(v == max) {
+        max = searchNextMax();
+        solver->enqueue(evMax);
+    }
     solver->enqueue(evChange);
     if(size == 1)
         solver->enqueue(evBind);
@@ -101,17 +133,95 @@ bool VarInt::remove(int v) {
 }
 
 bool VarInt::restrictToMarks() {
-    int m = marked;
+    int m = marked, mmin = markedmin, mmax = markedmax;
     clearMarks();
     if(m != size) {
         size = m;
         if(m == 0)
             return false;
+        if(min >= minVal && min != mmin) {
+            min = mmin;
+            solver->enqueue(evMin);
+        }
+        if(max <= maxVal && max != mmax) {
+            max = mmax;
+            solver->enqueue(evMax);
+        }
         solver->enqueue(evChange);
         if(m == 1)
             solver->enqueue(evBind);
     }
     return true;
+}
+
+bool VarInt::updateMin(int v) {
+    clearMarks();
+    bool nomaintain = min < minVal;
+    if(nomaintain)
+        min = searchNextMin();
+    if(v <= min)
+        return true;
+    while(v > min) {
+        if(!_remove(min)) {
+            if(nomaintain)
+                min = minVal - 1;
+            return false;
+        }
+        min = searchNextMin();
+    }
+    solver->enqueue(evChange);
+    if(nomaintain)
+        min = minVal - 1;
+    else
+        solver->enqueue(evMin);
+    if(size == 1)
+        solver->enqueue(evBind);
+    return true;
+}
+
+bool VarInt::updateMax(int v) {
+    clearMarks();
+    bool nomaintain = max > maxVal;
+    if(nomaintain)
+        max = searchNextMax();
+    if(v >= max)
+        return true;
+    while(v < max) {
+        if(!_remove(max)) {
+            if(nomaintain)
+                max = maxVal + 1;
+            return false;
+        }
+        max = searchNextMax();
+    }
+    solver->enqueue(evChange);
+    if(nomaintain)
+        max = maxVal + 1;
+    else
+        solver->enqueue(evMax);
+    if(size == 1)
+        solver->enqueue(evBind);
+    return true;
+}
+
+inline int VarInt::searchNextMin() {
+    // TODO check if lots of holes -> better to check domain
+    for(int v = min+1; v <= maxVal; v++) {
+        if(contains(v))
+            return v;
+    }
+    assert(false); // should not happen
+    return maxVal + 1;
+}
+
+inline int VarInt::searchNextMax() {
+    // TODO check if lots of holes -> better to check domain
+    for(int v = max-1; v >= minVal; v--) {
+        if(contains(v))
+            return v;
+    }
+    assert(false); // should not happen
+    return minVal - 1;
 }
 
 }

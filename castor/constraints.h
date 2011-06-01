@@ -92,6 +92,20 @@ public:
     bool propagate();
 };
 
+/**
+ * Inequality constraint v1 < v2
+ */
+class LessConstraint : public StatelessConstraint {
+    Query *query;
+    VarVal v1, v2;
+    VarInt *x1, *x2; //!< CP variable or NULL if fixed value
+public:
+    LessConstraint(Query *query, VarVal v1, VarVal v2);
+    void restore();
+    bool post();
+    bool propagate();
+};
+
 }
 
 #endif // CASTOR_CONSTRAINTS_H

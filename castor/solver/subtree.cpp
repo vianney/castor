@@ -30,6 +30,14 @@ struct Checkpoint {
      */
     int *domSizes;
     /**
+     * Lower bounds
+     */
+    int *min;
+    /**
+     * Upper bounds
+     */
+    int *max;
+    /**
      * Variable that has been chosen.
      */
     VarInt *x;
@@ -41,6 +49,8 @@ struct Checkpoint {
 
     ~Checkpoint() {
         delete [] domSizes;
+        delete [] min;
+        delete [] max;
     }
 };
 
@@ -51,8 +61,11 @@ Subtree::Subtree(Solver *solver, VarInt **vars, int nbVars) :
     // The depth of the subtree is at most vars.size(). Allocate trail.
     // +1 for the root checkpoint
     trail = new Checkpoint[nbVars + 1];
-    for(int i = 0; i <= nbVars; i++)
+    for(int i = 0; i <= nbVars; i++) {
         trail[i].domSizes = new int[nbVars];
+        trail[i].min = new int[nbVars];
+        trail[i].max = new int[nbVars];
+    }
     active = false;
 }
 
@@ -149,8 +162,11 @@ bool Subtree::search() {
 
 void Subtree::checkpoint(VarInt *x, int v) {
     Checkpoint *chkp = &trail[++trailIndex];
-    for(int i = 0; i < nbVars; i++)
-        chkp->domSizes[i] = vars[i]->getSize();
+    for(int i = 0; i < nbVars; i++) {
+        chkp->domSizes[i] = vars[i]->size;
+        chkp->min[i] = vars[i]->min;
+        chkp->max[i] = vars[i]->max;
+    }
     chkp->x = x;
     chkp->v = v;
 }
@@ -172,8 +188,11 @@ VarInt* Subtree::backtrack() {
         return NULL;
     // restore domains
     Checkpoint *chkp = &trail[trailIndex--];
-    for(int i = 0; i < nbVars; i++)
+    for(int i = 0; i < nbVars; i++) {
         vars[i]->size = chkp->domSizes[i];
+        vars[i]->min = chkp->min[i];
+        vars[i]->max = chkp->max[i];
+    }
     // clear propagation queue
     solver->clearQueue();
     if(chkp->x) {

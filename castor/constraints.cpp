@@ -284,4 +284,51 @@ bool EqConstraint::propagate() {
     return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+LessConstraint::LessConstraint(Query *query, VarVal v1, VarVal v2) :
+        StatelessConstraint(CSTR_PRIOR_HIGH), query(query), v1(v1), v2(v2) {
+    x1 = v1.isVariable() ?
+                query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
+    x2 = v2.isVariable() ?
+                query->getVariable(v2.getVariableId())->getCPVariable() : NULL;
+    if(x1 && x2) {
+        x1->registerMin(this);
+        x1->registerMax(this);
+        x2->registerMin(this);
+        x2->registerMax(this);
+    }
+}
+
+void LessConstraint::restore() {
+    if(x1 && x2)
+        done = x1->getMax() < x2->getMin();
+}
+
+bool LessConstraint::post() {
+    if(v1.isUnknown() || v2.isUnknown())
+        return false;
+    if(x1 && x2) {
+        return StatelessConstraint::post();
+    } else if(x1) {
+        return x1->updateMax(v2.getValueId() - 1);
+    } else if(x2) {
+        return x2->updateMin(v1.getValueId() + 1);
+    } else {
+        return v1.getValueId() < v2.getValueId();
+    }
+}
+
+bool LessConstraint::propagate() {
+    StatelessConstraint::propagate();
+    if(x1->getMax() < x2->getMin()) {
+        done = true;
+        return true;
+    }
+    if(!x1->updateMax(x2->getMax() - 1))
+        return false;
+    return x2->updateMin(x1->getMin() + 1);
+}
+
+
 }
