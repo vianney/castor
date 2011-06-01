@@ -445,4 +445,20 @@ void NEqExpression::post(Subtree &sub) {
         Expression::post(sub);
 }
 
+void LTExpression::post(Subtree &sub) {
+    if(arg1->isVarVal() && arg2->isVarVal())
+        sub.add(new LessConstraint(query,
+                                   arg1->getVarVal(), arg2->getVarVal()));
+    else
+        Expression::post(sub);
+}
+
+void GTExpression::post(Subtree &sub) {
+    if(arg1->isVarVal() && arg2->isVarVal())
+        sub.add(new LessConstraint(query,
+                                   arg2->getVarVal(), arg1->getVarVal()));
+    else
+        Expression::post(sub);
+}
+
 }

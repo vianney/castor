@@ -327,6 +327,7 @@ class LTExpression : public BinaryExpression {
 public:
     LTExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
+    void post(Subtree &sub);
     bool evaluate(Value &result);
 };
 
@@ -337,6 +338,7 @@ class GTExpression : public BinaryExpression {
 public:
     GTExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
+    void post(Subtree &sub);
     bool evaluate(Value &result);
 };
 
