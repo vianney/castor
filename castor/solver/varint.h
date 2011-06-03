@@ -50,13 +50,9 @@ public:
     Solver* getSolver() { return solver; }
 
     /**
-     * Maintain lower bound
+     * Maintain lower and upper bounds
      */
-    void maintainMin();
-    /**
-     * Maintain upper bound
-     */
-    void maintainMax();
+    void maintainBounds();
 
     /**
      * @return the current size of the domain of this variable
@@ -194,7 +190,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerMin(Constraint *c) { maintainMin(); evMin.push_back(c); }
+    void registerMin(Constraint *c) { maintainBounds(); evMin.push_back(c); }
 
     /**
      * Register constraint c to the update max event of this variable.
@@ -203,7 +199,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerMax(Constraint *c) { maintainMax(); evMax.push_back(c); }
+    void registerMax(Constraint *c) { maintainBounds(); evMax.push_back(c); }
 
 private:
     /**
@@ -222,8 +218,15 @@ private:
     int size;
 
     /**
-     * Lowest and highest value in the current domain.
-     * Set to minVal-1 (resp. maxVal+1) if not maintained.
+     * Are the bounds maintained for this variable?
+     */
+    bool bounds;
+
+    /**
+     * Lower and upper bounds of the values in the domain.
+     * If bounds is true, the bounds are thight (i.e., contains(min) and
+     * contains(max) return true). Otherwise, these values should still be
+     * valid bounds, but their thightness is not guaranteed.
      */
     int min, max;
 
@@ -280,13 +283,15 @@ private:
     int _remove(int v);
 
     /**
-     * @return the lowest value > min in the domain
+     * Set min to the lowest value in the domain.
+     * @pre !contains(min)
      */
-    int searchNextMin();
+    void _searchMin();
     /**
-     * @return the highest value < max in the domain
+     * Set max to the highest value in the domain.
+     * @pre !contains(max)
      */
-    int searchNextMax();
+    void _searchMax();
 
     friend class Subtree;
 };

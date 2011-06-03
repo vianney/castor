@@ -33,8 +33,9 @@ VarInt::VarInt(Solver *solver, int minVal, int maxVal) :
         domain[i] = v;
         map[v] = i;
     }
-    min = minVal - 1;
-    max = maxVal + 1;
+    bounds = false;
+    min = minVal - 1; // set for the first call to _searchMin()
+    max = maxVal + 1; // set for the first call to _searchMax()
     clearMarks();
 }
 
@@ -43,14 +44,12 @@ VarInt::~VarInt() {
     delete[] map;
 }
 
-void VarInt::maintainMin() {
-    if(min < minVal)
-        min = searchNextMin();
-}
-
-void VarInt::maintainMax() {
-    if(max > maxVal)
-        max = searchNextMax();
+void VarInt::maintainBounds() {
+    if(bounds)
+        return;
+    bounds = true;
+    _searchMin();
+    _searchMax();
 }
 
 void VarInt::mark(int v) {
@@ -90,11 +89,11 @@ bool VarInt::bind(int v) {
         map[v-minVal] = 0;
     }
     size = 1;
-    if(min >= minVal && v != min) {
+    if(bounds && v != min) {
         min = v;
         solver->enqueue(evMin);
     }
-    if(max <= maxVal && v != max) {
+    if(bounds && v != max) {
         max = v;
         solver->enqueue(evMax);
     }
@@ -128,12 +127,12 @@ bool VarInt::remove(int v) {
     case -1: return true;
     case 0: return false;
     }
-    if(v == min) {
-        min = searchNextMin();
+    if(bounds && v == min) {
+        _searchMin();
         solver->enqueue(evMin);
     }
-    if(v == max) {
-        max = searchNextMax();
+    if(bounds && v == max) {
+        _searchMax();
         solver->enqueue(evMax);
     }
     solver->enqueue(evChange);
@@ -149,11 +148,11 @@ bool VarInt::restrictToMarks() {
         size = m;
         if(m == 0)
             return false;
-        if(min >= minVal && min != mmin) {
+        if(bounds && min != mmin) {
             min = mmin;
             solver->enqueue(evMin);
         }
-        if(max <= maxVal && max != mmax) {
+        if(bounds && max != mmax) {
             max = mmax;
             solver->enqueue(evMax);
         }
@@ -166,23 +165,17 @@ bool VarInt::restrictToMarks() {
 
 bool VarInt::updateMin(int v) {
     clearMarks();
-    bool nomaintain = min < minVal;
-    if(nomaintain)
-        min = searchNextMin();
+    if(!bounds)
+        _searchMin();
     if(v <= min)
         return true;
     while(v > min) {
-        if(!_remove(min)) {
-            if(nomaintain)
-                min = minVal - 1;
+        if(!_remove(min))
             return false;
-        }
-        min = searchNextMin();
+        _searchMin();
     }
     solver->enqueue(evChange);
-    if(nomaintain)
-        min = minVal - 1;
-    else
+    if(bounds)
         solver->enqueue(evMin);
     if(size == 1)
         solver->enqueue(evBind);
@@ -191,47 +184,55 @@ bool VarInt::updateMin(int v) {
 
 bool VarInt::updateMax(int v) {
     clearMarks();
-    bool nomaintain = max > maxVal;
-    if(nomaintain)
-        max = searchNextMax();
+    if(!bounds)
+        _searchMax();
     if(v >= max)
         return true;
     while(v < max) {
-        if(!_remove(max)) {
-            if(nomaintain)
-                max = maxVal + 1;
+        if(!_remove(max))
             return false;
-        }
-        max = searchNextMax();
+        _searchMax();
     }
     solver->enqueue(evChange);
-    if(nomaintain)
-        max = maxVal + 1;
-    else
+    if(bounds)
         solver->enqueue(evMax);
     if(size == 1)
         solver->enqueue(evBind);
     return true;
 }
 
-inline int VarInt::searchNextMin() {
-    // TODO check if lots of holes -> better to check domain
-    for(int v = min+1; v <= maxVal; v++) {
-        if(contains(v))
-            return v;
+inline void VarInt::_searchMin() {
+    if(max - min + 1 > 2 * size) { // TODO check this condition
+        // lots of "holes" in the domain: check all remaining values
+        min = maxVal + 1;
+        for(int i = 0; i < size; i++)
+            if(domain[i] < min)
+                min = domain[i];
+    } else {
+        // else: check values successively from current min upwards
+        while(true) {
+            min++;
+            if(contains(min))
+                return;
+        }
     }
-    assert(false); // should not happen
-    return maxVal + 1;
 }
 
-inline int VarInt::searchNextMax() {
-    // TODO check if lots of holes -> better to check domain
-    for(int v = max-1; v >= minVal; v--) {
-        if(contains(v))
-            return v;
+inline void VarInt::_searchMax() {
+    if(max - min + 1 > 2 * size) { // TODO check this condition
+        // lots of "holes" in the domain: check all remaining values
+        max = minVal - 1;
+        for(int i = 0; i < size; i++)
+            if(domain[i] > max)
+                max = domain[i];
+    } else {
+        // else: check values successively from current max downwards
+        while(true) {
+            max--;
+            if(contains(max))
+                return;
+        }
     }
-    assert(false); // should not happen
-    return minVal - 1;
 }
 
 }
