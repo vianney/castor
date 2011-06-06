@@ -58,10 +58,11 @@ struct Checkpoint {
     }
 };
 
-Subtree::Subtree(Solver *solver, VarInt **vars, int nbVars) :
+Subtree::Subtree(Solver *solver, VarInt **vars, int nbVars, int nbDecision) :
         solver(solver),
         vars(vars),
         nbVars(nbVars) {
+    this->nbDecision = nbDecision > 0 ? nbDecision : nbVars;
     // The depth of the subtree is at most vars.size(). Allocate trail.
     // +1 for the root checkpoint
     trail = new Checkpoint[nbVars + 1];
@@ -144,7 +145,7 @@ bool Subtree::search() {
             // find unbound variable with smallest domain
             x = NULL;
             int sx = -1;
-            for(int i = 0; i < nbVars; i++) {
+            for(int i = 0; i < nbDecision; i++) {
                 VarInt *y = vars[i];
                 int sy = y->getSize();
                 if(sy > 1 && (!x || sy < sx)) {

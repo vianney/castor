@@ -155,7 +155,7 @@ int main(int argc, const char* argv[]) {
         vars[i] = new VarInt(&solver, 0, n-1);
     vars[n] = new VarInt(&solver, 0, n*n*n);
 
-    Subtree sub(&solver, vars, n+1);
+    Subtree sub(&solver, vars, n+1, n);
     for(int i = 0; i < n - 1; i++) {
         for(int j = i + 1; j < n; j++) {
             sub.add(new DiffConstraint(vars[i], vars[j], 0));
@@ -185,6 +185,11 @@ int main(int argc, const char* argv[]) {
         max->update();
     }
     cout << "Found " << nbSols << " solutions." << endl;
+
+    cout << "Backtracks: " << solver.getStatBacktracks() << endl;
+    cout << "Subtrees: " << solver.getStatSubtrees() << endl;
+    cout << "Post: " << solver.getStatPost() << endl;
+    cout << "Propagate: " << solver.getStatPropagate() << endl;
 
     for(int i = 0; i <= n; i++)
         delete vars[i];

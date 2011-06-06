@@ -39,8 +39,9 @@ public:
      * @param solver the solver
      * @param vars array of variables to label in the subtree
      * @param nbVars number of variables to label
+     * @param nbDecision number of decision variables (0 for all)
      */
-    Subtree(Solver *solver, VarInt **vars, int nbVars);
+    Subtree(Solver *solver, VarInt **vars, int nbVars, int nbDecision = 0);
 
     /**
      * Destructor.
@@ -134,9 +135,14 @@ private:
      */
     VarInt **vars;
     /**
-     * Number of variables to label.
+     * Number of variables to keep track of.
      */
     int nbVars;
+    /**
+     * Number of decision variables to label. The decision variables appear
+     * first in the vars array.
+     */
+    int nbDecision;
 
     /**
      * Posted constraints.
