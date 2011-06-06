@@ -36,6 +36,24 @@ public:
      */
     Solver();
 
+    ~Solver();
+
+    /**
+     * Adds a static constraint.
+     * The solver takes ownership of the constraint.
+     *
+     * @param c the constraint
+     */
+    void add(Constraint *c);
+
+    /**
+     * Indicates a static constraint has been updated and should be
+     * reposted.
+     *
+     * @param c the constraint
+     */
+    void refresh(Constraint *c);
+
     /**
      * Enqueue constraints for propagation. Only variable should call this
      * method.
@@ -67,6 +85,13 @@ public:
     int getStatPropagate() { return statPropagate; }
 
 private: // for subtree
+    /**
+     * Post all static constraints whose timestamp is greater than tsCurrent.
+     *
+     * @return false if there is a failure, true otherwise
+     */
+    bool postStatic();
+
     /**
      * Post a list of constraints. Perform initial propagation on all the
      * constraints.
@@ -100,6 +125,18 @@ private:
      * Current active subtree.
      */
     Subtree *current;
+
+    /**
+     * Static constraints.
+     */
+    std::vector<Constraint*> constraints;
+
+    /**
+     * Timestamps for static constraints.
+     * tsLastConstraint is the timestamp of the latest added/refreshed
+     * constraint. tsCurrent represents the current state of the domains.
+     */
+    int tsCurrent, tsLastConstraint;
 
     /**
      * Number of backtracks so far

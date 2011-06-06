@@ -77,17 +77,85 @@ public:
     }
 };
 
+/**
+ * Sum a[i] * x[i] = b
+ */
+class SumConstraint : public StatelessConstraint {
+    int n, *a;
+    VarInt **x;
+    int b;
+
+public:
+    SumConstraint(int n, int *a, VarInt **x, int b) : n(n), a(a), x(x), b(b) {
+        for(int i = 0; i < n; i++) {
+            x[i]->registerMin(this);
+            x[i]->registerMax(this);
+        }
+    }
+
+    bool propagate() {
+        int minSum = b, maxSum = b;
+        for(int i = 0; i < n; i++) {
+            if(a[i] > 0) {
+                minSum -= a[i] * x[i]->getMax();
+                maxSum -= a[i] * x[i]->getMin();
+            } else {
+                minSum -= a[i] * x[i]->getMin();
+                maxSum -= a[i] * x[i]->getMax();
+            }
+        }
+        for(int i = 0; i < n; i++) {
+            if(a[i] == 0)
+                continue;
+            int resMinSum, resMaxSum;
+            if(a[i] > 0) {
+                resMinSum = minSum + a[i] * x[i]->getMax();
+                resMaxSum = maxSum + a[i] * x[i]->getMin();
+            } else {
+                resMinSum = maxSum + a[i] * x[i]->getMax();
+                resMaxSum = minSum + a[i] * x[i]->getMin();
+            }
+            if(!x[i]->updateMin(resMinSum / a[i] + (resMinSum % a[i] ? 1 : 0)))
+                return false;
+            if(!x[i]->updateMax(resMaxSum / a[i]))
+                return false;
+        }
+        return true;
+    }
+};
+
+class Maximize : public Constraint {
+    VarInt *x;
+    int currentBound;
+
+public:
+    Maximize(VarInt *x) : x(x) {
+        x->maintainBounds();
+        currentBound = x->getMin();
+    }
+
+    void update() {
+        currentBound = x->getValue() + 1;
+        solver->refresh(this);
+    }
+
+    bool post() {
+        return x->updateMin(currentBound);
+    }
+};
+
 int main(int argc, const char* argv[]) {
     int n = 8;
     if(argc >= 2)
         n = atoi(argv[1]);
 
     Solver solver;
-    VarInt **vars = new VarInt*[n];
+    VarInt **vars = new VarInt*[n+1];
     for(int i = 0; i < n; i++)
         vars[i] = new VarInt(&solver, 0, n-1);
+    vars[n] = new VarInt(&solver, 0, n*n*n);
 
-    Subtree sub(&solver, vars, n);
+    Subtree sub(&solver, vars, n+1);
     for(int i = 0; i < n - 1; i++) {
         for(int j = i + 1; j < n; j++) {
             sub.add(new DiffConstraint(vars[i], vars[j], 0));
@@ -98,6 +166,14 @@ int main(int argc, const char* argv[]) {
 
     sub.add(new LessConstraint(vars[0], vars[1]));
 
+    int *a = new int[n+1];
+    for(int i = 0; i < n; i++) a[i] = i;
+    a[n] = -1;
+    sub.add(new SumConstraint(n+1, a, vars, 0));
+
+    Maximize *max = new Maximize(vars[n]);
+    solver.add(max);
+
     sub.activate();
     int nbSols = 0;
     while(sub.search()) {
@@ -105,12 +181,14 @@ int main(int argc, const char* argv[]) {
         cout << "[";
         for(int i = 0; i < n; i++)
             cout << (i == 0 ? "" : ", ") << vars[i]->getValue();
-        cout << "]" << endl;
+        cout << "], sum = " << vars[n]->getValue() << endl;
+        max->update();
     }
     cout << "Found " << nbSols << " solutions." << endl;
 
-    for(int i = 0; i < n; i++)
+    for(int i = 0; i <= n; i++)
         delete vars[i];
     delete [] vars;
+    delete [] a;
     return 0;
 }

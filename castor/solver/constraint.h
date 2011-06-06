@@ -91,8 +91,14 @@ public:
 
 protected:
     /**
-     * Parent subtree in which this constraint is posted.
-     * This variable is initialized by the Subtree.
+     * Solver containing this constraint.
+     */
+    Solver *solver;
+
+    /**
+     * Parent subtree in which this constraint is posted or NULL if posted
+     * globally.
+     * This variable is initialized by Subtree or Solver.
      */
     Subtree *parent;
 
@@ -113,6 +119,10 @@ private:
      * Next constraint in propagation queue.
      */
     Constraint *nextPropag;
+    /**
+     * Timestamp of this constraint. This is only used for static constraints.
+     */
+    int timestamp;
 
     friend class Solver;
     friend class Subtree;

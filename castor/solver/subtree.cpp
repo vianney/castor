@@ -38,6 +38,10 @@ struct Checkpoint {
      */
     int *max;
     /**
+     * Timestamp of static constraints
+     */
+    int timestamp;
+    /**
      * Variable that has been chosen.
      */
     VarInt *x;
@@ -80,6 +84,7 @@ Subtree::~Subtree() {
 }
 
 void Subtree::add(Constraint *c) {
+    c->solver = solver;
     c->parent = this;
     constraints[c->getPriority()].push_back(c);
 }
@@ -89,11 +94,16 @@ void Subtree::activate() {
         throw "Cannot activate active subtree.";
     active = true;
     previous = solver->current;
-    solver->current = this;
     solver->statSubtrees++;
     trailIndex = -1;
     checkpoint(NULL, -1);
-    inconsistent = !solver->post(constraints);
+    solver->current = NULL;
+    if(solver->tsCurrent < solver->tsLastConstraint)
+        inconsistent = !solver->postStatic();
+    else
+        inconsistent = false;
+    solver->current = this;
+    inconsistent = inconsistent || !solver->post(constraints);
     started = false;
 }
 
@@ -167,6 +177,7 @@ void Subtree::checkpoint(VarInt *x, int v) {
         chkp->min[i] = vars[i]->min;
         chkp->max[i] = vars[i]->max;
     }
+    chkp->timestamp = solver->tsCurrent;
     chkp->x = x;
     chkp->v = v;
 }
@@ -193,6 +204,7 @@ VarInt* Subtree::backtrack() {
         vars[i]->min = chkp->min[i];
         vars[i]->max = chkp->max[i];
     }
+    solver->tsCurrent = chkp->timestamp;
     // clear propagation queue
     solver->clearQueue();
     if(chkp->x) {
@@ -204,6 +216,9 @@ VarInt* Subtree::backtrack() {
             solver->statBacktracks--;
             return backtrack();
         }
+        if(solver->tsCurrent < solver->tsLastConstraint &&
+           !solver->postStatic())
+            return backtrack();
         if(!solver->propagate())
             return backtrack();
     }
