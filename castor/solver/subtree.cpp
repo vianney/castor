@@ -58,11 +58,15 @@ struct Checkpoint {
     }
 };
 
-Subtree::Subtree(Solver *solver, VarInt **vars, int nbVars, int nbDecision) :
+Subtree::Subtree(Solver *solver, VarInt **vars, int nbVars,
+                 int nbDecision, int nbOrder) :
         solver(solver),
         vars(vars),
-        nbVars(nbVars) {
-    this->nbDecision = nbDecision > 0 ? nbDecision : nbVars;
+        nbVars(nbVars),
+        nbDecision(nbDecision),
+        nbOrder(nbOrder) {
+    if(nbDecision == 0)
+        this->nbDecision = nbVars;
     // The depth of the subtree is at most vars.size(). Allocate trail.
     // +1 for the root checkpoint
     trail = new Checkpoint[nbVars + 1];
@@ -142,23 +146,32 @@ bool Subtree::search() {
     while(true) {
         // search for a variable to bind if needed
         if(!x || x->isBound()) {
-            // find unbound variable with smallest domain
             x = NULL;
-            int sx = -1;
-            for(int i = 0; i < nbDecision; i++) {
-                VarInt *y = vars[i];
-                int sy = y->getSize();
-                if(sy > 1 && (!x || sy < sx)) {
-                    x = y;
-                    sx = sy;
+            // first label the nbOrder first variables
+            for(int i = 0; i < nbOrder; i++) {
+                if(!vars[i]->isBound()) {
+                    x = vars[i];
+                    break;
                 }
             }
-            if(!x) { // we have a solution for vars
-                return true;
+            // find unbound variable with smallest domain
+            if(!x) {
+                int sx = -1;
+                for(int i = nbOrder; i < nbDecision; i++) {
+                    VarInt *y = vars[i];
+                    int sy = y->getSize();
+                    if(sy > 1 && (!x || sy < sx)) {
+                        x = y;
+                        sx = sy;
+                    }
+                }
+                if(!x) { // we have a solution for vars
+                    return true;
+                }
             }
         }
         // Take the last value of the domain
-        int v = x->getDomain()[x->getSize()-1];
+        int v = x->select();
         checkpoint(x, v);
         x->bind(v); // should always return true
         if(!solver->propagate()) {

@@ -30,6 +30,16 @@ class Constraint;
  */
 class VarInt {
 public:
+
+    /**
+     * Value selection strategies
+     */
+    enum ValueSelector {
+        SELECT_RANDOM,     //!< strategy does not matter
+        SELECT_MIN,        //!< select values in ascending order
+        SELECT_MAX         //!< select values in descending order
+    };
+
     /**
      * Construct a variable with domain minVal..maxVal.
      *
@@ -55,6 +65,16 @@ public:
     void maintainBounds();
 
     /**
+     * @return the value selection strategy used by select()
+     */
+    ValueSelector getSelectStrategy() { return strategy; }
+
+    /**
+     * Set the value selection strategy used by the select() method.
+     */
+    void setSelectStrategy(ValueSelector s) { strategy = s; }
+
+    /**
      * @return the current size of the domain of this variable
      */
     int getSize() { return size; }
@@ -63,6 +83,12 @@ public:
      * @return whether this variable is bound
      */
     bool isBound() { return size == 1; }
+
+    /**
+     * @pre getSize() > 0
+     * @return a value of the domain according to the selection strategy
+     */
+    int select();
 
     /**
      * @pre isBound() == true
@@ -271,6 +297,11 @@ private:
      * List of constraints registered to the update max event
      */
     std::vector<Constraint*> evMax;
+
+    /**
+     * Value selection strategy.
+     */
+    ValueSelector strategy;
 
     /**
      * Removes a value from the domain. Does not update the bounds, nor does it

@@ -37,6 +37,7 @@ VarInt::VarInt(Solver *solver, int minVal, int maxVal) :
     min = minVal - 1; // set for the first call to _searchMin()
     max = maxVal + 1; // set for the first call to _searchMax()
     clearMarks();
+    strategy = SELECT_RANDOM;
 }
 
 VarInt::~VarInt() {
@@ -50,6 +51,23 @@ void VarInt::maintainBounds() {
     bounds = true;
     _searchMin();
     _searchMax();
+}
+
+int VarInt::select() {
+    switch(strategy) {
+    case SELECT_RANDOM:
+        return domain[0];
+    case SELECT_MIN:
+        if(!bounds)
+            _searchMin();
+        return min;
+    case SELECT_MAX:
+        if(!bounds)
+            _searchMax();
+        return max;
+    }
+    assert(false); // should not happen
+    return 0;
 }
 
 void VarInt::mark(int v) {
