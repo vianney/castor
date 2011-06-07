@@ -24,7 +24,7 @@
 
 namespace castor {
 
-char *VALUETYPE_URIS[] = {
+char *Value::TYPE_URIS[] = {
     NULL,
     NULL,
     NULL,
@@ -50,25 +50,25 @@ char *VALUETYPE_URIS[] = {
 };
 
 void Value::clean() {
-    if(hasCleanFlag(VALUE_CLEAN_TYPE_URI)) {
+    if(hasCleanFlag(CLEAN_TYPE_URI)) {
         delete [] typeUri;
         typeUri = NULL;
     }
-    if(hasCleanFlag(VALUE_CLEAN_LEXICAL)) {
+    if(hasCleanFlag(CLEAN_LEXICAL)) {
         delete [] lexical;
         lexical = NULL;
     }
-    if(hasCleanFlag(VALUE_CLEAN_DATA)) {
+    if(hasCleanFlag(CLEAN_DATA)) {
         switch(type) {
-        case VALUE_TYPE_PLAIN_STRING:
+        case TYPE_PLAIN_STRING:
             delete [] languageTag;
             languageTag = NULL;
             break;
-        case VALUE_TYPE_DECIMAL:
+        case TYPE_DECIMAL:
             delete decimal;
             decimal = NULL;
             break;
-        case VALUE_TYPE_DATETIME:
+        case TYPE_DATETIME:
             // TODO  delete datetime;
             break;
         default:
@@ -76,14 +76,14 @@ void Value::clean() {
             break;
         }
     }
-    cleanup = VALUE_CLEAN_NOTHING;
+    cleanup = CLEAN_NOTHING;
 }
 
 void Value::fillBoolean(bool value) {
     clean();
     id = 0;
-    type = VALUE_TYPE_BOOLEAN;
-    typeUri = VALUETYPE_URIS[VALUE_TYPE_BOOLEAN];
+    type = TYPE_BOOLEAN;
+    typeUri = TYPE_URIS[TYPE_BOOLEAN];
     lexical = NULL;
     boolean = value;
 }
@@ -91,8 +91,8 @@ void Value::fillBoolean(bool value) {
 void Value::fillInteger(long value) {
     clean();
     id = 0;
-    type = VALUE_TYPE_INTEGER;
-    typeUri = VALUETYPE_URIS[VALUE_TYPE_INTEGER];
+    type = TYPE_INTEGER;
+    typeUri = TYPE_URIS[TYPE_INTEGER];
     lexical = NULL;
     integer = value;
 }
@@ -100,8 +100,8 @@ void Value::fillInteger(long value) {
 void Value::fillFloating(double value) {
     clean();
     id = 0;
-    type = VALUE_TYPE_DOUBLE;
-    typeUri = VALUETYPE_URIS[VALUE_TYPE_DOUBLE];
+    type = TYPE_DOUBLE;
+    typeUri = TYPE_URIS[TYPE_DOUBLE];
     lexical = NULL;
     floating = value;
 }
@@ -109,31 +109,31 @@ void Value::fillFloating(double value) {
 void Value::fillDecimal(XSDDecimal *value) {
     clean();
     id = 0;
-    type = VALUE_TYPE_DECIMAL;
-    typeUri = VALUETYPE_URIS[VALUE_TYPE_DECIMAL];
+    type = TYPE_DECIMAL;
+    typeUri = TYPE_URIS[TYPE_DECIMAL];
     lexical = NULL;
     decimal = value;
-    cleanup = VALUE_CLEAN_DATA;
+    cleanup = CLEAN_DATA;
 }
 
 void Value::fillSimpleLiteral(char *lexical, bool freeLexical) {
     clean();
     id = 0;
-    type = VALUE_TYPE_PLAIN_STRING;
+    type = TYPE_PLAIN_STRING;
     typeUri = NULL;
     this->lexical = lexical;
     if(freeLexical)
-        cleanup = VALUE_CLEAN_LEXICAL;
+        cleanup = CLEAN_LEXICAL;
 }
 
 void Value::fillIRI(char *lexical, bool freeLexical) {
     clean();
     id = 0;
-    type = VALUE_TYPE_IRI;
+    type = TYPE_IRI;
     typeUri = NULL;
     this->lexical = lexical;
     if(freeLexical)
-        cleanup = VALUE_CLEAN_LEXICAL;
+        cleanup = CLEAN_LEXICAL;
 }
 
 void Value::fillId(Store *store) {
@@ -177,8 +177,8 @@ int Value::compare(const Value &o) const {
 }
 
 bool Value::operator<(const Value &o) const {
-    ValueClass cls = getClass();
-    ValueClass ocls = o.getClass();
+    Class cls = getClass();
+    Class ocls = o.getClass();
     int cmp;
     if(cls < ocls) {
         return true;
@@ -186,17 +186,17 @@ bool Value::operator<(const Value &o) const {
         return false;
     } else {
         switch(cls) {
-        case VALUE_CLASS_BLANK:
-        case VALUE_CLASS_IRI:
-        case VALUE_CLASS_SIMPLE_LITERAL:
-        case VALUE_CLASS_TYPED_STRING:
+        case CLASS_BLANK:
+        case CLASS_IRI:
+        case CLASS_SIMPLE_LITERAL:
+        case CLASS_TYPED_STRING:
             return strcmp(lexical, o.lexical) < 0;
-        case VALUE_CLASS_BOOLEAN:
+        case CLASS_BOOLEAN:
             if(boolean == o.boolean)
                 return strcmp(lexical, o.lexical);
             else
                 return !boolean && o.boolean;
-        case VALUE_CLASS_NUMERIC:
+        case CLASS_NUMERIC:
             cmp = compare(o);
             if(cmp == -1)
                 return true;
@@ -206,10 +206,10 @@ bool Value::operator<(const Value &o) const {
                 return strcmp(lexical, o.lexical) < 0;
             else
                 return type < o.type;
-        case VALUE_CLASS_DATETIME:
+        case CLASS_DATETIME:
             // TODO
             return strcmp(lexical, o.lexical) < 0;
-        case VALUE_CLASS_OTHER:
+        case CLASS_OTHER:
             if(isPlain() && o.isPlain()) {
                 // plain literals with language tags
                 cmp = strcmp(languageTag, o.languageTag);
@@ -235,13 +235,13 @@ bool Value::operator<(const Value &o) const {
 int Value::rdfequals(const Value &o) const {
     if(id > 0 && id == o.id)
         return 0;
-    if(type == VALUE_TYPE_UNKOWN || o.type == VALUE_TYPE_UNKOWN) {
+    if(type == TYPE_UNKOWN || o.type == TYPE_UNKOWN) {
         if(typeUri == NULL || o.typeUri == NULL)
             return 1; // FIXME not sure
         if(strcmp(typeUri, o.typeUri) != 0)
             return -1;
     } else if(type != o.type) {
-        if(type >= VALUE_TYPE_PLAIN_STRING || o.type >= VALUE_TYPE_PLAIN_STRING)
+        if(type >= TYPE_PLAIN_STRING || o.type >= TYPE_PLAIN_STRING)
             return -1;
         else
             return 1;
@@ -271,17 +271,17 @@ void Value::ensureLexical() {
         int len = snprintf(NULL, 0, "%ld", integer);
         lexical = new char[len+1];
         sprintf(lexical, "%ld", integer);
-        addCleanFlag(VALUE_CLEAN_LEXICAL);
+        addCleanFlag(CLEAN_LEXICAL);
     } else if(isFloating()) {
         int len = snprintf(NULL, 0, "%f", floating);
         lexical = new char[len+1];
         sprintf(lexical, "%f", floating);
-        addCleanFlag(VALUE_CLEAN_LEXICAL);
+        addCleanFlag(CLEAN_LEXICAL);
     } else if(isDecimal()) {
         std::string str = decimal->getString();
         lexical = new char[str.size()+1];
         strcpy(lexical, str.c_str());
-        addCleanFlag(VALUE_CLEAN_LEXICAL);
+        addCleanFlag(CLEAN_LEXICAL);
     } else if(isDateTime()) {
         // TODO
         lexical = const_cast<char*>("");
@@ -294,15 +294,15 @@ std::string Value::getString() const {
     std::ostringstream str;
 
     switch(type) {
-    case VALUE_TYPE_BLANK:
+    case TYPE_BLANK:
         str << "_:";
         if(lexical)
             str << lexical;
         break;
-    case VALUE_TYPE_IRI:
+    case TYPE_IRI:
         str << '<' << lexical << '>';
         break;
-    case VALUE_TYPE_PLAIN_STRING:
+    case TYPE_PLAIN_STRING:
         str << '"' << lexical << '"';
         if(language > 0)
             str << '@' << languageTag;
@@ -340,7 +340,7 @@ std::ostream& operator<<(std::ostream &out, const Value *val) {
         return out;
 }
 
-void promoteNumericType(Value &v1, Value &v2) {
+void Value::promoteNumericType(Value &v1, Value &v2) {
     if(v1.isDecimal() && v2.isInteger())
         // convert v2 to xsd:decimal
         v2.fillDecimal(new XSDDecimal(v2.integer));

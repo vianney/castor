@@ -454,17 +454,17 @@ public:
  * Cast expression
  */
 class CastExpression : public Expression {
-    ValueType destination; //!< destination type
+    Value::Type destination; //!< destination type
     Expression *arg; //!< argument to cast
 public:
-    CastExpression(ValueType destination, Expression *arg);
+    CastExpression(Value::Type destination, Expression *arg);
     ~CastExpression();
     bool evaluate(Value &result);
 
     /**
      * @return destination type
      */
-    ValueType getDestination() { return destination; }
+    Value::Type getDestination() { return destination; }
 
     /**
      * @return argument

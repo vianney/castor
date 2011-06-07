@@ -54,9 +54,9 @@ Store::Store(const char* filename) throw(StoreException) {
     sqlite3_finalize(sql);
 
     datatypes = new char*[nbDatatypes];
-    for(i = 0; i < VALUE_TYPE_FIRST_CUSTOM; i++)
-        datatypes[i] = VALUETYPE_URIS[i];
-    for(i = VALUE_TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
+    for(i = 0; i < Value::TYPE_FIRST_CUSTOM; i++)
+        datatypes[i] = Value::TYPE_URIS[i];
+    for(i = Value::TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
         datatypes[i] = NULL;
 
     if(sqlite3_prepare_v2(db,
@@ -64,7 +64,7 @@ Store::Store(const char* filename) throw(StoreException) {
                           "WHERE id >= ?",
                           -1, &sql, NULL) != SQLITE_OK)
         goto cleandb;
-    if(sqlite3_bind_int(sql, 1, VALUE_TYPE_FIRST_CUSTOM) != SQLITE_OK)
+    if(sqlite3_bind_int(sql, 1, Value::TYPE_FIRST_CUSTOM) != SQLITE_OK)
         goto cleansql;
     while((rc = sqlite3_step(sql)) != SQLITE_DONE) {
         if(rc != SQLITE_ROW)
@@ -126,12 +126,12 @@ Store::Store(const char* filename) throw(StoreException) {
         i = sqlite3_column_int(sql, 0);
         v = &values[i-1];
         v->id = i;
-        v->type = (ValueType) sqlite3_column_int(sql, 1);
+        v->type = static_cast<Value::Type>(sqlite3_column_int(sql, 1));
         v->typeUri = datatypes[v->type];
         str = reinterpret_cast<const char*>(sqlite3_column_text(sql, 2));
         v->lexical = new char[strlen(str) + 1];
         strcpy(v->lexical, str);
-        v->cleanup = VALUE_CLEAN_LEXICAL;
+        v->cleanup = Value::CLEAN_LEXICAL;
         if(v->isPlain()) {
             v->language = sqlite3_column_int(sql, 3);
             v->languageTag = languages[v->language];
@@ -143,7 +143,7 @@ Store::Store(const char* filename) throw(StoreException) {
             v->floating = sqlite3_column_double(sql, 4);
         } else if(v->isDecimal()) {
             v->decimal = new XSDDecimal(v->lexical);
-            v->addCleanFlag(VALUE_CLEAN_DATA);
+            v->addCleanFlag(Value::CLEAN_DATA);
         }
         //else if(v->isDateTime())
         // TODO: v->datetime
@@ -206,7 +206,7 @@ cleandb:
     sqlite3_close(db);
 cleanself:
     if(datatypes) {
-        for(i = VALUE_TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
+        for(i = Value::TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
             if(datatypes[i])
                 delete [] datatypes[i];
         delete [] datatypes;
@@ -232,7 +232,7 @@ Store::~Store() {
 
     sqlite3_close(db);
     if(datatypes) {
-        for(int i = VALUE_TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
+        for(int i = Value::TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
             delete [] datatypes[i];
         delete [] datatypes;
     }
@@ -245,11 +245,11 @@ Store::~Store() {
         delete [] values;
 }
 
-int Store::getValueId(const ValueType type, const char *typeUri,
+int Store::getValueId(const Value::Type type, const char *typeUri,
                       const char *lexical, const char *language)
             throw(StoreException) {
     sqlite3_stmt *sql;
-    if(type == VALUE_TYPE_UNKOWN)
+    if(type == Value::TYPE_UNKOWN)
         sql = sqlValUnkTypeLang;
     else if(language == NULL || language[0] == '\0')
         sql = sqlVal;
@@ -266,7 +266,7 @@ int Store::getValueId(const ValueType type, const char *typeUri,
 #define BIND_INT(col, i) \
     checkDbResult(sqlite3_bind_int(sql, (col), (i)));
 
-    if(type == VALUE_TYPE_UNKOWN) {
+    if(type == Value::TYPE_UNKOWN) {
         BIND_STR(1, typeUri);
     } else {
         BIND_INT(1, type);

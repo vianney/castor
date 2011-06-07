@@ -20,7 +20,7 @@ include(LibFindMacros)
 libfind_pkg_check_modules(PC_RAPTOR2 raptor2)
 
 find_path(RAPTOR2_INCLUDE_DIR
-          NAMES raptor.h
+          NAMES raptor2.h
           HINTS ${PC_RAPTOR2_INCLUDE_DIRS}
           PATH_SUFFIXES raptor2)
 

@@ -18,7 +18,6 @@
 
 #include <sstream>
 #include "query.h"
-#include "librdf.h"
 
 namespace castor {
 
@@ -305,15 +304,15 @@ Expression* Query::convertExpression(rasqal_expression *expr)
             val->lexical = NULL;
             switch(lit->type) {
             case RASQAL_LITERAL_BLANK:
-                val->type = VALUE_TYPE_BLANK;
+                val->type = Value::TYPE_BLANK;
                 break;
             case RASQAL_LITERAL_URI:
-                val->type = VALUE_TYPE_IRI;
+                val->type = Value::TYPE_IRI;
                 val->lexical = convertURI(lit->value.uri);
-                val->addCleanFlag(VALUE_CLEAN_LEXICAL);
+                val->addCleanFlag(Value::CLEAN_LEXICAL);
                 break;
             case RASQAL_LITERAL_STRING:
-                val->type = VALUE_TYPE_PLAIN_STRING;
+                val->type = Value::TYPE_PLAIN_STRING;
                 if(lit->language == NULL || lit->language[0] == '\0') {
                     val->language = 0;
                     val->languageTag = const_cast<char*>("");
@@ -321,45 +320,45 @@ Expression* Query::convertExpression(rasqal_expression *expr)
                     val->language = -1;
                     val->languageTag = new char[strlen(lit->language)+1];
                     strcpy(val->languageTag, lit->language);
-                    val->addCleanFlag(VALUE_CLEAN_DATA);
+                    val->addCleanFlag(Value::CLEAN_DATA);
                 }
                 break;
             case RASQAL_LITERAL_XSD_STRING:
-                val->type = VALUE_TYPE_TYPED_STRING;
+                val->type = Value::TYPE_TYPED_STRING;
                 break;
             case RASQAL_LITERAL_BOOLEAN:
-                val->type = VALUE_TYPE_BOOLEAN;
+                val->type = Value::TYPE_BOOLEAN;
                 val->boolean = lit->value.integer;
                 val->lexical = val->boolean ? const_cast<char*>("true") :
                                               const_cast<char*>("false");
                 break;
             case RASQAL_LITERAL_INTEGER:
-                val->type = VALUE_TYPE_INTEGER;
+                val->type = Value::TYPE_INTEGER;
                 val->integer = lit->value.integer;
                 break;
             case RASQAL_LITERAL_FLOAT:
-                val->type = VALUE_TYPE_FLOAT;
+                val->type = Value::TYPE_FLOAT;
                 val->floating = lit->value.floating;
                 break;
             case RASQAL_LITERAL_DOUBLE:
-                val->type = VALUE_TYPE_DOUBLE;
+                val->type = Value::TYPE_DOUBLE;
                 val->floating = lit->value.floating;
                 break;
             case RASQAL_LITERAL_DECIMAL:
-                val->type = VALUE_TYPE_DECIMAL;
+                val->type = Value::TYPE_DECIMAL;
                 val->decimal = new XSDDecimal(reinterpret_cast<const char*>(lit->string));
-                val->addCleanFlag(VALUE_CLEAN_DATA);
+                val->addCleanFlag(Value::CLEAN_DATA);
                 break;
             case RASQAL_LITERAL_DATETIME:
-                val->type = VALUE_TYPE_DATETIME;
+                val->type = Value::TYPE_DATETIME;
                 // TODO
                 delete val;
                 throw QueryParseException("datetime unimplemented");
                 break;
             case RASQAL_LITERAL_UDT:
-                val->type = VALUE_TYPE_UNKOWN;
+                val->type = Value::TYPE_UNKOWN;
                 val->typeUri = convertURI(lit->datatype);
-                val->addCleanFlag(VALUE_CLEAN_TYPE_URI);
+                val->addCleanFlag(Value::CLEAN_TYPE_URI);
                 break;
             default:
                 delete val;
@@ -367,13 +366,13 @@ Expression* Query::convertExpression(rasqal_expression *expr)
                 msg << "unknown rasqal literal type " << lit->type;
                 throw QueryParseException(msg.str());
             }
-            if(val->type != VALUE_TYPE_UNKOWN &&
-               val->type < VALUE_TYPE_FIRST_CUSTOM)
-                val->typeUri = VALUETYPE_URIS[val->type];
+            if(val->type != Value::TYPE_UNKOWN &&
+               val->type < Value::TYPE_FIRST_CUSTOM)
+                val->typeUri = Value::TYPE_URIS[val->type];
             if(val->lexical == NULL) {
                 val->lexical = new char[lit->string_len + 1];
                 strcpy(val->lexical, reinterpret_cast<const char*>(lit->string));
-                val->addCleanFlag(VALUE_CLEAN_LEXICAL);
+                val->addCleanFlag(Value::CLEAN_LEXICAL);
             }
             return new ValueExpression(this, val, true);
         }
@@ -472,39 +471,39 @@ VarVal Query::getVarVal(rasqal_literal* literal) throw(QueryParseException) {
     } else {
         const char *lexical = reinterpret_cast<const char*>(literal->string);
         const char *typeUri = NULL;
-        ValueType type;
+        Value::Type type;
         switch(literal->type) {
         case RASQAL_LITERAL_BLANK:
-            type = VALUE_TYPE_BLANK;
+            type = Value::TYPE_BLANK;
             break;
         case RASQAL_LITERAL_URI:
-            type = VALUE_TYPE_IRI;
+            type = Value::TYPE_IRI;
             lexical = reinterpret_cast<const char*>(raptor_uri_as_string(literal->value.uri));
             break;
         case RASQAL_LITERAL_STRING:
-            type = VALUE_TYPE_PLAIN_STRING;
+            type = Value::TYPE_PLAIN_STRING;
             break;
         case RASQAL_LITERAL_XSD_STRING:
-            type = VALUE_TYPE_TYPED_STRING;
+            type = Value::TYPE_TYPED_STRING;
             break;
         case RASQAL_LITERAL_BOOLEAN:
-            type = VALUE_TYPE_BOOLEAN;
+            type = Value::TYPE_BOOLEAN;
             break;
         case RASQAL_LITERAL_FLOAT:
-            type = VALUE_TYPE_FLOAT;
+            type = Value::TYPE_FLOAT;
             break;
         case RASQAL_LITERAL_DOUBLE:
-            type = VALUE_TYPE_DOUBLE;
+            type = Value::TYPE_DOUBLE;
             break;
         case RASQAL_LITERAL_DECIMAL:
-            type = VALUE_TYPE_DECIMAL;
+            type = Value::TYPE_DECIMAL;
             break;
         case RASQAL_LITERAL_DATETIME:
-            type = VALUE_TYPE_DATETIME;
+            type = Value::TYPE_DATETIME;
             break;
         case RASQAL_LITERAL_INTEGER: // what kind of integer precisely?
         case RASQAL_LITERAL_UDT:
-            type = VALUE_TYPE_UNKOWN;
+            type = Value::TYPE_UNKOWN;
             typeUri = reinterpret_cast<const char*>(raptor_uri_as_string(literal->datatype));
             break;
         default:

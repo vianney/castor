@@ -29,7 +29,7 @@ namespace castor {
 
 #include <string>
 #include <iostream>
-#include <rasqal.h>
+#include "librdfwrapper.h"
 #include "store.h"
 #include "solver/solver.h"
 

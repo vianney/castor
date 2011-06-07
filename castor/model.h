@@ -21,7 +21,6 @@
 #include <cstring>
 #include <string>
 #include <iostream>
-#include <rasqal.h>
 
 #include "xsddecimal.h"
 
@@ -30,91 +29,93 @@ namespace castor {
 class Store;
 
 /**
- * Value class ids
- */
-enum ValueClass {
-    VALUE_CLASS_BLANK,
-    VALUE_CLASS_IRI,
-    VALUE_CLASS_SIMPLE_LITERAL,
-    VALUE_CLASS_TYPED_STRING,
-    VALUE_CLASS_BOOLEAN,
-    VALUE_CLASS_NUMERIC,
-    VALUE_CLASS_DATETIME,
-    VALUE_CLASS_OTHER
-};
-
-/**
- * Standard value type ids. Higher ids means custom URI.
- */
-enum ValueType {
-    VALUE_TYPE_BLANK,         //!< blank node
-    VALUE_TYPE_IRI,           //!< IRI
-    VALUE_TYPE_PLAIN_STRING,  //!< plain literal
-    VALUE_TYPE_TYPED_STRING,  //!< xsd:string
-    VALUE_TYPE_BOOLEAN,       //!< xsd:boolean
-    VALUE_TYPE_INTEGER,       //!< xsd:integer
-    VALUE_TYPE_POSINTEGER,    //!< xsd:positiveInteger
-    VALUE_TYPE_NONPOSINTEGER, //!< xsd:nonPositiveInteger
-    VALUE_TYPE_NEGINTEGER,    //!< xsd:negativeInteger
-    VALUE_TYPE_NONNEGINTEGER, //!< xsd:nonNegativeInteger
-    VALUE_TYPE_BYTE,          //!< xsd:byte
-    VALUE_TYPE_SHORT,         //!< xsd:short
-    VALUE_TYPE_INT,           //!< xsd:int
-    VALUE_TYPE_LONG,          //!< xsd:long
-    VALUE_TYPE_UNSIGNEDBYTE,  //!< xsd:unsignedByte
-    VALUE_TYPE_UNSIGNEDSHORT, //!< xsd:unsignedShort
-    VALUE_TYPE_UNSIGNEDINT,   //!< xsd:unsignedInt
-    VALUE_TYPE_UNSIGNEDLONG,  //!< xsd:unsignedLong
-    VALUE_TYPE_FLOAT,         //!< xsd:float
-    VALUE_TYPE_DOUBLE,        //!< xsd:double
-    VALUE_TYPE_DECIMAL,       //!< xsd:decimal
-    VALUE_TYPE_DATETIME,      //!< xsd:dateTime
-
-    VALUE_TYPE_FIRST_CUSTOM,
-    VALUE_TYPE_UNKOWN = -1,
-
-    // internal values
-    VALUE_TYPE_FIRST_XSD = VALUE_TYPE_TYPED_STRING,
-    VALUE_TYPE_LAST_XSD = VALUE_TYPE_DATETIME,
-    VALUE_TYPE_FIRST_NUMERIC = VALUE_TYPE_INTEGER,
-    VALUE_TYPE_LAST_NUMERIC = VALUE_TYPE_DECIMAL,
-    VALUE_TYPE_FIRST_INTEGER = VALUE_TYPE_INTEGER,
-    VALUE_TYPE_LAST_INTEGER = VALUE_TYPE_UNSIGNEDLONG,
-    VALUE_TYPE_FIRST_FLOATING = VALUE_TYPE_FLOAT,
-    VALUE_TYPE_LAST_FLOATING = VALUE_TYPE_DOUBLE
-};
-
-/**
- * URIs corresponding to the value types
- */
-extern char *VALUETYPE_URIS[VALUE_TYPE_FIRST_CUSTOM];
-
-/**
- * Value cleanup flags
- */
-enum ValueCleanFlags {
-    /**
-     * Nothing to do
-     */
-    VALUE_CLEAN_NOTHING = 0,
-    /**
-     * Datatype URI should be freed
-     */
-    VALUE_CLEAN_TYPE_URI = 1,
-    /**
-     * Lexical form should be freed
-     */
-    VALUE_CLEAN_LEXICAL = 2,
-    /**
-     * Type-specific data should be freed
-     */
-    VALUE_CLEAN_DATA = 4
-};
-
-/**
  * An RDF value
  */
 struct Value {
+
+    /**
+     * Value class ids
+     */
+    enum Class {
+        CLASS_BLANK,
+        CLASS_IRI,
+        CLASS_SIMPLE_LITERAL,
+        CLASS_TYPED_STRING,
+        CLASS_BOOLEAN,
+        CLASS_NUMERIC,
+        CLASS_DATETIME,
+        CLASS_OTHER
+    };
+
+    /**
+     * Standard value type ids. Higher ids means custom URI.
+     */
+    enum Type {
+        TYPE_BLANK,         //!< blank node
+        TYPE_IRI,           //!< IRI
+        TYPE_PLAIN_STRING,  //!< plain literal
+        TYPE_TYPED_STRING,  //!< xsd:string
+        TYPE_BOOLEAN,       //!< xsd:boolean
+        TYPE_INTEGER,       //!< xsd:integer
+        TYPE_POSINTEGER,    //!< xsd:positiveInteger
+        TYPE_NONPOSINTEGER, //!< xsd:nonPositiveInteger
+        TYPE_NEGINTEGER,    //!< xsd:negativeInteger
+        TYPE_NONNEGINTEGER, //!< xsd:nonNegativeInteger
+        TYPE_BYTE,          //!< xsd:byte
+        TYPE_SHORT,         //!< xsd:short
+        TYPE_INT,           //!< xsd:int
+        TYPE_LONG,          //!< xsd:long
+        TYPE_UNSIGNEDBYTE,  //!< xsd:unsignedByte
+        TYPE_UNSIGNEDSHORT, //!< xsd:unsignedShort
+        TYPE_UNSIGNEDINT,   //!< xsd:unsignedInt
+        TYPE_UNSIGNEDLONG,  //!< xsd:unsignedLong
+        TYPE_FLOAT,         //!< xsd:float
+        TYPE_DOUBLE,        //!< xsd:double
+        TYPE_DECIMAL,       //!< xsd:decimal
+        TYPE_DATETIME,      //!< xsd:dateTime
+
+        TYPE_FIRST_CUSTOM,
+        TYPE_UNKOWN = -1,
+
+        // internal values
+        TYPE_FIRST_XSD = TYPE_TYPED_STRING,
+        TYPE_LAST_XSD = TYPE_DATETIME,
+        TYPE_FIRST_NUMERIC = TYPE_INTEGER,
+        TYPE_LAST_NUMERIC = TYPE_DECIMAL,
+        TYPE_FIRST_INTEGER = TYPE_INTEGER,
+        TYPE_LAST_INTEGER = TYPE_UNSIGNEDLONG,
+        TYPE_FIRST_FLOATING = TYPE_FLOAT,
+        TYPE_LAST_FLOATING = TYPE_DOUBLE
+    };
+
+    /**
+     * URIs corresponding to the value types
+     */
+    static char *TYPE_URIS[TYPE_FIRST_CUSTOM];
+
+    /**
+     * Value cleanup flags
+     */
+    enum CleanFlags {
+        /**
+         * Nothing to do
+         */
+        CLEAN_NOTHING = 0,
+        /**
+         * Datatype URI should be freed
+         */
+        CLEAN_TYPE_URI = 1,
+        /**
+         * Lexical form should be freed
+         */
+        CLEAN_LEXICAL = 2,
+        /**
+         * Type-specific data should be freed
+         */
+        CLEAN_DATA = 4
+    };
+
+
     /**
      * ID of the value, starting from 1. Or 0 if not part of the store.
      */
@@ -122,9 +123,9 @@ struct Value {
     /**
      * Datatype of the value. May be higher than the enumeration.
      */
-    ValueType type;
+    Type type;
     /**
-     * URI of the datatype. NULL if type <= VALUE_TYPE_PLAIN_STRING.
+     * URI of the datatype. NULL if type <= TYPE_PLAIN_STRING.
      */
     char* typeUri;
     /**
@@ -134,10 +135,10 @@ struct Value {
     /**
      * Cleanup flags
      */
-    ValueCleanFlags cleanup;
+    CleanFlags cleanup;
     union {
         /**
-         * Language tag. Unspecified if type is not VALUE_TYPE_PLAIN_STRING.
+         * Language tag. Unspecified if type is not TYPE_PLAIN_STRING.
          */
         struct {
             /**
@@ -156,27 +157,27 @@ struct Value {
         bool boolean;
         /**
          * Integer representation of the lexical. Unspecified if type not in
-         * range VALUE_TYPE_FIRST_INTEGER..VALUE_TYPE_LAST_INTEGER.
+         * range TYPE_FIRST_INTEGER..TYPE_LAST_INTEGER.
          */
         long integer;
         /**
          * Floating point representation of the lexical. Unspecified if type not
-         * in range VALUE_TYPE_FIRST_FLOATING..VALUE_TYPE_LAST_FLOATING.
+         * in range TYPE_FIRST_FLOATING..TYPE_LAST_FLOATING.
          */
         double floating;
         /**
          * xsd:decimal representation of the lexical. Unspecified if type is not
-         * VALUE_TYPE_DECIMAL.
+         * TYPE_DECIMAL.
          */
         XSDDecimal* decimal;
         /**
          * Date and time representation of the lexical. Unspecified if type is
-         * not VALUE_TYPE_DATETIME.
+         * not TYPE_DATETIME.
          */
         // TODO  DateTime* datetime;
     };
 
-    Value() { cleanup = VALUE_CLEAN_NOTHING; }
+    Value() { cleanup = CLEAN_NOTHING; }
     Value(const Value &val) { fillCopy(&val); }
     ~Value() { clean(); }
 
@@ -184,18 +185,18 @@ struct Value {
      * @param flag
      * @return whether the flag has been specified
      */
-    bool hasCleanFlag(ValueCleanFlags flag) const { return cleanup & flag; }
+    bool hasCleanFlag(CleanFlags flag) const { return cleanup & flag; }
     /**
      * Add a cleanup flag
      */
-    void addCleanFlag(ValueCleanFlags flag) {
-        cleanup = static_cast<ValueCleanFlags>(cleanup | flag);
+    void addCleanFlag(CleanFlags flag) {
+        cleanup = static_cast<CleanFlags>(cleanup | flag);
     }
     /**
      * Remove a cleanup flag
      */
-    void removeCleanFlag(ValueCleanFlags flag) {
-        cleanup = static_cast<ValueCleanFlags>(cleanup & ~flag);
+    void removeCleanFlag(CleanFlags flag) {
+        cleanup = static_cast<CleanFlags>(cleanup & ~flag);
     }
     /**
      * Clean this structure according to cleanup.
@@ -209,7 +210,7 @@ struct Value {
      */
     void fillCopy(const Value *value) {
         memcpy(this, value, sizeof(Value));
-        cleanup = VALUE_CLEAN_NOTHING;
+        cleanup = CLEAN_NOTHING;
     }
     /**
      * Make a xsd:boolean
@@ -260,19 +261,19 @@ struct Value {
     /**
      * @return whether this value is a blank node
      */
-    bool isBlank() const { return type == VALUE_TYPE_BLANK; }
+    bool isBlank() const { return type == TYPE_BLANK; }
     /**
      * @return whether this value is an IRI
      */
-    bool isIRI() const { return type == VALUE_TYPE_IRI; }
+    bool isIRI() const { return type == TYPE_IRI; }
     /**
      * @return whether this value is a literal
      */
-    bool isLiteral() const { return type >= VALUE_TYPE_PLAIN_STRING; }
+    bool isLiteral() const { return type >= TYPE_PLAIN_STRING; }
     /**
      * @return whether this value is a plain literal
      */
-    bool isPlain() const { return type == VALUE_TYPE_PLAIN_STRING; }
+    bool isPlain() const { return type == TYPE_PLAIN_STRING; }
     /**
      * @return whether this value is a simple literal
      */
@@ -280,47 +281,47 @@ struct Value {
     /**
      * @return whether this value is a typed string
      */
-    bool isXSDString() const { return type == VALUE_TYPE_TYPED_STRING; }
+    bool isXSDString() const { return type == TYPE_TYPED_STRING; }
     /**
      * @return whether this value is a boolean literal
      */
-    bool isBoolean() const { return type == VALUE_TYPE_BOOLEAN; }
+    bool isBoolean() const { return type == TYPE_BOOLEAN; }
     /**
      * @return whether this value is a numeric literal
      */
-    bool isNumeric() const { return type >= VALUE_TYPE_FIRST_NUMERIC &&
-                                    type <= VALUE_TYPE_LAST_NUMERIC; }
+    bool isNumeric() const { return type >= TYPE_FIRST_NUMERIC &&
+                                    type <= TYPE_LAST_NUMERIC; }
     /**
      * @return whether this value is an integer literal
      */
-    bool isInteger() const { return type >= VALUE_TYPE_FIRST_INTEGER &&
-                                    type <= VALUE_TYPE_LAST_INTEGER; }
+    bool isInteger() const { return type >= TYPE_FIRST_INTEGER &&
+                                    type <= TYPE_LAST_INTEGER; }
     /**
      * @return whether this value is a floating literal
      */
-    bool isFloating() const { return type >= VALUE_TYPE_FIRST_FLOATING &&
-                                     type <= VALUE_TYPE_LAST_FLOATING; }
+    bool isFloating() const { return type >= TYPE_FIRST_FLOATING &&
+                                     type <= TYPE_LAST_FLOATING; }
     /**
      * @return whether this value is a decimal literal
      */
-    bool isDecimal() const { return type == VALUE_TYPE_DECIMAL; }
+    bool isDecimal() const { return type == TYPE_DECIMAL; }
     /**
      * @return whether this value is a dateTime literal
      */
-    bool isDateTime() const { return type == VALUE_TYPE_DATETIME; }
+    bool isDateTime() const { return type == TYPE_DATETIME; }
 
     /**
      * @return the class of this value
      */
-    ValueClass getClass() const {
-        if(isBlank()) return VALUE_CLASS_BLANK;
-        else if(isIRI()) return VALUE_CLASS_IRI;
-        else if(isSimple()) return VALUE_CLASS_SIMPLE_LITERAL;
-        else if(isXSDString()) return VALUE_CLASS_TYPED_STRING;
-        else if(isBoolean()) return VALUE_CLASS_BOOLEAN;
-        else if(isNumeric()) return VALUE_CLASS_NUMERIC;
-        else if(isDateTime()) return VALUE_CLASS_DATETIME;
-        else return VALUE_CLASS_OTHER;
+    Class getClass() const {
+        if(isBlank()) return CLASS_BLANK;
+        else if(isIRI()) return CLASS_IRI;
+        else if(isSimple()) return CLASS_SIMPLE_LITERAL;
+        else if(isXSDString()) return CLASS_TYPED_STRING;
+        else if(isBoolean()) return CLASS_BOOLEAN;
+        else if(isNumeric()) return CLASS_NUMERIC;
+        else if(isDateTime()) return CLASS_DATETIME;
+        else return CLASS_OTHER;
     }
 
     /**
@@ -356,19 +357,20 @@ struct Value {
      * @return a string representation of this value
      */
     std::string getString() const;
+
+
+    /**
+     * Apply numeric type promotion rules to make v1 and v2 the same type to
+     * evaluate arithmetic operators.
+     *
+     * @param v1 first numeric value
+     * @param v2 second numeric value
+     */
+    static void promoteNumericType(Value &v1, Value &v2);
 };
 
 std::ostream& operator<<(std::ostream &out, const Value &val);
 std::ostream& operator<<(std::ostream &out, const Value *val);
-
-/**
- * Apply numeric type promotion rules to make v1 and v2 the same type to
- * evaluate arithmetic operators.
- *
- * @param v1 first numeric value
- * @param v2 second numeric value
- */
-void promoteNumericType(Value &v1, Value &v2);
 
 /**
  * Small statement structure containing ids.

@@ -84,7 +84,7 @@ RegExExpression::~RegExExpression() {
     delete arg3;
 }
 
-CastExpression::CastExpression(ValueType destination, Expression *arg) :
+CastExpression::CastExpression(Value::Type destination, Expression *arg) :
         Expression(arg->getQuery()), destination(destination), arg(arg) {
     vars = arg->getVars();
 }
@@ -184,8 +184,8 @@ bool StrExpression::evaluate(Value &result) {
     if(!arg->evaluate(result) || result.isBlank())
         return false;
     result.ensureLexical();
-    bool freeLex = result.hasCleanFlag(VALUE_CLEAN_LEXICAL);
-    result.removeCleanFlag(VALUE_CLEAN_LEXICAL);
+    bool freeLex = result.hasCleanFlag(Value::CLEAN_LEXICAL);
+    result.removeCleanFlag(Value::CLEAN_LEXICAL);
     result.fillSimpleLiteral(result.lexical, freeLex);
     return true;
 }
@@ -196,8 +196,8 @@ bool LangExpression::evaluate(Value &result) {
     char *lang = result.languageTag;
     if(lang == NULL)
         lang = const_cast<char*>("");
-    bool freeLex = result.hasCleanFlag(VALUE_CLEAN_DATA);
-    result.removeCleanFlag(VALUE_CLEAN_DATA);
+    bool freeLex = result.hasCleanFlag(Value::CLEAN_DATA);
+    result.removeCleanFlag(Value::CLEAN_DATA);
     result.fillSimpleLiteral(lang, freeLex);
     return true;
 }
@@ -208,12 +208,12 @@ bool DatatypeExpression::evaluate(Value &result) {
     if(result.isPlain()) {
         if(result.language != 0)
             return false;
-        result.fillSimpleLiteral(VALUETYPE_URIS[VALUE_TYPE_PLAIN_STRING],
+        result.fillSimpleLiteral(Value::TYPE_URIS[Value::TYPE_PLAIN_STRING],
                                  false);
         return true;
     } else {
-        bool freeLex = result.hasCleanFlag(VALUE_CLEAN_TYPE_URI);
-        result.removeCleanFlag(VALUE_CLEAN_TYPE_URI);
+        bool freeLex = result.hasCleanFlag(Value::CLEAN_TYPE_URI);
+        result.removeCleanFlag(Value::CLEAN_TYPE_URI);
         result.fillSimpleLiteral(result.typeUri, freeLex);
         return true;
     }
@@ -338,7 +338,7 @@ bool StarExpression::evaluate(Value &result) {
     if(!arg1->evaluate(result) || !result.isNumeric() ||
        !arg2->evaluate(right) || !right.isNumeric())
         return false;
-    promoteNumericType(result, right);
+    Value::promoteNumericType(result, right);
     if(right.isInteger())
         result.fillInteger(result.integer * right.integer);
     else if(right.isDecimal())
@@ -353,7 +353,7 @@ bool SlashExpression::evaluate(Value &result) {
     if(!arg1->evaluate(result) || !result.isNumeric() ||
        !arg2->evaluate(right) || !right.isNumeric())
         return false;
-    promoteNumericType(result, right);
+    Value::promoteNumericType(result, right);
     if(right.isInteger()) {
         XSDDecimal d1(result.integer), d2(result.integer);
         result.fillDecimal(d1.divide(d2));
@@ -370,7 +370,7 @@ bool PlusExpression::evaluate(Value &result) {
     if(!arg1->evaluate(result) || !result.isNumeric() ||
        !arg2->evaluate(right) || !right.isNumeric())
         return false;
-    promoteNumericType(result, right);
+    Value::promoteNumericType(result, right);
     if(right.isInteger())
         result.fillInteger(result.integer + right.integer);
     else if(right.isDecimal())
@@ -385,7 +385,7 @@ bool MinusExpression::evaluate(Value &result) {
     if(!arg1->evaluate(result) || !result.isNumeric() ||
        !arg2->evaluate(right) || !right.isNumeric())
         return false;
-    promoteNumericType(result, right);
+    Value::promoteNumericType(result, right);
     if(right.isInteger())
         result.fillInteger(result.integer - right.integer);
     else if(right.isDecimal())

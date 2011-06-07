@@ -22,7 +22,8 @@
 namespace castor {
 
 Solver::Solver() {
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+    for(Constraint::Priority p = Constraint::PRIOR_FIRST;
+        p <= Constraint::PRIOR_LAST; ++p)
         propagQueue[p] = NULL;
     current = NULL;
     tsCurrent = 0;
@@ -66,7 +67,7 @@ void Solver::enqueue(std::vector<Constraint*> &constraints) {
         if(!c->done && c->nextPropag == CSTR_UNQUEUED &&
                 ((c->parent == NULL && c->timestamp <= tsCurrent) ||
                  (current != NULL && c->parent == current))) {
-            ConstraintPriority p = c->getPriority();
+            Constraint::Priority p = c->getPriority();
             c->nextPropag = propagQueue[p];
             propagQueue[p] = c;
         }
@@ -110,7 +111,8 @@ bool Solver::postStatic() {
 
 bool Solver::post(std::vector<Constraint *> *constraints) {
     // mark all constraints as propagating or unqueued if they are stateless
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+    for(Constraint::Priority p = Constraint::PRIOR_FIRST;
+        p <= Constraint::PRIOR_LAST; ++p) {
         for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
             end = constraints[p].end(); it != end; ++it) {
             Constraint *c = *it;
@@ -119,7 +121,8 @@ bool Solver::post(std::vector<Constraint *> *constraints) {
             c->init();
         }
     }
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+    for(Constraint::Priority p = Constraint::PRIOR_FIRST;
+        p <= Constraint::PRIOR_LAST; ++p) {
         // mark constraints as propagating
         for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
             end = constraints[p].end(); it != end; ++it)
@@ -145,7 +148,8 @@ bool Solver::post(std::vector<Constraint *> *constraints) {
 }
 
 bool Solver::propagate() {
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+    for(Constraint::Priority p = Constraint::PRIOR_FIRST;
+        p <= Constraint::PRIOR_LAST; ++p) {
         if(propagQueue[p] != NULL) {
             Constraint *c = propagQueue[p];
             propagQueue[p] = c->nextPropag;
@@ -162,7 +166,8 @@ bool Solver::propagate() {
 }
 
 void Solver::clearQueue() {
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p) {
+    for(Constraint::Priority p = Constraint::PRIOR_FIRST;
+        p <= Constraint::PRIOR_LAST; ++p) {
         while(propagQueue[p]) {
             Constraint *c = propagQueue[p];
             propagQueue[p] = c->nextPropag;

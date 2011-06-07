@@ -28,9 +28,8 @@
 #include <unistd.h>
 
 #include <sqlite3.h>
-#include <raptor.h>
 
-#include "librdf.h"
+#include "librdfwrapper.h"
 #include "model.h"
 
 using namespace std;
@@ -42,20 +41,20 @@ using namespace castor;
 #define XSD_PREFIX "http://www.w3.org/2001/XMLSchema#"
 #define XSD_PREFIX_LEN (sizeof(XSD_PREFIX) - 1)
 
-ValueType get_type(char *uri) {
+Value::Type get_type(char *uri) {
     if(uri == NULL || uri[0] == '\0')
-        return VALUE_TYPE_PLAIN_STRING;
+        return Value::TYPE_PLAIN_STRING;
 
     if(strncmp(uri, XSD_PREFIX, XSD_PREFIX_LEN) != 0)
-        return VALUE_TYPE_UNKOWN;
+        return Value::TYPE_UNKOWN;
 
     char *fragment = &uri[XSD_PREFIX_LEN];
-    for(ValueType t = VALUE_TYPE_FIRST_XSD; t <= VALUE_TYPE_LAST_XSD;
-        t = (ValueType)(t+1)) {
-        if(strcmp(fragment, &VALUETYPE_URIS[t][XSD_PREFIX_LEN]) == 0)
+    for(Value::Type t = Value::TYPE_FIRST_XSD; t <= Value::TYPE_LAST_XSD;
+        t = static_cast<Value::Type>(t+1)) {
+        if(strcmp(fragment, &Value::TYPE_URIS[t][XSD_PREFIX_LEN]) == 0)
             return t;
     }
-    return VALUE_TYPE_UNKOWN;
+    return Value::TYPE_UNKOWN;
 }
 
 char* convertURI(raptor_uri *uri) {
@@ -126,14 +125,14 @@ public:
         if(sqlite3_bind_null(stmt, col) != SQLITE_OK)
             throw SqliteException(stmt);
     }
-    void bindVal(int col, ValueType type, const char *lex) throw(SqliteException) {
-        if(type == VALUE_TYPE_BOOLEAN) {
+    void bindVal(int col, Value::Type type, const char *lex) throw(SqliteException) {
+        if(type == Value::TYPE_BOOLEAN) {
             bindInt(col, strcmp(lex, "true") == 0 || strcmp(lex, "1") == 0 ? 1 : 0);
-        } else if(type >= VALUE_TYPE_FIRST_INTEGER &&
-                  type <= VALUE_TYPE_LAST_INTEGER) {
+        } else if(type >= Value::TYPE_FIRST_INTEGER &&
+                  type <= Value::TYPE_LAST_INTEGER) {
             bindInt(col, atoi(lex));
-        } else if(type >= VALUE_TYPE_FIRST_FLOATING &&
-                  type <= VALUE_TYPE_LAST_FLOATING) {
+        } else if(type >= Value::TYPE_FIRST_FLOATING &&
+                  type <= Value::TYPE_LAST_FLOATING) {
             bindFloat(col, atof(lex));
         } else {
             bindNull(col);
@@ -172,7 +171,7 @@ public:
 
 class RDFParseHandler {
 public:
-    virtual ~RDFParseHandler() {};
+    virtual ~RDFParseHandler() {}
     virtual void parseTriple(raptor_statement* triple) = 0;
 };
 
@@ -263,14 +262,14 @@ public:
 
     int getCount() { return values.size(); }
 
-    ValueType getDatatypeId(const char* uri) {
+    Value::Type getDatatypeId(const char* uri) {
         sqlInsertDatatype.reset();
         sqlInsertDatatype.bindStr(1, uri);
         sqlInsertDatatype.next();
         sqlDatatype.reset();
         sqlDatatype.bindStr(1, uri);
         assert(sqlDatatype.next());
-        return static_cast<ValueType>(sqlDatatype.getInt(0));
+        return static_cast<Value::Type>(sqlDatatype.getInt(0));
     }
 
     int getLanguageId(const char* tag) {
@@ -320,11 +319,11 @@ private:
         val->id = 0;
         switch(term->type) {
         case RAPTOR_TERM_TYPE_BLANK:
-            val->type = VALUE_TYPE_BLANK;
+            val->type = Value::TYPE_BLANK;
             val->typeUri = NULL;
             val->lexical = new char[term->value.blank.string_len + 1];
             strcpy(val->lexical, reinterpret_cast<char*>(term->value.blank.string));
-            val->addCleanFlag(VALUE_CLEAN_LEXICAL);
+            val->addCleanFlag(Value::CLEAN_LEXICAL);
             break;
         case RAPTOR_TERM_TYPE_URI:
             val->fillIRI(convertURI(term->value.uri), true);
@@ -332,9 +331,9 @@ private:
         case RAPTOR_TERM_TYPE_LITERAL:
             val->lexical = new char[term->value.literal.string_len + 1];
             strcpy(val->lexical, reinterpret_cast<char*>(term->value.literal.string));
-            val->addCleanFlag(VALUE_CLEAN_LEXICAL);
+            val->addCleanFlag(Value::CLEAN_LEXICAL);
             if(term->value.literal.datatype == NULL) {
-                val->type = VALUE_TYPE_PLAIN_STRING;
+                val->type = Value::TYPE_PLAIN_STRING;
                 val->typeUri = NULL;
                 if(term->value.literal.language == NULL ||
                    term->value.literal.language_len == 0) {
@@ -343,18 +342,18 @@ private:
                 } else {
                     val->languageTag = new char[term->value.literal.language_len + 1];
                     strcpy(val->languageTag, reinterpret_cast<char*>(term->value.literal.language));
-                    val->addCleanFlag(VALUE_CLEAN_DATA);
+                    val->addCleanFlag(Value::CLEAN_DATA);
                     val->language = getLanguageId(val->languageTag);
                 }
             } else {
                 typeUri = convertURI(term->value.literal.datatype);
                 val->type = get_type(typeUri);
-                if(val->type == VALUE_TYPE_UNKOWN) {
+                if(val->type == Value::TYPE_UNKOWN) {
                     val->typeUri = typeUri;
-                    val->addCleanFlag(VALUE_CLEAN_TYPE_URI);
+                    val->addCleanFlag(Value::CLEAN_TYPE_URI);
                     val->type = getDatatypeId(val->typeUri);
                 } else {
-                    val->typeUri = VALUETYPE_URIS[val->type];
+                    val->typeUri = Value::TYPE_URIS[val->type];
                     delete typeUri;
                 }
                 if(val->isBoolean()) {
@@ -366,7 +365,7 @@ private:
                     val->floating = atof(val->lexical);
                 } else if(val->isDecimal()) {
                     val->decimal = new XSDDecimal(val->lexical);
-                    val->addCleanFlag(VALUE_CLEAN_DATA);
+                    val->addCleanFlag(Value::CLEAN_DATA);
                 } else if(val->isDateTime()) {
                     // TODO
                 }
@@ -428,15 +427,15 @@ public:
             cerr << '.';
 
         // Subject value
-        ValueType ts;
+        Value::Type ts;
         char *lexs;
         switch(triple->subject->type) {
         case RAPTOR_TERM_TYPE_BLANK:
-            ts = VALUE_TYPE_BLANK;
+            ts = Value::TYPE_BLANK;
             lexs = reinterpret_cast<char*>(triple->subject->value.blank.string);
             break;
         case RAPTOR_TERM_TYPE_URI:
-            ts = VALUE_TYPE_IRI;
+            ts = Value::TYPE_IRI;
             lexs = reinterpret_cast<char*>(raptor_uri_as_string(triple->subject->value.uri));
             break;
         default:
@@ -449,18 +448,18 @@ public:
         char *lexp = reinterpret_cast<char*>(raptor_uri_as_string(triple->predicate->value.uri));
 
         // Object value and statement
-        ValueType to;
+        Value::Type to;
         char *typeUri = NULL;
         char *lexo;
         int lang = 0;
         char *langTag = NULL;
         switch(triple->object->type) {
         case RAPTOR_TERM_TYPE_BLANK:
-            to = VALUE_TYPE_BLANK;
+            to = Value::TYPE_BLANK;
             lexo = reinterpret_cast<char*>(triple->object->value.blank.string);
             break;
         case RAPTOR_TERM_TYPE_URI:
-            to = VALUE_TYPE_IRI;
+            to = Value::TYPE_IRI;
             lexo = reinterpret_cast<char*>(raptor_uri_as_string(triple->object->value.uri));
             break;
         case RAPTOR_TERM_TYPE_LITERAL:
@@ -478,12 +477,12 @@ public:
             throw ConvertException("Unknown object type", triple->object->type);
         }
 
-        if(to == VALUE_TYPE_UNKOWN) {
+        if(to == Value::TYPE_UNKOWN) {
             sqlInsertStmtUnkTypeLang.reset();
             sqlInsertStmtUnkTypeLang.bindStr(1, lexs);
             sqlInsertStmtUnkTypeLang.bindInt(2, ts);
             sqlInsertStmtUnkTypeLang.bindStr(3, lexp);
-            sqlInsertStmtUnkTypeLang.bindInt(4, VALUE_TYPE_IRI);
+            sqlInsertStmtUnkTypeLang.bindInt(4, Value::TYPE_IRI);
             sqlInsertStmtUnkTypeLang.bindStr(5, lexo);
             sqlInsertStmtUnkTypeLang.bindStr(6, typeUri);
             sqlInsertStmtUnkTypeLang.bindStr(7, langTag);
@@ -493,7 +492,7 @@ public:
             sqlInsertStmt.bindStr(1, lexs);
             sqlInsertStmt.bindInt(2, ts);
             sqlInsertStmt.bindStr(3, lexp);
-            sqlInsertStmt.bindInt(4, VALUE_TYPE_IRI);
+            sqlInsertStmt.bindInt(4, Value::TYPE_IRI);
             sqlInsertStmt.bindStr(5, lexo);
             sqlInsertStmt.bindInt(6, to);
             sqlInsertStmt.bindInt(7, lang);
@@ -503,7 +502,7 @@ public:
             sqlInsertStmtUnkLang.bindStr(1, lexs);
             sqlInsertStmtUnkLang.bindInt(2, ts);
             sqlInsertStmtUnkLang.bindStr(3, lexp);
-            sqlInsertStmtUnkLang.bindInt(4, VALUE_TYPE_IRI);
+            sqlInsertStmtUnkLang.bindInt(4, Value::TYPE_IRI);
             sqlInsertStmtUnkLang.bindStr(5, lexo);
             sqlInsertStmtUnkLang.bindInt(6, to);
             sqlInsertStmtUnkLang.bindStr(7, langTag);
@@ -596,14 +595,14 @@ int main(int argc, char* argv[]) {
 
         SqliteStatement stmt(&db,
                              "INSERT INTO datatypes (id, uri) VALUES (?, ?)");
-        for(ValueType t = VALUE_TYPE_BLANK; t < VALUE_TYPE_FIRST_CUSTOM;
-            t = (ValueType)(t+1)) {
+        for(Value::Type t = Value::TYPE_BLANK; t < Value::TYPE_FIRST_CUSTOM;
+            t = static_cast<Value::Type>(t+1)) {
             stmt.reset();
             stmt.bindInt(1, t);
-            if(VALUETYPE_URIS[t] == NULL)
+            if(Value::TYPE_URIS[t] == NULL)
                 stmt.bindNull(2);
             else
-                stmt.bindStr(2, VALUETYPE_URIS[t]);
+                stmt.bindStr(2, Value::TYPE_URIS[t]);
             stmt.next();
         }
     }

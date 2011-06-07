@@ -80,7 +80,8 @@ Subtree::Subtree(Solver *solver, VarInt **vars, int nbVars,
 
 Subtree::~Subtree() {
     // delete constraints
-    for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+    for(Constraint::Priority p = Constraint::PRIOR_FIRST;
+        p <= Constraint::PRIOR_LAST; ++p)
         for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
             end = constraints[p].end(); it != end; ++it)
             delete *it;
@@ -222,7 +223,8 @@ VarInt* Subtree::backtrack() {
     // clear propagation queue
     solver->clearQueue();
     if(chkp->x) {
-        for(ConstraintPriority p = CSTR_PRIOR_FIRST; p <= CSTR_PRIOR_LAST; ++p)
+        for(Constraint::Priority p = Constraint::PRIOR_FIRST;
+            p <= Constraint::PRIOR_LAST; ++p)
             fireRestore(constraints[p]);
         // remove old (failed) choice
         if(!chkp->x->remove(chkp->v)) {

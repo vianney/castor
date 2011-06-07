@@ -81,7 +81,7 @@ public:
      * @return the id of the value or 0 if not found
      * @throws StoreException on database error
      */
-    int getValueId(const ValueType type, const char* typeUri,
+    int getValueId(const Value::Type type, const char* typeUri,
                    const char* lexical, const char* language)
             throw(StoreException);
 

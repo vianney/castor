@@ -22,7 +22,7 @@ namespace castor {
 ////////////////////////////////////////////////////////////////////////////////
 
 StatementConstraint::StatementConstraint(Query *query, StatementPattern &stmt) :
-        StatelessConstraint(CSTR_PRIOR_LOW), store(query->getStore()), stmt(stmt) {
+        StatelessConstraint(PRIOR_LOW), store(query->getStore()), stmt(stmt) {
 #define REGISTER(part) \
     if(stmt.part.isVariable()) { \
         part = query->getVariable(stmt.part.getVariableId())->getCPVariable(); \
@@ -160,7 +160,7 @@ bool FilterConstraint::propagate() {
 ////////////////////////////////////////////////////////////////////////////////
 
 DiffConstraint::DiffConstraint(Query *query, VarVal v1, VarVal v2) :
-        StatelessConstraint(CSTR_PRIOR_HIGH), query(query), v1(v1), v2(v2) {
+        StatelessConstraint(PRIOR_HIGH), query(query), v1(v1), v2(v2) {
     x1 = v1.isVariable() ?
                 query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
     x2 = v2.isVariable() ?
@@ -205,7 +205,7 @@ bool DiffConstraint::propagate() {
 ////////////////////////////////////////////////////////////////////////////////
 
 EqConstraint::EqConstraint(Query *query, VarVal v1, VarVal v2) :
-        Constraint(CSTR_PRIOR_HIGH), query(query), v1(v1), v2(v2) {
+        Constraint(PRIOR_HIGH), query(query), v1(v1), v2(v2) {
     x1 = v1.isVariable() ?
                 query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
     x2 = v2.isVariable() ?
@@ -287,7 +287,7 @@ bool EqConstraint::propagate() {
 ////////////////////////////////////////////////////////////////////////////////
 
 LessConstraint::LessConstraint(Query *query, VarVal v1, VarVal v2) :
-        StatelessConstraint(CSTR_PRIOR_HIGH), query(query), v1(v1), v2(v2) {
+        StatelessConstraint(PRIOR_HIGH), query(query), v1(v1), v2(v2) {
     x1 = v1.isVariable() ?
                 query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
     x2 = v2.isVariable() ?

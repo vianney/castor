@@ -16,7 +16,7 @@
 # along with Castor; if not, see <http://www.gnu.org/licenses/>.
 cmake_minimum_required(VERSION 2.6)
 project(Castor)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
 find_package(Raptor2 REQUIRED)
 find_package(Rasqal REQUIRED)

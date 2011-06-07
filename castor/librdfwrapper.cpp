@@ -16,7 +16,7 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "librdf.h"
+#include "librdfwrapper.h"
 
 namespace castor {
 namespace librdf {

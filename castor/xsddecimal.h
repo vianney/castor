@@ -18,7 +18,7 @@
 #ifndef CASTOR_XSDDECIMAL_H
 #define CASTOR_XSDDECIMAL_H
 
-#include "librdf.h"
+#include "librdfwrapper.h"
 
 namespace castor {
 

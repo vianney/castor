@@ -24,45 +24,42 @@ class Solver;
 class Subtree;
 
 /**
- * Constraint propagation priority
- */
-enum ConstraintPriority {
-    /**
-     * High priority, will be propagated first. Use this for value-based
-     * constraints or very quick constraints.
-     */
-    CSTR_PRIOR_HIGH,
-    /**
-     * Medium priority. Use this for bound consistent constraints.
-     */
-    CSTR_PRIOR_MEDIUM,
-    /**
-     * Low priority. Use this for heavy constraints that should be called after
-     * as many values as possible have been removed.
-     */
-    CSTR_PRIOR_LOW,
-
-    CSTR_PRIOR_FIRST = CSTR_PRIOR_HIGH,
-    CSTR_PRIOR_LAST = CSTR_PRIOR_LOW
-};
-const int CSTR_PRIOR_COUNT = CSTR_PRIOR_LAST - CSTR_PRIOR_FIRST + 1;
-inline ConstraintPriority& operator++(ConstraintPriority &p) {
-    return p = (ConstraintPriority)(p + 1);
-}
-
-/**
  * Constraint base class
  */
 class Constraint {
 public:
-    Constraint(ConstraintPriority priority = CSTR_PRIOR_MEDIUM) :
+    /**
+     * Constraint propagation priority
+     */
+    enum Priority {
+        /**
+         * High priority, will be propagated first. Use this for value-based
+         * constraints or very quick constraints.
+         */
+        PRIOR_HIGH,
+        /**
+         * Medium priority. Use this for bound consistent constraints.
+         */
+        PRIOR_MEDIUM,
+        /**
+         * Low priority. Use this for heavy constraints that should be called after
+         * as many values as possible have been removed.
+         */
+        PRIOR_LOW,
+
+        PRIOR_FIRST = PRIOR_HIGH,
+        PRIOR_LAST = PRIOR_LOW
+    };
+    static const int PRIOR_COUNT = PRIOR_LAST - PRIOR_FIRST + 1;
+
+    Constraint(Priority priority = PRIOR_MEDIUM) :
             priority(priority) {}
     virtual ~Constraint() {}
 
     /**
      * Priority of this constraint.
      */
-    ConstraintPriority getPriority() { return priority; }
+    Priority getPriority() { return priority; }
 
     /**
      * Constraint (re)initialization. Called when parent subtree is activated
@@ -113,7 +110,7 @@ private:
     /**
      * Constraint priority. The priority is constant for a constraint.
      */
-    ConstraintPriority priority;
+    Priority priority;
     /**
      * Internal use by solver.
      * Next constraint in propagation queue.
@@ -128,6 +125,10 @@ private:
     friend class Subtree;
 };
 
+static inline Constraint::Priority& operator++(Constraint::Priority &p) {
+    return p = static_cast<Constraint::Priority>(p + 1);
+}
+
 /**
  * A stateless constraint does not do anything in his post method apart from
  * calling propagate. As such, it can react to variable events before being
@@ -140,7 +141,7 @@ class StatelessConstraint : public Constraint {
     bool posted; //!< true if initial propagation has been performed
 public:
     StatelessConstraint() : Constraint() {}
-    StatelessConstraint(ConstraintPriority priority) : Constraint(priority) {}
+    StatelessConstraint(Priority priority) : Constraint(priority) {}
 
     void init() { Constraint::init(); posted = false; }
     bool post() { return posted ? true : propagate(); }

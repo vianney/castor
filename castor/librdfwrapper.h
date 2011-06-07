@@ -18,7 +18,7 @@
 #ifndef CASTOR_LIBRDF_H
 #define CASTOR_LIBRDF_H
 
-#include <raptor.h>
+#include <raptor2.h>
 #include <rasqal.h>
 
 namespace castor {
