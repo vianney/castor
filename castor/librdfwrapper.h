@@ -61,7 +61,7 @@ class Sequence {
 public:
     Sequence(raptor_sequence *seq = NULL) : seq(seq) {}
     Sequence& operator=(raptor_sequence *s) { seq = s; return *this; }
-    int size() { return raptor_sequence_size(seq); }
+    int size() { return seq ? raptor_sequence_size(seq) : 0; }
     T* operator[](int i) {
         return reinterpret_cast<T*>(raptor_sequence_get_at(seq, i));
     }
