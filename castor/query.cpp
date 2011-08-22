@@ -152,6 +152,14 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
         pattern = pattern->optimize();
         pattern->init();
 
+        // DISTINCT constraint
+        if(isDistinct()) {
+            distinctCstr = new DistinctConstraint(this);
+            solver.add(distinctCstr);
+        } else {
+            distinctCstr = NULL;
+        }
+
         // cleanup
         rasqal_free_query(query);
 
@@ -588,6 +596,8 @@ bool Query::next() {
         return false;
     for(int i = 0; i < nbVars; i++)
         vars[i].setValueFromCP();
+    if(distinctCstr != NULL)
+        distinctCstr->addSolution();
     nbSols++;
     return true;
 }
@@ -595,6 +605,8 @@ bool Query::next() {
 void Query::reset() {
     pattern->discard();
     nbSols = 0;
+    if(distinctCstr != NULL)
+        distinctCstr->reset();
 }
 
 }

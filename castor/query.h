@@ -25,6 +25,7 @@ namespace castor {
     class Query;
     class Pattern;
     class Expression;
+    class DistinctConstraint;
 }
 
 #include <string>
@@ -32,6 +33,7 @@ namespace castor {
 #include "librdfwrapper.h"
 #include "store.h"
 #include "solver/solver.h"
+#include "distinct.h"
 
 namespace castor {
 
@@ -246,6 +248,10 @@ private:
      * Should all solutions be distinct?
      */
     bool distinct;
+    /**
+     * Static distinct constraint or NULL if not needed.
+     */
+    DistinctConstraint *distinctCstr;
     /**
      * Limit of the number of solutions to return. -1 to return all.
      */

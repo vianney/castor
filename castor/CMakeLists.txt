@@ -37,6 +37,8 @@ set(CASTOR_SRCS
     query.cpp
     constraints.h
     constraints.cpp
+    distinct.h
+    distinct.cpp
 )
 
 add_library(libcastor ${CASTOR_SRCS})
