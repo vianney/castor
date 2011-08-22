@@ -16,6 +16,7 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <cassert>
 #include <sstream>
 #include "query.h"
 
@@ -42,22 +43,37 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
                                 NULL))
             throw QueryParseException("unable to parse query");
 
-        // variables
-        Sequence<rasqal_variable> seq;
-        switch(rasqal_query_get_verb(query)) {
+        // DISTINCT, LIMIT and OFFSET (+ check for unsupported verbs)
+        rasqal_query_verb verb = rasqal_query_get_verb(query);
+        switch(verb) {
         case RASQAL_QUERY_VERB_SELECT:
+            distinct = rasqal_query_get_distinct(query); // ignores mode
             limit = rasqal_query_get_limit(query);
-            seq = rasqal_query_get_bound_variable_sequence(query);
-            nbRequestedVars = seq.size();
+            offset = rasqal_query_get_offset(query);
             break;
         case RASQAL_QUERY_VERB_ASK:
+            distinct = false;
             limit = 1;
-            nbRequestedVars = 0;
+            offset = 0;
             break;
         default:
             std::ostringstream msg;
             msg << "unsupported rasqal verb " << rasqal_query_get_verb(query);
             throw QueryParseException(msg.str());
+        }
+
+        // variables
+        Sequence<rasqal_variable> seq;
+        switch(verb) {
+        case RASQAL_QUERY_VERB_SELECT:
+            seq = rasqal_query_get_bound_variable_sequence(query);
+            nbRequestedVars = seq.size();
+            break;
+        case RASQAL_QUERY_VERB_ASK:
+            nbRequestedVars = 0;
+            break;
+        default:
+            assert(false); // should not happen
         }
         Sequence<rasqal_variable> seqVars =
                 rasqal_query_get_all_variable_sequence(query);
@@ -97,6 +113,40 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
             i++;
         }
 
+        // ORDERY BY expressions
+        if(verb == RASQAL_QUERY_VERB_SELECT) {
+            Sequence<rasqal_expression> seqOrder =
+                    rasqal_query_get_order_conditions_sequence(query);
+            nbOrder = seqOrder.size();
+            if(nbOrder > 0) {
+                order = new Expression*[nbOrder];
+                orderDescending = new bool[nbOrder];
+                for(int i = 0; i < nbOrder; i++) {
+                    rasqal_expression *expr = seqOrder[i];
+                    switch(expr->op) {
+                    case RASQAL_EXPR_ORDER_COND_ASC:
+                        orderDescending[i] = false;
+                        expr = expr->arg1;
+                        break;
+                    case RASQAL_EXPR_ORDER_COND_DESC:
+                        orderDescending[i] = true;
+                        expr = expr->arg1;
+                        break;
+                    default:
+                        orderDescending[i] = false;
+                    }
+                    order[i] = convertExpression(expr);
+                }
+            } else {
+                order = NULL;
+                orderDescending = NULL;
+            }
+        } else {
+            nbOrder = 0;
+            order = NULL;
+            orderDescending = NULL;
+        }
+
         // graph pattern
         pattern = convertPattern(rasqal_query_get_query_graph_pattern(query));
         pattern = pattern->optimize();
@@ -118,6 +168,12 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
 }
 
 Query::~Query() {
+    if(nbOrder > 0) {
+        for(int i = 0; i < nbOrder; i++)
+            delete order[i];
+        delete [] order;
+        delete [] orderDescending;
+    }
     delete [] vars;
     delete pattern;
 }

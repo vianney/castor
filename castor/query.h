@@ -139,7 +139,7 @@ public:
      */
     int getRequestedCount() const { return nbRequestedVars; }
     /**
-     * @param id id of a variable (within 0..getVariablesCount())
+     * @param id id of a variable (within 0..getVariablesCount()-1)
      * @return the variable with identifier id
      */
     Variable* getVariable(int id) const { return &vars[id]; }
@@ -152,10 +152,34 @@ public:
      */
     Pattern* getPattern() const { return pattern; }
     /**
+     * @return whether all returned solutions are distinct
+     */
+    bool isDistinct() const { return distinct; }
+    /**
      * @return the limit on the number of solutions to return or
      *         -1 to return all
      */
     int getLimit() const { return limit; }
+    /**
+     * @return the number of ignored solutions in the beginning
+     */
+    int getOffset() const { return offset; }
+
+    /**
+     * @return the number of ORDER BY expressions.
+     */
+    int getOrderCount() const { return nbOrder; }
+    /**
+     * @param i index of an ORDER BY expression (within 0..getOrderCount()-1)
+     * @return the ORDERY BY expression at index i
+     */
+    Expression* getOrder(int i) const { return order[i]; }
+    /**
+     * @param i index of an ORDER BY expression (within 0..getOrderCount()-1)
+     * @return whether ORDERY BY expression at index i should be in descending
+     *         direction
+     */
+    bool isOrderDescending(int i) const { return orderDescending[i]; }
 
     /**
      * @return the number of solutions found so far
@@ -219,9 +243,29 @@ private:
      */
     Pattern *pattern;
     /**
+     * Should all solutions be distinct?
+     */
+    bool distinct;
+    /**
      * Limit of the number of solutions to return. -1 to return all.
      */
     int limit;
+    /**
+     * Number of solutions to ignore in the beginning.
+     */
+    int offset;
+    /**
+     * Number of ORDER BY expressions.
+     */
+    int nbOrder;
+    /**
+     * Array of ORDER BY expressions.
+     */
+    Expression **order;
+    /**
+     * Array of order directions. True for descending, false for ascending.
+     */
+    bool *orderDescending;
     /**
      * Number of solutions found so far.
      */
