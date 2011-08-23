@@ -149,6 +149,7 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
         }
 
         // ORDERY BY expressions
+        bnbOrderCstr = NULL;
         if(verb == RASQAL_QUERY_VERB_SELECT) {
             Sequence<rasqal_expression> seqOrder =
                     rasqal_query_get_order_conditions_sequence(query);
@@ -173,6 +174,10 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
                     order[i] = convertExpression(expr);
                 }
                 solutions = new SolutionSet;
+                if(limit >= 0) {
+                    bnbOrderCstr = new BnBOrderConstraint(this);
+                    solver.add(bnbOrderCstr);
+                }
             } else {
                 order = NULL;
                 orderDescending = NULL;
@@ -649,13 +654,18 @@ bool Query::next() {
         if(nbSols == 0) {
             while(nextPatternSolution()) {
                 solutions->insert(new Solution(this));
-                if(limit >= 0 &&
-                        static_cast<int>(solutions->size()) > limit + offset) {
-                    // only keep the first (offset + limit) solutions
-                    SolutionSet::iterator it = solutions->end();
-                    --it;
-                    delete *it;
-                    solutions->erase(it);
+                if(limit >= 0) {
+                    int n = static_cast<int>(solutions->size());
+                    if(n > limit + offset) {
+                        // only keep the first (offset + limit) solutions
+                        SolutionSet::iterator it = solutions->end();
+                        --it;
+                        delete *it;
+                        solutions->erase(it);
+                        n--;
+                    }
+                    if(n == limit + offset)
+                        bnbOrderCstr->updateBound(*solutions->rbegin());
                 }
             }
             it = solutions->begin();

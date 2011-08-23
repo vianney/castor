@@ -20,12 +20,14 @@
 
 namespace castor {
     class Variable;
+    class Solution;
     class VarVal;
     class VariableSet;
     class Query;
     class Pattern;
     class Expression;
     class DistinctConstraint;
+    class BnBOrderConstraint;
 }
 
 #include <string>
@@ -35,6 +37,7 @@ namespace castor {
 #include "store.h"
 #include "solver/solver.h"
 #include "distinct.h"
+#include "bnborder.h"
 #include "util.h"
 
 namespace castor {
@@ -124,6 +127,9 @@ public:
      */
     Solution(Query *query);
     ~Solution();
+
+    Value *getValue(int i) { return values[i]; }
+    Value *getValue(Variable *var) { return getValue(var->getId()); }
 
     /**
      * Assign the stored values to the variables of the query.
@@ -323,6 +329,11 @@ private:
      * Pointer to the next solution to return.
      */
     SolutionSet::iterator it;
+
+    /**
+     * Static constraint for Branch-and-Bound or NULL if not needed.
+     */
+    BnBOrderConstraint *bnbOrderCstr;
 };
 
 std::ostream& operator<<(std::ostream &out, const Query &q);

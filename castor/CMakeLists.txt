@@ -40,6 +40,8 @@ set(CASTOR_SRCS
     constraints.cpp
     distinct.h
     distinct.cpp
+    bnborder.h
+    bnborder.cpp
 )
 
 add_library(libcastor ${CASTOR_SRCS})
