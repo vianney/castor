@@ -31,6 +31,7 @@
 
 #include "librdfwrapper.h"
 #include "model.h"
+#include "util.h"
 
 using namespace std;
 using namespace castor;
@@ -233,11 +234,6 @@ public:
     ~ConvertException() throw() {}
 
     const char *what() const throw() { return msg.c_str(); }
-};
-
-struct DereferenceLess {
-    template <typename T>
-    bool operator()(T a, T b) const { return *a < *b; }
 };
 
 typedef set<Value*, DereferenceLess> ValueSet;

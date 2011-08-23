@@ -335,8 +335,8 @@ struct Value {
 
     bool operator<(const Value &o) const;
     bool operator>(const Value &o) const { return o < *this; }
-    bool operator==(const Value &o) const { return compare(o) == 0; }
-    bool operator!=(const Value &o) const { return compare(o) != 0; }
+    bool operator==(const Value &o) const { return rdfequals(o) == 0; }
+    bool operator!=(const Value &o) const { return rdfequals(o) != 0; }
 
     /**
      * Test the RDFterm-equality as defined in SPARQL 1.0, section 11.4.10.

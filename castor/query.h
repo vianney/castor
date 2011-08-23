@@ -30,10 +30,12 @@ namespace castor {
 
 #include <string>
 #include <iostream>
+#include <set>
 #include "librdfwrapper.h"
 #include "store.h"
 #include "solver/solver.h"
 #include "distinct.h"
+#include "util.h"
 
 namespace castor {
 
@@ -107,6 +109,33 @@ private:
     }
 
     friend class Query;
+};
+
+/**
+ * A solution is a snapshot of the values assigned to the variables of a query.
+ */
+class Solution {
+    Query *query;
+    Value **values;
+public:
+    /**
+     * Create a snapshot of the values currently assigned to the variables of
+     * query.
+     */
+    Solution(Query *query);
+    ~Solution();
+
+    /**
+     * Assign the stored values to the variables of the query.
+     */
+    void restore() const;
+
+    /**
+     * Compare two solutions following the ordering given in the query.
+     * @note this may change the values set in the query
+     */
+    bool operator<(const Solution &o) const;
+    bool operator>(const Solution &o) const { return o < *this; }
 };
 
 /**
@@ -190,7 +219,7 @@ public:
 
     /**
      * Find the next solution
-     * @param false if there are no more solutions, true otherwise
+     * @return false if there are no more solutions, true otherwise
      */
     bool next();
 
@@ -230,6 +259,13 @@ private:
      * @throws QueryParseException on parse error
      */
     VarVal getVarVal(rasqal_literal* literal) throw(QueryParseException);
+
+    /**
+     * Find the next solution of the pattern, updating the DISTINCT constraint
+     * if appropriate, but without bothering about ORDER BY, LIMIT and OFFSET.
+     * @return false if there are no more solutions, true otherwise
+     */
+    bool nextPatternSolution();
 
 private:
     Store *store; //!< store associated to this query
@@ -276,6 +312,17 @@ private:
      * Number of solutions found so far.
      */
     int nbSols;
+
+    typedef std::multiset<Solution*,DereferenceLess> SolutionSet;
+    /**
+     * The solution set if we need to compute it a priori. Otherwise, it is
+     * NULL.
+     */
+    SolutionSet *solutions;
+    /**
+     * Pointer to the next solution to return.
+     */
+    SolutionSet::iterator it;
 };
 
 std::ostream& operator<<(std::ostream &out, const Query &q);

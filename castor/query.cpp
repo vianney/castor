@@ -29,6 +29,40 @@ void Variable::setValueFromCP() {
         value = query->getStore()->getValue(var->getValue());
 }
 
+Solution::Solution(Query *query) : query(query) {
+    values = new Value*[query->getVariablesCount()];
+    for(int i = 0; i < query->getVariablesCount(); i++)
+        values[i] = query->getVariable(i)->getValue();
+}
+
+Solution::~Solution() {
+    delete [] values;
+}
+
+void Solution::restore() const {
+    for(int i = 0; i < query->getVariablesCount(); i++)
+        query->getVariable(i)->setValue(values[i]);
+}
+
+bool Solution::operator <(const Solution &o) const {
+    if(o.query != query)
+        return false;
+    Value v1, v2;
+    for(int i = 0; i < query->getOrderCount(); i++) {
+        Expression *expr = query->getOrder(i);
+        restore();
+        if(!expr->evaluate(v1))
+            return false;
+        o.restore();
+        if(!expr->evaluate(v2))
+            return false;
+        if(v1 != v2)
+            return query->isOrderDescending(i) ? v1 > v2 : v1 < v2;
+    }
+    return false;
+}
+
+
 using librdf::Sequence;
 
 Query::Query(Store *store, char *queryString) throw(QueryParseException) :
@@ -37,6 +71,7 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
                                            "sparql", NULL);
     vars = NULL;
     pattern = NULL;
+    solutions = NULL;
     try {
         if(rasqal_query_prepare(query,
                                 reinterpret_cast<unsigned char*>(queryString),
@@ -137,6 +172,7 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
                     }
                     order[i] = convertExpression(expr);
                 }
+                solutions = new SolutionSet;
             } else {
                 order = NULL;
                 orderDescending = NULL;
@@ -176,6 +212,12 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
 }
 
 Query::~Query() {
+    if(solutions != NULL) {
+        for(SolutionSet::iterator it = solutions->begin(), end = solutions->end();
+            it != end; ++it)
+            delete *it;
+        delete solutions;
+    }
     if(nbOrder > 0) {
         for(int i = 0; i < nbOrder; i++)
             delete order[i];
@@ -590,15 +632,53 @@ std::ostream& operator<<(std::ostream &out, const Query &q) {
 // Search
 
 bool Query::next() {
-    if(limit >= 0 && nbSols >= limit)
-        return false;
+    if(solutions == NULL) {
+        if(limit >= 0 && nbSols >= limit)
+            return false;
+        if(nbSols == 0) {
+            for(int i = 0; i < offset; i++) {
+                if(!nextPatternSolution())
+                    return false;
+            }
+        }
+        if(!nextPatternSolution())
+            return false;
+        nbSols++;
+        return true;
+    } else {
+        if(nbSols == 0) {
+            while(nextPatternSolution()) {
+                solutions->insert(new Solution(this));
+                if(limit >= 0 &&
+                        static_cast<int>(solutions->size()) > limit + offset) {
+                    // only keep the first (offset + limit) solutions
+                    SolutionSet::iterator it = solutions->end();
+                    --it;
+                    delete *it;
+                    solutions->erase(it);
+                }
+            }
+            it = solutions->begin();
+            for(int i = 0; i < offset && it != solutions->end(); i++)
+                ++it;
+        }
+        if(it == solutions->end())
+            return false;
+        Solution *sol = *it;
+        ++it;
+        nbSols++;
+        sol->restore();
+        return true;
+    }
+}
+
+bool Query::nextPatternSolution() {
     if(!pattern->next())
         return false;
     for(int i = 0; i < nbVars; i++)
         vars[i].setValueFromCP();
     if(distinctCstr != NULL)
         distinctCstr->addSolution();
-    nbSols++;
     return true;
 }
 
@@ -607,6 +687,12 @@ void Query::reset() {
     nbSols = 0;
     if(distinctCstr != NULL)
         distinctCstr->reset();
+    if(solutions != NULL) {
+        for(SolutionSet::iterator it = solutions->begin(), end = solutions->end();
+            it != end; ++it)
+            delete *it;
+        solutions->clear();
+    }
 }
 
 }

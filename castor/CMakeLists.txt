@@ -22,6 +22,7 @@ set(CASTOR_SRCS
     solver/constraint.h
     solver/subtree.h
     solver/subtree.cpp
+    util.h
     librdfwrapper.h
     librdfwrapper.cpp
     xsddecimal.h
