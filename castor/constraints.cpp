@@ -16,13 +16,15 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "constraints.h"
+#include "config.h"
 
 namespace castor {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 StatementConstraint::StatementConstraint(Query *query, StatementPattern &stmt) :
-        StatelessConstraint(PRIOR_LOW), store(query->getStore()), stmt(stmt) {
+        StatelessConstraint(CASTOR_CONSTRAINTS_STATEMENT_PRIORITY),
+        store(query->getStore()), stmt(stmt) {
 #define REGISTER(part) \
     if(stmt.part.isVariable()) { \
         part = query->getVariable(stmt.part.getVariableId())->getCPVariable(); \
@@ -99,6 +101,7 @@ bool StatementConstraint::propagate() {
 ////////////////////////////////////////////////////////////////////////////////
 
 FilterConstraint::FilterConstraint(Store *store, Expression *expr) :
+        StatelessConstraint(CASTOR_CONSTRAINTS_FILTER_PRIORITY),
         store(store), expr(expr) {
     VarInt** vars = expr->getVars().getCPVars();
     for(int i = 0; i < expr->getVars().getSize(); i++)

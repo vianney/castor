@@ -17,6 +17,8 @@
  */
 #include <cassert>
 
+#include "../config.h"
+
 #include "varint.h"
 #include "solver.h"
 
@@ -220,7 +222,7 @@ bool VarInt::updateMax(int v) {
 }
 
 inline void VarInt::_searchMin() {
-    if(max - min + 1 > 2 * size) { // TODO check this condition
+    if(max - min + 1 > CASTOR_SOLVER_VARINT_BOUND_SPARSITY * size) {
         // lots of "holes" in the domain: check all remaining values
         min = maxVal + 1;
         for(int i = 0; i < size; i++)
@@ -237,7 +239,7 @@ inline void VarInt::_searchMin() {
 }
 
 inline void VarInt::_searchMax() {
-    if(max - min + 1 > 2 * size) { // TODO check this condition
+    if(max - min + 1 > CASTOR_SOLVER_VARINT_BOUND_SPARSITY * size) {
         // lots of "holes" in the domain: check all remaining values
         max = minVal - 1;
         for(int i = 0; i < size; i++)
