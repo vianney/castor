@@ -381,14 +381,22 @@ struct VarVal {
  * Set of variables
  */
 class VariableSet {
-public:
-    VariableSet(Query *query) {
-        capacity = query->getVariablesCount();
+    void _init(int capacity) {
+        // TODO refactor this with C++11
+        this->capacity = capacity;
         vars = new Variable*[capacity];
         varMap = new bool[capacity];
-        memset(varMap, 0, query->getVariablesCount() * sizeof(bool));
+        memset(varMap, 0, capacity * sizeof(bool));
         size = 0;
         cpvars = NULL;
+    }
+
+public:
+    VariableSet(int capacity) {
+        _init(capacity);
+    }
+    VariableSet(Query *query) {
+        _init(query->getVariablesCount());
     }
     VariableSet(const VariableSet &o) {
         capacity = o.capacity;
@@ -406,7 +414,7 @@ public:
             delete [] cpvars;
     }
 
-    VariableSet& operator=(VariableSet &o) {
+    VariableSet& operator=(const VariableSet &o) {
         memcpy(vars, o.vars, capacity * sizeof(Variable*));
         memcpy(varMap, o.varMap, capacity * sizeof(bool));
         size = o.size;
@@ -435,10 +443,22 @@ public:
     /**
      * Union with another set
      */
-    VariableSet& operator+=(VariableSet &o) {
+    VariableSet& operator+=(const VariableSet &o) {
         for(int i = 0; i < o.size; i++)
             *this += o.vars[i];
         return *this;
+    }
+
+    /**
+     * Intersection with another set
+     */
+    VariableSet operator*(const VariableSet &o) const {
+        VariableSet result(capacity);
+        for(int i = 0; i < size; i++) {
+            if(o.contains(vars[i]))
+                result += vars[i];
+        }
+        return result;
     }
 
     int getSize() const { return size; }

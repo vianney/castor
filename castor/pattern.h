@@ -47,7 +47,7 @@ struct StatementPattern {
  */
 class Pattern {
 public:
-    Pattern(Query *query) : query(query), vars(query) {}
+    Pattern(Query *query) : query(query), vars(query), cvars(query) {}
     virtual ~Pattern() {}
 
     /**
@@ -59,6 +59,11 @@ public:
      * @return variables occuring in this pattern
      */
     VariableSet& getVars() { return vars; }
+
+    /**
+     * @return certain variables
+     */
+    VariableSet& getCVars() { return cvars; }
 
     /**
      * Same effect as "delete this", but do not delete subpatterns.
@@ -112,6 +117,11 @@ protected:
      * Variables occuring in this pattern.
      */
     VariableSet vars;
+    /**
+     * Certain variables: variables we are sure will be assigned in this
+     * pattern. Always a subset of vars.
+     */
+    VariableSet cvars;
 
     /**
      * For debugging purpose, return a string of whitespace corresponding to the
@@ -211,7 +221,8 @@ class CompoundPattern : public Pattern {
 protected:
     Pattern *left, *right;
 public:
-    CompoundPattern(Pattern *left, Pattern *right);
+    CompoundPattern(Pattern *left, Pattern *right)
+        : Pattern(left->getQuery()), left(left), right(right) {}
     ~CompoundPattern();
 
     /**
@@ -241,8 +252,7 @@ public:
  */
 class JoinPattern : public CompoundPattern {
 public:
-    JoinPattern(Pattern *left, Pattern *right) :
-            CompoundPattern(left, right) {}
+    JoinPattern(Pattern *left, Pattern *right);
     bool next();
     void discard();
 };
@@ -253,8 +263,7 @@ public:
 class LeftJoinPattern : public CompoundPattern {
     bool consistent; //!< is the right branch consistent?
 public:
-    LeftJoinPattern(Pattern *left, Pattern *right) :
-            CompoundPattern(left, right), consistent(false) {}
+    LeftJoinPattern(Pattern *left, Pattern *right);
     bool next();
     void discard();
 };
@@ -264,8 +273,7 @@ public:
  */
 class DiffPattern : public CompoundPattern {
 public:
-    DiffPattern(Pattern *left, Pattern *right) :
-            CompoundPattern(left, right) {}
+    DiffPattern(Pattern *left, Pattern *right);
     bool next();
     void discard();
 };
@@ -276,8 +284,7 @@ public:
 class UnionPattern : public CompoundPattern {
     bool onRightBranch; //!< exploring the left (false) or right (true) branch
 public:
-    UnionPattern(Pattern *left, Pattern *right) :
-            CompoundPattern(left, right), onRightBranch(false) {}
+    UnionPattern(Pattern *left, Pattern *right);
     bool next();
     void discard();
 };

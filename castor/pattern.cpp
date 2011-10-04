@@ -32,12 +32,18 @@ BasicPattern::~BasicPattern() {
 
 void BasicPattern::add(const StatementPattern &triple) {
     triples.push_back(triple);
-    if(triple.subject.isVariable())
+    if(triple.subject.isVariable()) {
         vars += query->getVariable(triple.subject.getVariableId());
-    if(triple.predicate.isVariable())
+        cvars += query->getVariable(triple.subject.getVariableId());
+    }
+    if(triple.predicate.isVariable()) {
         vars += query->getVariable(triple.predicate.getVariableId());
-    if(triple.object.isVariable())
+        cvars += query->getVariable(triple.predicate.getVariableId());
+    }
+    if(triple.object.isVariable()) {
         vars += query->getVariable(triple.object.getVariableId());
+        cvars += query->getVariable(triple.object.getVariableId());
+    }
 }
 
 void BasicPattern::init() {
@@ -66,6 +72,7 @@ FilterPattern::FilterPattern(Pattern *subpattern, Expression *condition) :
         Pattern(subpattern->getQuery()),
         subpattern(subpattern), condition(condition) {
     vars = subpattern->getVars();
+    cvars = subpattern->getCVars();
 }
 
 FilterPattern::~FilterPattern() {
@@ -86,7 +93,7 @@ bool isNotBound(Expression *expr, LeftJoinPattern *pat) {
     if(BangExpression *bang = dynamic_cast<BangExpression*>(expr)) {
         if(BoundExpression *bound =
                 dynamic_cast<BoundExpression*>(bang->getArgument())) {
-            return pat->getRight()->getVars().contains(bound->getVariable()) &&
+            return pat->getRight()->getCVars().contains(bound->getVariable()) &&
                     !pat->getLeft()->getVars().contains(bound->getVariable());
         }
     }
@@ -131,12 +138,6 @@ void FilterPattern::discard() {
     subpattern->discard();
 }
 
-CompoundPattern::CompoundPattern(Pattern *left, Pattern *right) :
-        Pattern(left->getQuery()), left(left), right(right) {
-    vars = left->getVars();
-    vars += right->getVars();
-}
-
 CompoundPattern::~CompoundPattern() {
     if(left)
         delete left;
@@ -155,6 +156,14 @@ void CompoundPattern::init() {
     right->init();
 }
 
+JoinPattern::JoinPattern(Pattern *left, Pattern *right)
+        : CompoundPattern(left, right) {
+    vars = left->getVars();
+    vars += right->getVars();
+    cvars = left->getCVars();
+    cvars += right->getCVars();
+}
+
 bool JoinPattern::next() {
     while(left->next())
         if(right->next())
@@ -165,6 +174,13 @@ bool JoinPattern::next() {
 void JoinPattern::discard() {
     right->discard();
     left->discard();
+}
+
+LeftJoinPattern::LeftJoinPattern(Pattern *left, Pattern *right)
+        : CompoundPattern(left, right), consistent(false) {
+    vars = left->getVars();
+    vars += right->getVars();
+    cvars = left->getCVars();
 }
 
 bool LeftJoinPattern::next() {
@@ -187,6 +203,12 @@ void LeftJoinPattern::discard() {
     consistent = false;
 }
 
+DiffPattern::DiffPattern(Pattern *left, Pattern *right)
+        : CompoundPattern(left, right) {
+    vars = left->getVars();
+    cvars = left->getCVars();
+}
+
 bool DiffPattern::next() {
     while(left->next()) {
         if(right->next())
@@ -200,6 +222,13 @@ bool DiffPattern::next() {
 void DiffPattern::discard() {
     right->discard();
     left->discard();
+}
+
+UnionPattern::UnionPattern(Pattern *left, Pattern *right)
+        : CompoundPattern(left, right), onRightBranch(false) {
+    vars = left->getVars();
+    vars += right->getVars();
+    cvars = left->getCVars() * right->getCVars();
 }
 
 bool UnionPattern::next() {
