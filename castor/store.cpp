@@ -16,312 +16,332 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <cstdlib>
 #include <cstring>
+#include <cstdio>
+#include <cassert>
+#include <set>
+#include <map>
+#include <iostream>
+#include <fstream>
+#include <sstream>
 #include "store.h"
 
 namespace castor {
 
-Store::Store(const char* filename) throw(StoreException) {
-    sqlite3_stmt *sql;
-    int i, rc;
-    const char *str;
-    Value *v;
-    std::string error;
+Store::Store(const char* fileName) : db(fileName) {
+    Cursor cur = db.getPage(0);
 
-    nbValues = 0;
-    values = NULL;
-    nbDatatypes = 0;
-    datatypes = NULL;
-    nbLanguages = 0;
-    languages = NULL;
-    sqlVal = NULL;
-    sqlValUnkLang = NULL;
-    sqlValUnkTypeLang = NULL;
-    for(i = 0; i < 8; i++)
-        sqlStmts[i] = NULL;
+    // check magic number and version format
+    if(memcmp(cur.get(), CASTOR_STORE_MAGIC, sizeof(CASTOR_STORE_MAGIC) - 1) != 0)
+        throw "Invalid magic number";
+    cur += sizeof(CASTOR_STORE_MAGIC) - 1;
+    if(cur.readInt() != VERSION)
+        throw "Invalid format version";
 
-    if(sqlite3_open_v2(filename, &db, SQLITE_OPEN_READONLY, NULL) != SQLITE_OK)
-        goto cleanself;
 
-    // Populate datatypes
-    if(sqlite3_prepare_v2(db,
-                          "SELECT COUNT(*) FROM datatypes",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto cleandb;
-    if(sqlite3_step(sql) != SQLITE_ROW)
-        goto cleansql;
-    nbDatatypes = sqlite3_column_int(sql, 0);
-    sqlite3_finalize(sql);
-
-    datatypes = new char*[nbDatatypes];
-    for(i = 0; i < Value::TYPE_FIRST_CUSTOM; i++)
-        datatypes[i] = Value::TYPE_URIS[i];
-    for(i = Value::TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
-        datatypes[i] = NULL;
-
-    if(sqlite3_prepare_v2(db,
-                          "SELECT id, uri FROM datatypes "
-                          "WHERE id >= ?",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto cleandb;
-    if(sqlite3_bind_int(sql, 1, Value::TYPE_FIRST_CUSTOM) != SQLITE_OK)
-        goto cleansql;
-    while((rc = sqlite3_step(sql)) != SQLITE_DONE) {
-        if(rc != SQLITE_ROW)
-            goto cleansql;
-        i = sqlite3_column_int(sql, 0);
-        str = reinterpret_cast<const char*>(sqlite3_column_text(sql, 1));
-        datatypes[i] = new char[strlen(str) + 1];
-        strcpy(datatypes[i], str);
+    // Get triples pointers
+    for(int i = 0; i < 6; i++) {
+        triplesStart[i] = cur.readInt();
+        triplesIndex[i] = new BTree<TripleKey>(&db, cur.readInt());
     }
-    sqlite3_finalize(sql);
 
-    // Populate languages
-    if(sqlite3_prepare_v2(db,
-                          "SELECT COUNT(*) FROM languages",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto cleandb;
-    if(sqlite3_step(sql) != SQLITE_ROW)
-        goto cleansql;
-    nbLanguages = sqlite3_column_int(sql, 0);
-    sqlite3_finalize(sql);
-
-    languages = new char*[nbLanguages];
-    for(i = 0; i < nbLanguages; i++)
-        languages[i] = NULL;
-
-    if(sqlite3_prepare_v2(db,
-                          "SELECT id, tag FROM languages",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto cleandb;
-    while((rc = sqlite3_step(sql)) != SQLITE_DONE) {
-        if(rc != SQLITE_ROW)
-            goto cleansql;
-        i = sqlite3_column_int(sql, 0);
-        str = reinterpret_cast<const char*>(sqlite3_column_text(sql, 1));
-        languages[i] = new char[strlen(str) + 1];
-        strcpy(languages[i], str);
-    }
-    sqlite3_finalize(sql);
-
-    // Populate values
-    if(sqlite3_prepare_v2(db,
-                          "SELECT COUNT(*) FROM vals",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto cleandb;
-    if(sqlite3_step(sql) != SQLITE_ROW)
-        goto cleansql;
-    nbValues = sqlite3_column_int(sql, 0);
-    sqlite3_finalize(sql);
-
-    values = new Value[nbValues];
-
-    if(sqlite3_prepare_v2(db,
-                          "SELECT id, type, lexical, language, value FROM vals",
-                          -1, &sql, NULL) != SQLITE_OK)
-        goto cleandb;
-    while((rc = sqlite3_step(sql)) != SQLITE_DONE) {
-        if(rc != SQLITE_ROW)
-            goto cleansql;
-        i = sqlite3_column_int(sql, 0);
-        v = &values[i-1];
-        v->id = i;
-        v->type = static_cast<Value::Type>(sqlite3_column_int(sql, 1));
-        v->typeUri = datatypes[v->type];
-        str = reinterpret_cast<const char*>(sqlite3_column_text(sql, 2));
-        v->lexical = new char[strlen(str) + 1];
-        strcpy(v->lexical, str);
-        v->cleanup = Value::CLEAN_LEXICAL;
-        if(v->isPlain()) {
-            v->language = sqlite3_column_int(sql, 3);
-            v->languageTag = languages[v->language];
-        } else if(v->isBoolean()) {
-            v->boolean = sqlite3_column_int(sql, 4);
-        } else if(v->isInteger()) {
-            v->integer = sqlite3_column_int(sql, 4);
-        } else if(v->isFloating()) {
-            v->floating = sqlite3_column_double(sql, 4);
-        } else if(v->isDecimal()) {
-            v->decimal = new XSDDecimal(v->lexical);
-            v->addCleanFlag(Value::CLEAN_DATA);
-        }
-        //else if(v->isDateTime())
-        // TODO: v->datetime
-    }
-    sqlite3_finalize(sql);
-
-#define SQL(var, sql) \
-    if(sqlite3_prepare_v2(db, sql, -1, &var, NULL) != SQLITE_OK) \
-        goto cleandb;
-
-    SQL(sqlVal,
-        "SELECT id FROM vals "
-        "WHERE type = ?1 AND lexical = ?2 AND language = 0")
-    SQL(sqlValUnkLang,
-        "SELECT vals.id "
-        "FROM vals, languages ON languages.id = vals.language "
-        "WHERE type = ?1 AND lexical = ?2 AND languages.tag = ?3")
-    SQL(sqlValUnkTypeLang,
-        "SELECT vals.id "
-        "FROM vals, "
-        "     datatypes ON datatypes.id = vals.type, "
-        "     languages ON languages.id = vals.language "
-        "WHERE datatypes.uri = ?1 AND lexical = ?2 AND languages.tag = ?3")
-
-#undef SQL
-
-#define SQL(num, where) \
-    if(sqlite3_prepare_v2(db, \
-                          "SELECT subject, predicate, object FROM statements " \
-                          where, \
-                          -1, &sqlStmts[num], NULL) != SQLITE_OK) \
-        goto cleandb;
-
-    SQL(0, "")
-    SQL(1, "WHERE subject = ?1")
-    SQL(2, "WHERE predicate = ?2")
-    SQL(3, "WHERE subject = ?1 AND predicate = ?2")
-    SQL(4, "WHERE object = ?3")
-    SQL(5, "WHERE subject = ?1 AND object = ?3")
-    SQL(6, "WHERE predicate = ?2 AND object = ?3")
-    SQL(7, "WHERE subject = ?1 AND predicate = ?2 AND object = ?3")
-
-#undef SQL
-
-    sqlStmt = NULL;
-
-    return;
-
-cleansql:
-    sqlite3_finalize(sql);
-cleandb:
-    error.append(sqlite3_errmsg(db));
-    if(sqlVal) sqlite3_finalize(sqlVal);
-    if(sqlValUnkLang) sqlite3_finalize(sqlValUnkLang);
-    if(sqlValUnkTypeLang) sqlite3_finalize(sqlValUnkTypeLang);
-    for(i = 0; i < 8; i++) {
-        if(sqlStmts[i])
-            sqlite3_finalize(sqlStmts[i]);
-    }
-    sqlite3_close(db);
-cleanself:
-    if(datatypes) {
-        for(i = Value::TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
-            if(datatypes[i])
-                delete [] datatypes[i];
-        delete [] datatypes;
-    }
-    if(languages) {
-        for(i = 0; i < nbLanguages; i++)
-            if(languages[i])
-                delete [] languages[i];
-        delete [] languages;
-    }
-    if(values)
-        delete [] values;
-    throw StoreException(error);
+    // Get values pointers
+    nbValues = cur.readInt();
+    valuesStart = cur.readInt();
+    valuesMapping = cur.readInt();
+    valuesIndex = new ValueHashTree(&db, cur.readInt());
 }
 
 Store::~Store() {
-    sqlite3_finalize(sqlVal);
-    sqlite3_finalize(sqlValUnkLang);
-    sqlite3_finalize(sqlValUnkTypeLang);
-
-    for(int i = 0; i < 8; i++)
-        sqlite3_finalize(sqlStmts[i]);
-
-    sqlite3_close(db);
-    if(datatypes) {
-        for(int i = Value::TYPE_FIRST_CUSTOM; i < nbDatatypes; i++)
-            delete [] datatypes[i];
-        delete [] datatypes;
-    }
-    if(languages) {
-        for(int i = 0; i < nbLanguages; i++)
-            delete [] languages[i];
-        delete [] languages;
-    }
-    if(values)
-        delete [] values;
+    for(int i = 0; i < 6; i++)
+        delete triplesIndex[i];
+    delete valuesIndex;
 }
 
-int Store::getValueId(const Value::Type type, const char *typeUri,
-                      const char *lexical, const char *language)
-            throw(StoreException) {
-    sqlite3_stmt *sql;
-    if(type == Value::TYPE_UNKOWN)
-        sql = sqlValUnkTypeLang;
-    else if(language == NULL || language[0] == '\0')
-        sql = sqlVal;
-    else
-        sql = sqlValUnkLang;
+void Store::fetchValue(Value::id_t id, Value &val) {
+    // read mapping
+    const unsigned EPP = PageReader::PAGE_SIZE / 8; // entries per page in map
+    id--;
+    Cursor cur = db.getPage(valuesMapping + id / EPP) + 8*(id % EPP);
+    unsigned page = cur.readInt();
+    unsigned offlen = cur.readInt();
+    unsigned offset = offlen >> 16;
 
-    if(language == NULL)
-        language = "";
-
-    checkDbResult(sqlite3_reset(sql));
-
-#define BIND_STR(col, s) \
-    checkDbResult(sqlite3_bind_text(sql, (col), (s), -1, SQLITE_STATIC));
-#define BIND_INT(col, i) \
-    checkDbResult(sqlite3_bind_int(sql, (col), (i)));
-
-    if(type == Value::TYPE_UNKOWN) {
-        BIND_STR(1, typeUri);
-    } else {
-        BIND_INT(1, type);
-    }
-    BIND_STR(2, lexical);
-    if(sql != sqlVal) {
-        BIND_STR(3, language);
-    }
-
-#undef BIND_STR
-#undef BIND_INT
-
-    switch(sqlite3_step(sql)) {
-    case SQLITE_ROW:
-        return sqlite3_column_int(sql, 0);
-    case SQLITE_DONE:
-        return 0;
-    default:
-        throw StoreException(sqlite3_errmsg(db));
-    }
+    // read value
+    cur = db.getPage(page) + offset;
+    cur.readValue(val);
 }
 
-void Store::queryStatements(int subject, int predicate, int object)
-            throw(StoreException) {
-    sqlStmt = sqlStmts[ (subject >= 0) |
-                        (predicate >= 0) << 1 |
-                        (object >= 0) << 2 ];
-    checkDbResult(sqlite3_reset(sqlStmt));
+void Store::lookupId(Value &val) {
+    if(val.id > 0)
+        return;
 
-#define BIND(col, var) \
-    if(var >= 0) checkDbResult(sqlite3_bind_int(sqlStmt, col, var));
+    // look for pages containing the hash
+    val.ensureLexical();
+    uint32_t hash = val.hash();
+    Cursor listCur = valuesIndex->lookup(hash);
+    if(!listCur.valid())
+        return;
 
-    BIND(1, subject)
-    BIND(2, predicate)
-    BIND(3, object)
+    // scan all candidates in the collision list
+    for(Cursor listEnd = db.getPageEnd(listCur); listCur != listEnd;) {
+        if(listCur.readInt() != hash)
+            break;
 
-#undef BIND
-}
-
-bool Store::fetchStatement(Statement *stmt) throw(StoreException) {
-    if(sqlStmt == NULL)
-        return false;
-    switch(sqlite3_step(sqlStmt)) {
-    case SQLITE_ROW:
-        if(stmt) {
-            stmt->subject = sqlite3_column_int(sqlStmt, 0);
-            stmt->predicate = sqlite3_column_int(sqlStmt, 1);
-            stmt->object = sqlite3_column_int(sqlStmt, 2);
+        // scan page
+        Cursor cur = db.getPage(listCur.readInt());
+        cur.skipInt(); // skip next page header
+        unsigned count = cur.readInt();
+        unsigned idx = 0;
+        for(; idx < count; ++idx) { // skip hashes before
+            if(hash == cur.peekValueHash())
+                break;
+            cur.skipValue();
         }
-        return true;
-    case SQLITE_DONE:
-        return false;
-    default:
-        throw StoreException(sqlite3_errmsg(db));
+        for(; idx < count; ++idx) {
+            if(hash != cur.peekValueHash())
+                break;
+            Value v;
+            cur.readValue(v);
+            if(v == val) {
+                val.id = v.id;
+                return;
+            }
+        }
     }
+}
+
+Store::StatementQuery::StatementQuery(Store &store, Statement &stmt) : db(&store.db) {
+    // determine index such that wildcards are the last components
+    switch((stmt.subject == 0) |
+           (stmt.predicate == 0) << 1 |
+           (stmt.object == 0) << 2) {
+    case 0: // (s,p,o)
+    case 4: // (s,p,*)
+    case 6: // (s,*,*)
+    case 7: // (*,*,*)
+        order = SPO;
+        key.a = stmt.subject;
+        key.b = stmt.predicate;
+        key.c = stmt.object;
+        break;
+    case 1: // (*,p,o)
+    case 5: // (*,p,*)
+        order = POS;
+        key.a = stmt.predicate;
+        key.b = stmt.object;
+        key.c = stmt.subject;
+        break;
+    case 2: // (s,*,o)
+    case 3: // (*,*,o)
+        order = OSP;
+        key.a = stmt.object;
+        key.b = stmt.subject;
+        key.c = stmt.predicate;
+        break;
+    }
+
+    // look for the first leaf
+    nextPage = store.triplesIndex[order]->lookupLeaf(key);
+    readNextPage();
+}
+
+bool Store::StatementQuery::next(Statement *stmt) {
+    if(it == end && !readNextPage())
+        return false;
+    if(stmt != NULL) {
+        switch(order) {
+        case SPO:
+            stmt->subject = it->a;
+            stmt->predicate = it->b;
+            stmt->object = it->c;
+            break;
+        case POS:
+            stmt->predicate = it->a;
+            stmt->object = it->b;
+            stmt->subject = it->c;
+            break;
+        case OSP:
+            stmt->object = it->a;
+            stmt->subject = it->b;
+            stmt->predicate = it->c;
+            break;
+        }
+    }
+    it++;
+    return true;
+}
+
+bool Store::StatementQuery::readNextPage() {
+    if(nextPage == 0)
+        return false;
+
+    // read page and interpret header
+    Cursor cur = db->getPage(nextPage);
+    Cursor pageEnd = cur + PageReader::PAGE_SIZE;
+    nextPage = cur.readInt();
+
+    // read first triple
+    TripleKey t = {cur.readInt(),
+                   cur.readInt(),
+                   cur.readInt()};
+    end = triples;
+    if(key.matches(t)) // first triple is matching
+        (*end++) = t;
+
+    // Unpack other triples
+    while(cur < pageEnd) {
+        unsigned header = cur.readByte();
+        if(header < 0x80) {
+            // small gap in last component
+            if(header == 0)
+                break;
+            t.c += header;
+        } else {
+            switch(header & 127) {
+            case 0: t.c += 128; break;
+            case 1: t.c += cur.readDelta1()+128; break;
+            case 2: t.c += cur.readDelta2()+128; break;
+            case 3: t.c += cur.readDelta3()+128; break;
+            case 4: t.c += cur.readDelta4()+128; break;
+            case 5: t.b += cur.readDelta1(); t.c = 1; break;
+            case 6: t.b += cur.readDelta1(); t.c = cur.readDelta1()+1; break;
+            case 7: t.b += cur.readDelta1(); t.c = cur.readDelta2()+1; break;
+            case 8: t.b += cur.readDelta1(); t.c = cur.readDelta3()+1; break;
+            case 9: t.b += cur.readDelta1(); t.c = cur.readDelta4()+1; break;
+            case 10: t.b += cur.readDelta2(); t.c = 1; break;
+            case 11: t.b += cur.readDelta2(); t.c = cur.readDelta1()+1; break;
+            case 12: t.b += cur.readDelta2(); t.c = cur.readDelta2()+1; break;
+            case 13: t.b += cur.readDelta2(); t.c = cur.readDelta3()+1; break;
+            case 14: t.b += cur.readDelta2(); t.c = cur.readDelta4()+1; break;
+            case 15: t.b += cur.readDelta3(); t.c = 1; break;
+            case 16: t.b += cur.readDelta3(); t.c = cur.readDelta1()+1; break;
+            case 17: t.b += cur.readDelta3(); t.c = cur.readDelta2()+1; break;
+            case 18: t.b += cur.readDelta3(); t.c = cur.readDelta3()+1; break;
+            case 19: t.b += cur.readDelta3(); t.c = cur.readDelta4()+1; break;
+            case 20: t.b += cur.readDelta4(); t.c = 1; break;
+            case 21: t.b += cur.readDelta4(); t.c = cur.readDelta1()+1; break;
+            case 22: t.b += cur.readDelta4(); t.c = cur.readDelta2()+1; break;
+            case 23: t.b += cur.readDelta4(); t.c = cur.readDelta3()+1; break;
+            case 24: t.b += cur.readDelta4(); t.c = cur.readDelta4()+1; break;
+            case 25: t.a += cur.readDelta1(); t.b = 1; t.c = 1; break;
+            case 26: t.a += cur.readDelta1(); t.b = 1; t.c = cur.readDelta1()+1; break;
+            case 27: t.a += cur.readDelta1(); t.b = 1; t.c = cur.readDelta2()+1; break;
+            case 28: t.a += cur.readDelta1(); t.b = 1; t.c = cur.readDelta3()+1; break;
+            case 29: t.a += cur.readDelta1(); t.b = 1; t.c = cur.readDelta4()+1; break;
+            case 30: t.a += cur.readDelta1(); t.b = cur.readDelta1()+1; t.c = 1; break;
+            case 31: t.a += cur.readDelta1(); t.b = cur.readDelta1()+1; t.c = cur.readDelta1()+1; break;
+            case 32: t.a += cur.readDelta1(); t.b = cur.readDelta1()+1; t.c = cur.readDelta2()+1; break;
+            case 33: t.a += cur.readDelta1(); t.b = cur.readDelta1()+1; t.c = cur.readDelta3()+1; break;
+            case 34: t.a += cur.readDelta1(); t.b = cur.readDelta1()+1; t.c = cur.readDelta4()+1; break;
+            case 35: t.a += cur.readDelta1(); t.b = cur.readDelta2()+1; t.c = 1; break;
+            case 36: t.a += cur.readDelta1(); t.b = cur.readDelta2()+1; t.c = cur.readDelta1()+1; break;
+            case 37: t.a += cur.readDelta1(); t.b = cur.readDelta2()+1; t.c = cur.readDelta2()+1; break;
+            case 38: t.a += cur.readDelta1(); t.b = cur.readDelta2()+1; t.c = cur.readDelta3()+1; break;
+            case 39: t.a += cur.readDelta1(); t.b = cur.readDelta2()+1; t.c = cur.readDelta4()+1; break;
+            case 40: t.a += cur.readDelta1(); t.b = cur.readDelta3()+1; t.c = 1; break;
+            case 41: t.a += cur.readDelta1(); t.b = cur.readDelta3()+1; t.c = cur.readDelta1()+1; break;
+            case 42: t.a += cur.readDelta1(); t.b = cur.readDelta3()+1; t.c = cur.readDelta2()+1; break;
+            case 43: t.a += cur.readDelta1(); t.b = cur.readDelta3()+1; t.c = cur.readDelta3()+1; break;
+            case 44: t.a += cur.readDelta1(); t.b = cur.readDelta3()+1; t.c = cur.readDelta4()+1; break;
+            case 45: t.a += cur.readDelta1(); t.b = cur.readDelta4()+1; t.c = 1; break;
+            case 46: t.a += cur.readDelta1(); t.b = cur.readDelta4()+1; t.c = cur.readDelta1()+1; break;
+            case 47: t.a += cur.readDelta1(); t.b = cur.readDelta4()+1; t.c = cur.readDelta2()+1; break;
+            case 48: t.a += cur.readDelta1(); t.b = cur.readDelta4()+1; t.c = cur.readDelta3()+1; break;
+            case 49: t.a += cur.readDelta1(); t.b = cur.readDelta4()+1; t.c = cur.readDelta4()+1; break;
+            case 50: t.a += cur.readDelta2(); t.b = 1; t.c = 1; break;
+            case 51: t.a += cur.readDelta2(); t.b = 1; t.c = cur.readDelta1()+1; break;
+            case 52: t.a += cur.readDelta2(); t.b = 1; t.c = cur.readDelta2()+1; break;
+            case 53: t.a += cur.readDelta2(); t.b = 1; t.c = cur.readDelta3()+1; break;
+            case 54: t.a += cur.readDelta2(); t.b = 1; t.c = cur.readDelta4()+1; break;
+            case 55: t.a += cur.readDelta2(); t.b = cur.readDelta1()+1; t.c = 1; break;
+            case 56: t.a += cur.readDelta2(); t.b = cur.readDelta1()+1; t.c = cur.readDelta1()+1; break;
+            case 57: t.a += cur.readDelta2(); t.b = cur.readDelta1()+1; t.c = cur.readDelta2()+1; break;
+            case 58: t.a += cur.readDelta2(); t.b = cur.readDelta1()+1; t.c = cur.readDelta3()+1; break;
+            case 59: t.a += cur.readDelta2(); t.b = cur.readDelta1()+1; t.c = cur.readDelta4()+1; break;
+            case 60: t.a += cur.readDelta2(); t.b = cur.readDelta2()+1; t.c = 1; break;
+            case 61: t.a += cur.readDelta2(); t.b = cur.readDelta2()+1; t.c = cur.readDelta1()+1; break;
+            case 62: t.a += cur.readDelta2(); t.b = cur.readDelta2()+1; t.c = cur.readDelta2()+1; break;
+            case 63: t.a += cur.readDelta2(); t.b = cur.readDelta2()+1; t.c = cur.readDelta3()+1; break;
+            case 64: t.a += cur.readDelta2(); t.b = cur.readDelta2()+1; t.c = cur.readDelta4()+1; break;
+            case 65: t.a += cur.readDelta2(); t.b = cur.readDelta3()+1; t.c = 1; break;
+            case 66: t.a += cur.readDelta2(); t.b = cur.readDelta3()+1; t.c = cur.readDelta1()+1; break;
+            case 67: t.a += cur.readDelta2(); t.b = cur.readDelta3()+1; t.c = cur.readDelta2()+1; break;
+            case 68: t.a += cur.readDelta2(); t.b = cur.readDelta3()+1; t.c = cur.readDelta3()+1; break;
+            case 69: t.a += cur.readDelta2(); t.b = cur.readDelta3()+1; t.c = cur.readDelta4()+1; break;
+            case 70: t.a += cur.readDelta2(); t.b = cur.readDelta4()+1; t.c = 1; break;
+            case 71: t.a += cur.readDelta2(); t.b = cur.readDelta4()+1; t.c = cur.readDelta1()+1; break;
+            case 72: t.a += cur.readDelta2(); t.b = cur.readDelta4()+1; t.c = cur.readDelta2()+1; break;
+            case 73: t.a += cur.readDelta2(); t.b = cur.readDelta4()+1; t.c = cur.readDelta3()+1; break;
+            case 74: t.a += cur.readDelta2(); t.b = cur.readDelta4()+1; t.c = cur.readDelta4()+1; break;
+            case 75: t.a += cur.readDelta3(); t.b = 1; t.c = 1; break;
+            case 76: t.a += cur.readDelta3(); t.b = 1; t.c = cur.readDelta1()+1; break;
+            case 77: t.a += cur.readDelta3(); t.b = 1; t.c = cur.readDelta2()+1; break;
+            case 78: t.a += cur.readDelta3(); t.b = 1; t.c = cur.readDelta3()+1; break;
+            case 79: t.a += cur.readDelta3(); t.b = 1; t.c = cur.readDelta4()+1; break;
+            case 80: t.a += cur.readDelta3(); t.b = cur.readDelta1()+1; t.c = 1; break;
+            case 81: t.a += cur.readDelta3(); t.b = cur.readDelta1()+1; t.c = cur.readDelta1()+1; break;
+            case 82: t.a += cur.readDelta3(); t.b = cur.readDelta1()+1; t.c = cur.readDelta2()+1; break;
+            case 83: t.a += cur.readDelta3(); t.b = cur.readDelta1()+1; t.c = cur.readDelta3()+1; break;
+            case 84: t.a += cur.readDelta3(); t.b = cur.readDelta1()+1; t.c = cur.readDelta4()+1; break;
+            case 85: t.a += cur.readDelta3(); t.b = cur.readDelta2()+1; t.c = 1; break;
+            case 86: t.a += cur.readDelta3(); t.b = cur.readDelta2()+1; t.c = cur.readDelta1()+1; break;
+            case 87: t.a += cur.readDelta3(); t.b = cur.readDelta2()+1; t.c = cur.readDelta2()+1; break;
+            case 88: t.a += cur.readDelta3(); t.b = cur.readDelta2()+1; t.c = cur.readDelta3()+1; break;
+            case 89: t.a += cur.readDelta3(); t.b = cur.readDelta2()+1; t.c = cur.readDelta4()+1; break;
+            case 90: t.a += cur.readDelta3(); t.b = cur.readDelta3()+1; t.c = 1; break;
+            case 91: t.a += cur.readDelta3(); t.b = cur.readDelta3()+1; t.c = cur.readDelta1()+1; break;
+            case 92: t.a += cur.readDelta3(); t.b = cur.readDelta3()+1; t.c = cur.readDelta2()+1; break;
+            case 93: t.a += cur.readDelta3(); t.b = cur.readDelta3()+1; t.c = cur.readDelta3()+1; break;
+            case 94: t.a += cur.readDelta3(); t.b = cur.readDelta3()+1; t.c = cur.readDelta4()+1; break;
+            case 95: t.a += cur.readDelta3(); t.b = cur.readDelta4()+1; t.c = 1; break;
+            case 96: t.a += cur.readDelta3(); t.b = cur.readDelta4()+1; t.c = cur.readDelta1()+1; break;
+            case 97: t.a += cur.readDelta3(); t.b = cur.readDelta4()+1; t.c = cur.readDelta2()+1; break;
+            case 98: t.a += cur.readDelta3(); t.b = cur.readDelta4()+1; t.c = cur.readDelta3()+1; break;
+            case 99: t.a += cur.readDelta3(); t.b = cur.readDelta4()+1; t.c = cur.readDelta4()+1; break;
+            case 100: t.a += cur.readDelta4(); t.b = 1; t.c = 1; break;
+            case 101: t.a += cur.readDelta4(); t.b = 1; t.c = cur.readDelta1()+1; break;
+            case 102: t.a += cur.readDelta4(); t.b = 1; t.c = cur.readDelta2()+1; break;
+            case 103: t.a += cur.readDelta4(); t.b = 1; t.c = cur.readDelta3()+1; break;
+            case 104: t.a += cur.readDelta4(); t.b = 1; t.c = cur.readDelta4()+1; break;
+            case 105: t.a += cur.readDelta4(); t.b = cur.readDelta1()+1; t.c = 1; break;
+            case 106: t.a += cur.readDelta4(); t.b = cur.readDelta1()+1; t.c = cur.readDelta1()+1; break;
+            case 107: t.a += cur.readDelta4(); t.b = cur.readDelta1()+1; t.c = cur.readDelta2()+1; break;
+            case 108: t.a += cur.readDelta4(); t.b = cur.readDelta1()+1; t.c = cur.readDelta3()+1; break;
+            case 109: t.a += cur.readDelta4(); t.b = cur.readDelta1()+1; t.c = cur.readDelta4()+1; break;
+            case 110: t.a += cur.readDelta4(); t.b = cur.readDelta2()+1; t.c = 1; break;
+            case 111: t.a += cur.readDelta4(); t.b = cur.readDelta2()+1; t.c = cur.readDelta1()+1; break;
+            case 112: t.a += cur.readDelta4(); t.b = cur.readDelta2()+1; t.c = cur.readDelta2()+1; break;
+            case 113: t.a += cur.readDelta4(); t.b = cur.readDelta2()+1; t.c = cur.readDelta3()+1; break;
+            case 114: t.a += cur.readDelta4(); t.b = cur.readDelta2()+1; t.c = cur.readDelta4()+1; break;
+            case 115: t.a += cur.readDelta4(); t.b = cur.readDelta3()+1; t.c = 1; break;
+            case 116: t.a += cur.readDelta4(); t.b = cur.readDelta3()+1; t.c = cur.readDelta1()+1; break;
+            case 117: t.a += cur.readDelta4(); t.b = cur.readDelta3()+1; t.c = cur.readDelta2()+1; break;
+            case 118: t.a += cur.readDelta4(); t.b = cur.readDelta3()+1; t.c = cur.readDelta3()+1; break;
+            case 119: t.a += cur.readDelta4(); t.b = cur.readDelta3()+1; t.c = cur.readDelta4()+1; break;
+            case 120: t.a += cur.readDelta4(); t.b = cur.readDelta4()+1; t.c = 1; break;
+            case 121: t.a += cur.readDelta4(); t.b = cur.readDelta4()+1; t.c = cur.readDelta1()+1; break;
+            case 122: t.a += cur.readDelta4(); t.b = cur.readDelta4()+1; t.c = cur.readDelta2()+1; break;
+            case 123: t.a += cur.readDelta4(); t.b = cur.readDelta4()+1; t.c = cur.readDelta3()+1; break;
+            case 124: t.a += cur.readDelta4(); t.b = cur.readDelta4()+1; t.c = cur.readDelta4()+1; break;
+            default: assert(false); // should not happen
+            }
+        }
+        if(key.matches(t))
+            (*end++) = t;
+        else if(end != triples)
+            break; // we are at the end of the range of interest
+    }
+
+    it = triples;
+    if(it == end) {
+        // no triples found
+        nextPage = 0;
+        return false;
+    }
+
+    return true;
 }
 
 }

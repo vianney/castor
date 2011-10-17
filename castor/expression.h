@@ -147,13 +147,12 @@ public:
 };
 
 /**
- * Literal value
+ * Literal value. Takes ownership of the value.
  */
 class ValueExpression : public Expression {
     Value *value; //!< the value
-    bool ownership; //!< whether to take over ownership of the value
 public:
-    ValueExpression(Query *query, Value *value, bool ownership);
+    ValueExpression(Query *query, Value *value);
     ~ValueExpression();
     bool evaluate(Value &result);
 

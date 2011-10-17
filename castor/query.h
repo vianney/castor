@@ -70,17 +70,17 @@ public:
     /**
      * @return id of the variable
      */
-    int getId() const { return id; }
+    unsigned getId() const { return id; }
 
     /**
-     * @return the value bound to this variable or NULL if unbound
+     * @return the value id bound to this variable or 0 if unbound
      */
-    Value* getValue() const { return value; }
+    Value::id_t getValueId() const { return val; }
 
     /**
      * @return whether the variable is bound
      */
-    bool isBound() const { return value != NULL; }
+    bool isBound() const { return val != 0; }
 
     /**
      * @return the CP variable corrsponding to this variable.
@@ -88,10 +88,10 @@ public:
     VarInt* getCPVariable() const { return var; }
 
     /**
-     * Set the value of this variable.
-     * @param value the new value or NULL for unbound
+     * Set the value of this variable using an id from the store
+     * @param the id of the new value or 0 for unbound
      */
-    void setValue(Value *value) { this->value = value; }
+    void setValueId(Value::id_t id) { val = id; }
 
     /**
      * Set the value of this variable according to the value of the CP variable
@@ -100,12 +100,12 @@ public:
 
 private:
     Query* query;       //!< Parent query
-    int id;             //!< Id of the variable
+    unsigned id;        //!< Id of the variable
     std::string name;   //!< Name of the variable
     VarInt *var;        //!< CP variable
-    Value *value;       //!< Value
+    Value::id_t val;    //!< value (0 means unbound)
 
-    Variable() : var(NULL), value(NULL) {}
+    Variable() : var(NULL), val(0) {}
     ~Variable() {
         if(var != NULL)
             delete var;
@@ -119,7 +119,7 @@ private:
  */
 class Solution {
     Query *query;
-    Value **values;
+    Value::id_t *values;
 public:
     /**
      * Create a snapshot of the values currently assigned to the variables of
@@ -128,8 +128,8 @@ public:
     Solution(Query *query);
     ~Solution();
 
-    Value *getValue(int i) { return values[i]; }
-    Value *getValue(Variable *var) { return getValue(var->getId()); }
+    Value::id_t getValueId(int i) { return values[i]; }
+    Value::id_t getValueId(Variable &var) { return getValueId(var.getId()); }
 
     /**
      * Assign the stored values to the variables of the query.
@@ -156,7 +156,7 @@ public:
      * @param queryString SPARQL query
      * @throws QueryParseException on parse error
      */
-    Query(Store *store, char *queryString) throw(QueryParseException);
+    Query(Store *store, const char *queryString) throw(QueryParseException);
     ~Query();
 
     /**
@@ -170,16 +170,16 @@ public:
     /**
      * @return the number of variables
      */
-    int getVariablesCount() const { return nbVars; }
+    unsigned getVariablesCount() const { return nbVars; }
     /**
      * @return the number of requested variables
      */
-    int getRequestedCount() const { return nbRequestedVars; }
+    unsigned getRequestedCount() const { return nbRequestedVars; }
     /**
      * @param id id of a variable (within 0..getVariablesCount()-1)
      * @return the variable with identifier id
      */
-    Variable* getVariable(int id) const { return &vars[id]; }
+    Variable* getVariable(unsigned id) const { return &vars[id]; }
     /**
      * @return array of variables
      */
@@ -200,28 +200,28 @@ public:
     /**
      * @return the number of ignored solutions in the beginning
      */
-    int getOffset() const { return offset; }
+    unsigned getOffset() const { return offset; }
 
     /**
      * @return the number of ORDER BY expressions.
      */
-    int getOrderCount() const { return nbOrder; }
+    unsigned getOrderCount() const { return nbOrder; }
     /**
      * @param i index of an ORDER BY expression (within 0..getOrderCount()-1)
      * @return the ORDERY BY expression at index i
      */
-    Expression* getOrder(int i) const { return order[i]; }
+    Expression* getOrder(unsigned i) const { return order[i]; }
     /**
      * @param i index of an ORDER BY expression (within 0..getOrderCount()-1)
      * @return whether ORDERY BY expression at index i should be in descending
      *         direction
      */
-    bool isOrderDescending(int i) const { return orderDescending[i]; }
+    bool isOrderDescending(unsigned i) const { return orderDescending[i]; }
 
     /**
      * @return the number of solutions found so far
      */
-    int getSolutionCount() const { return nbSols; }
+    unsigned getSolutionCount() const { return nbSols; }
 
     /**
      * Find the next solution
@@ -260,8 +260,7 @@ private:
 
     /**
      * @param literal a rasqal literal
-     * @return the variable or value id of the literal in the store. Id is 0 if
-     *         unknown.
+     * @return the variable or value id of the literal in the store
      * @throws QueryParseException on parse error
      */
     VarVal getVarVal(rasqal_literal* literal) throw(QueryParseException);
@@ -276,8 +275,8 @@ private:
 private:
     Store *store; //!< store associated to this query
     Solver solver; //!< CP solver
-    int nbVars; //!< number of variables
-    int nbRequestedVars; //!< number of requested variables
+    unsigned nbVars; //!< number of variables
+    unsigned nbRequestedVars; //!< number of requested variables
     /**
      * Array of variables. The requested variables come first.
      */
@@ -301,11 +300,11 @@ private:
     /**
      * Number of solutions to ignore in the beginning.
      */
-    int offset;
+    unsigned offset;
     /**
      * Number of ORDER BY expressions.
      */
-    int nbOrder;
+    unsigned nbOrder;
     /**
      * Array of ORDER BY expressions.
      */
@@ -317,7 +316,7 @@ private:
     /**
      * Number of solutions found so far.
      */
-    int nbSols;
+    unsigned nbSols;
 
     typedef std::multiset<Solution*,DereferenceLess> SolutionSet;
     /**
@@ -341,47 +340,46 @@ std::ostream& operator<<(std::ostream &out, const Query &q);
 /**
  * Small structure containing a value or variable id.
  */
-struct VarVal {
-    /**
-     * The id. Negative ids design variables. The variable number is retrieved
-     * with -id - 1.
-     */
-    int id;
+class VarVal {
+    Value::id_t valid; //!< id of the value or 0 if variable or unknown
+    unsigned varid; //!< id of the variable + 1 or 0 if value or unknown
 
-    explicit VarVal(int id) : id(id) {}
-    VarVal(const Variable &variable) : id(-variable.getId()-1) {}
-    VarVal(const Variable *variable) : id(-variable->getId()-1) {}
-    VarVal(const Value &value) : id(value.id) {}
-    VarVal(const Value *value) : id(value->id) {}
+public:
+
+    explicit VarVal(Value::id_t valid) : valid(valid), varid(0) {}
+    VarVal(const Variable &variable) : valid(0), varid(variable.getId()+1) {}
+    VarVal(const Variable *variable) : valid(0), varid(variable->getId()+1) {}
+    VarVal(const Value &value) : valid(value.id), varid(0) {}
+    VarVal(const Value *value) : valid(value->id), varid(0) {}
 
     /**
      * @return whether the id refers to a variable
      */
-    bool isVariable() const { return id < 0; }
+    bool isVariable() const { return varid > 0; }
     /**
      * @return whether this refers to an unknown value (id 0)
      */
-    bool isUnknown() const { return id == 0; }
+    bool isUnknown() const { return valid == 0 && varid == 0; }
     /**
      * @pre !isVariable()
      * @return the value id
      */
-    int getValueId() const { return id; }
+    Value::id_t getValueId() const { return valid; }
     /**
      * @pre isVariable()
      * @return the variable id
      */
-    int getVariableId() const { return -id-1; }
+    unsigned getVariableId() const { return varid - 1; }
 
-    bool operator==(const VarVal &o) const { return id == o.id; }
-    bool operator!=(const VarVal &o) const { return id != o.id; }
+    bool operator==(const VarVal &o) const { return valid == o.valid && varid == o.varid; }
+    bool operator!=(const VarVal &o) const { return valid != o.valid || varid != o.varid; }
 };
 
 /**
  * Set of variables
  */
 class VariableSet {
-    void _init(int capacity) {
+    void _init(unsigned capacity) {
         // TODO refactor this with C++11
         this->capacity = capacity;
         vars = new Variable*[capacity];
@@ -392,7 +390,7 @@ class VariableSet {
     }
 
 public:
-    VariableSet(int capacity) {
+    VariableSet(unsigned capacity) {
         _init(capacity);
     }
     VariableSet(Query *query) {
@@ -444,7 +442,7 @@ public:
      * Union with another set
      */
     VariableSet& operator+=(const VariableSet &o) {
-        for(int i = 0; i < o.size; i++)
+        for(unsigned i = 0; i < o.size; i++)
             *this += o.vars[i];
         return *this;
     }
@@ -454,15 +452,15 @@ public:
      */
     VariableSet operator*(const VariableSet &o) const {
         VariableSet result(capacity);
-        for(int i = 0; i < size; i++) {
+        for(unsigned i = 0; i < size; i++) {
             if(o.contains(vars[i]))
                 result += vars[i];
         }
         return result;
     }
 
-    int getSize() const { return size; }
-    Variable* operator[](int i) { return vars[i]; }
+    unsigned getSize() const { return size; }
+    Variable* operator[](unsigned i) { return vars[i]; }
 
     /**
      * @param v a variable
@@ -484,15 +482,15 @@ public:
     VarInt** getCPVars() {
         if(!cpvars) {
             cpvars = new VarInt*[size];
-            for(int i = 0; i < size; i++)
+            for(unsigned i = 0; i < size; i++)
                 cpvars[i] = vars[i]->getCPVariable();
         }
         return cpvars;
     }
 
 private:
-    int size; //!< number of variables in the list
-    int capacity; //!< maximum number of variables
+    unsigned size; //!< number of variables in the list
+    unsigned capacity; //!< maximum number of variables
     Variable **vars; //!< array of variables
     bool *varMap; //!< map of ids
     VarInt **cpvars; //!< List of CP variables. NULL if not yet created.

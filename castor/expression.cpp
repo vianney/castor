@@ -25,7 +25,7 @@ namespace castor {
 VarVal Expression::getVarVal() {
     Value val;
     if(evaluate(val))
-        val.fillId(query->getStore());
+        query->getStore()->lookupId(val);
     else
         val.id = 0;
     return val;
@@ -51,13 +51,12 @@ BinaryExpression::~BinaryExpression() {
     delete arg2;
 }
 
-ValueExpression::ValueExpression(Query *query, Value *value, bool ownership) :
-        Expression(query), value(value), ownership(ownership) {
+ValueExpression::ValueExpression(Query *query, Value *value) :
+        Expression(query), value(value) {
 }
 
 ValueExpression::~ValueExpression() {
-    if(ownership)
-        delete value;
+    delete value;
 }
 
 VariableExpression::VariableExpression(Variable *variable) :
@@ -114,15 +113,15 @@ int Expression::evaluateEBV(Value &buffer) {
 }
 
 bool ValueExpression::evaluate(Value &result) {
-    result.fillCopy(value);
+    result.fillCopy(*value);
     return true;
 }
 
 bool VariableExpression::evaluate(Value &result) {
-    Value *val = variable->getValue();
-    if(!val)
+    Value::id_t valid = variable->getValueId();
+    if(valid == 0)
         return false;
-    result.fillCopy(val);
+    query->getStore()->fetchValue(valid, result);
     return true;
 }
 
@@ -186,19 +185,19 @@ bool StrExpression::evaluate(Value &result) {
     result.ensureLexical();
     bool freeLex = result.hasCleanFlag(Value::CLEAN_LEXICAL);
     result.removeCleanFlag(Value::CLEAN_LEXICAL);
-    result.fillSimpleLiteral(result.lexical, freeLex);
+    result.fillSimpleLiteral(result.lexical, result.lexicalLen, freeLex);
     return true;
 }
 
 bool LangExpression::evaluate(Value &result) {
     if(!arg->evaluate(result) || !result.isPlain())
         return false;
-    char *lang = result.languageTag;
+    char *lang = result.language;
     if(lang == NULL)
         lang = const_cast<char*>("");
     bool freeLex = result.hasCleanFlag(Value::CLEAN_DATA);
     result.removeCleanFlag(Value::CLEAN_DATA);
-    result.fillSimpleLiteral(lang, freeLex);
+    result.fillSimpleLiteral(lang, result.languageLen, freeLex);
     return true;
 }
 
@@ -209,12 +208,13 @@ bool DatatypeExpression::evaluate(Value &result) {
         if(result.language != 0)
             return false;
         result.fillSimpleLiteral(Value::TYPE_URIS[Value::TYPE_PLAIN_STRING],
+                                 sizeof(Value::TYPE_URIS[Value::TYPE_PLAIN_STRING]) - 1,
                                  false);
         return true;
     } else {
         bool freeLex = result.hasCleanFlag(Value::CLEAN_TYPE_URI);
         result.removeCleanFlag(Value::CLEAN_TYPE_URI);
-        result.fillSimpleLiteral(result.typeUri, freeLex);
+        result.fillSimpleLiteral(result.typeUri, result.typeUriLen, freeLex);
         return true;
     }
 }

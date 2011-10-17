@@ -18,37 +18,34 @@
 #ifndef CASTOR_STORE_H
 #define CASTOR_STORE_H
 
-#include <sqlite3.h>
 #include <string>
 #include <exception>
 #include "model.h"
+#include "store/readutils.h"
+#include "store/btree.h"
+
+// magic number of store
+#define CASTOR_STORE_MAGIC "\xd0\xd4\xc5\xd8" "Castor"
 
 namespace castor {
 
-class StoreException : public std::exception {
-    std::string msg;
-
-public:
-    StoreException(std::string msg) : msg(msg) {}
-    StoreException(const char* msg) : msg(msg) {}
-    StoreException(const StoreException &o) : msg(o.msg) {}
-    ~StoreException() throw() {}
-
-    const char *what() const throw() { return msg.c_str(); }
-};
-
 /**
- * Store interface. Implementations may extend this structure.
+ * Store containing triples and values.
+ * The triples encoding is modeled after RDF-3x [1].
+ *
+ * [1] http://www.mpi-inf.mpg.de/~neumann/rdf3x/
  */
 class Store {
 public:
+    static const unsigned VERSION = 1; //!< format version
+
     /**
-     * Open an existing SQLite store.
+     * Open a store.
      *
-     * @param filename location of the store
-     * @throws StoreException on database error
+     * @param fileName location of the store
+     * @throws StoreException on error
      */
-    Store(const char* filename) throw(StoreException);
+    Store(const char* fileName);
     ~Store();
 
     /**
@@ -57,111 +54,88 @@ public:
      *
      * @return the number of values in the store or -1 if error
      */
-    int getValueCount() { return nbValues; }
+    unsigned getValueCount() { return nbValues; }
 
     /**
-     * Get a value from the store
+     * Fetch a value from the store
      *
      * @param id identifier of the value (within range 1..getValueCount())
-     * @return the value corresponding to id or NULL if error
+     * @param[out] val will contain the value
      */
-    Value* getValue(int id) {
-        if(id <= 0 || id > nbValues)
-            return NULL;
-        return &values[id-1];
-    }
+    void fetchValue(Value::id_t id, Value &val);
 
     /**
-     * Get the id of a value from the store.
+     * Search for the id of a value (if id == 0) and replace it if found.
      *
-     * @param type datatype of the value
-     * @param typeUri URI of the datatype if type is VALUE_TYPE_UNKOWN
-     * @param lexical lexical form
-     * @param language language tag or NULL if none
-     * @return the id of the value or 0 if not found
-     * @throws StoreException on database error
+     * @param[in,out] val the value to look for and update
      */
-    int getValueId(const Value::Type type, const char* typeUri,
-                   const char* lexical, const char* language)
-            throw(StoreException);
-
-    /**
-     * Query the store for statements. Use fetchStatement to get the results.
-     *
-     * @param subject subject id or -1 for wildcard
-     * @param predicate predicate id or -1 for wildcard
-     * @param object object id or -1 for wildcard
-     * @throws StoreException on database error
-     */
-    void queryStatements(int subject, int predicate, int object)
-            throw(StoreException);
-
-    /**
-     * Fetch the next result statement from the query initiated by
-     * queryStatement().
-     *
-     * @param[out] stmt structure in which to write the result or NULL to ignore
-     * @return true if stmt contains the next result, false if there are no more
-     *         results
-     * @throws StoreException on database error
-     */
-    bool fetchStatement(Statement *stmt) throw(StoreException);
+    void lookupId(Value &val);
 
 private:
+    PageReader db;
+
+    unsigned triplesStart[6]; //!< start of triples tables in all orderings
+    BTree<TripleKey>* triplesIndex[6]; //!< triples index in all orderings
+    unsigned nbValues; //!< number of values
+    unsigned valuesStart; //!< start of values table
+    unsigned valuesMapping; //!< start of values mapping
+    ValueHashTree* valuesIndex; //!< values index (hash->page mapping)
+
+public:
     /**
-     * Check the result of a SQLite command and throw an exception if failed.
+     * Query the triples store.
      *
-     * @param rc result of the SQLite command
-     * @throws StoreException on database error
+     * @note this class should be allocated on the stack instead of the heap
+     *       as it contains a heavy triples cache
      */
-    void checkDbResult(int rc) throw(StoreException) {
-        if(rc != SQLITE_OK) throw StoreException(sqlite3_errmsg(db));
-    }
+    class StatementQuery {
 
-private:
-    /**
-     * Handle to the database
-     */
-    sqlite3* db;
-    /**
-     * Number of values in the store
-     */
-    int nbValues;
-    /**
-     * Value cache
-     */
-    Value* values;
-    /**
-     * Number of datatypes
-     */
-    int nbDatatypes;
-    /**
-     * Datatypes cache
-     */
-    char** datatypes;
-    /**
-     * Number of languages
-     */
-    int nbLanguages;
-    /**
-     * Languages cache
-     */
-    char** languages;
+        enum TripleOrder {
+            SPO = 0, POS = 5, OSP = 3 // FIXME we do not need other indexes
+        };
 
-    /**
-     * SQL for value id retrieval. The first one is for known datatype id and
-     * language 0, the second is for known datatype id and unknown language,
-     * and the last one for unknown datatype and language id.
-     */
-    sqlite3_stmt *sqlVal, *sqlValUnkLang, *sqlValUnkTypeLang;
-    /**
-     * SQL for rdf statements currently executed
-     */
-    sqlite3_stmt* sqlStmt;
-    /**
-     * SQL for rdf statement queries
-     */
-    sqlite3_stmt* sqlStmts[8];
+        PageReader *db;
+        TripleKey key; //!< the key we are looking for
+        TripleOrder order; //!< order of components in the key
+
+        unsigned nextPage; //!< next page to read or 0 if no more
+
+        static const unsigned CACHE_SIZE = PageReader::PAGE_SIZE; //!< max triples in a page
+        TripleKey triples[CACHE_SIZE]; //!< triples cache
+        TripleKey *it; //!< current triple
+        TripleKey *end; //!< last triple in cache
+
+    public:
+        /**
+         * Construct a new query
+         *
+         * @param store the store
+         * @param stmt the triple to query, 0 for a component is a wildcard
+         */
+        StatementQuery(Store &store, Statement &stmt);
+
+        /**
+         * Fetch the next result statement
+         *
+         * @param[out] stmt structure in which to write the result or
+         *                  NULL to ignore
+         * @return true if stmt contains the next result, false if there are no
+         *         more results (further calls to next() are undefined)
+         */
+        bool next(Statement *stmt);
+
+    private:
+        /**
+         * Load the next page of triples. Updates nextPage and end.
+         * Resets it to the beginning of the cache.
+         *
+         * While reading the page, skip any triple not matching key.
+         *
+         * @return false if there are no more pages, true otherwise
+         */
+        bool readNextPage();
+    };
+    friend class StatementQuery;
 };
 
 }

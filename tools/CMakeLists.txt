@@ -16,8 +16,7 @@
 # along with Castor; if not, see <http://www.gnu.org/licenses/>.
 include_directories(../castor)
 
-add_executable(createsqlite createsqlite.cpp)
-target_link_libraries(createsqlite libcastor)
-
 add_executable(castor castor.cpp)
 target_link_libraries(castor libcastor)
+
+add_subdirectory(castorld)

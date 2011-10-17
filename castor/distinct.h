@@ -46,17 +46,17 @@ private:
      * Comparator for solutions
      */
     class LexLess {
-        int size; //!< number of values in a solution
-        int index; //!< index to ignore
+        unsigned size; //!< number of values in a solution
+        unsigned index; //!< index to ignore
     public:
-        LexLess(int size, int index = -1) : size(size), index(index) {}
+        LexLess(unsigned size, unsigned index = -1) : size(size), index(index) {}
         template <typename T>
         bool operator()(T* a, T* b) const;
     };
 
     Query *query;
 
-    typedef std::multiset<int*, LexLess> SolSet;
+    typedef std::multiset<Value::id_t*, LexLess> SolSet;
     SolSet *solutions;
     SolSet **indexes; //!< solution indexes
 };

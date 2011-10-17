@@ -20,8 +20,10 @@
 
 #include <cstring>
 #include <string>
+#include <cstdint>
 #include <iostream>
 
+#include "util.h"
 #include "xsddecimal.h"
 
 namespace castor {
@@ -32,6 +34,11 @@ class Store;
  * An RDF value
  */
 struct Value {
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Static definitions
+
+    typedef unsigned id_t;
 
     /**
      * Value class ids
@@ -44,7 +51,9 @@ struct Value {
         CLASS_BOOLEAN,
         CLASS_NUMERIC,
         CLASS_DATETIME,
-        CLASS_OTHER
+        CLASS_OTHER,
+
+        CLASSES_COUNT //!< number of classes
     };
 
     /**
@@ -74,7 +83,7 @@ struct Value {
         TYPE_DECIMAL,       //!< xsd:decimal
         TYPE_DATETIME,      //!< xsd:dateTime
 
-        TYPE_FIRST_CUSTOM,
+        TYPE_CUSTOM,        //!< custom datatype
         TYPE_UNKOWN = -1,
 
         // internal values
@@ -91,7 +100,11 @@ struct Value {
     /**
      * URIs corresponding to the value types
      */
-    static char *TYPE_URIS[TYPE_FIRST_CUSTOM];
+    static char *TYPE_URIS[TYPE_CUSTOM];
+    /**
+     * length of predefined type URIs
+     */
+    static unsigned TYPE_URIS_LEN[TYPE_CUSTOM];
 
     /**
      * Value cleanup flags
@@ -116,22 +129,30 @@ struct Value {
     };
 
 
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Public fields
+
     /**
      * ID of the value, starting from 1. Or 0 if not part of the store.
      */
-    int id;
+    id_t id;
     /**
      * Datatype of the value. May be higher than the enumeration.
      */
     Type type;
     /**
      * URI of the datatype. NULL if type <= TYPE_PLAIN_STRING.
+     * @note not necessarily null-terminated
      */
     char* typeUri;
+    unsigned typeUriLen; //!< length of typeUri
     /**
      * Lexical form. May be NULL if there is a native representation.
+     * @note not necessarily null-terminated
      */
     char* lexical;
+    unsigned lexicalLen; //!< length of lexical
     /**
      * Cleanup flags
      */
@@ -139,16 +160,11 @@ struct Value {
     union {
         /**
          * Language tag. Unspecified if type is not TYPE_PLAIN_STRING.
+         * @note not necessarily null-terminated
          */
         struct {
-            /**
-             * Language tag id, starting from 0. Or -1 if unknown.
-             */
-            int language;
-            /**
-             * String representation of the language tag.
-             */
-            char* languageTag;
+            char* language;
+            unsigned languageLen;
         };
         /**
          * Boolean representation of the lexical. Unspecified if type is not
@@ -177,9 +193,36 @@ struct Value {
         // TODO  DateTime* datetime;
     };
 
-    Value() { cleanup = CLEAN_NOTHING; }
-    Value(const Value &val) { fillCopy(&val); }
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Constructors
+
+    /**
+     * Create an uninitialized value
+     */
+    Value() : id(0), cleanup(CLEAN_NOTHING) {}
+    /**
+     * Copy constructor
+     */
+    Value(const Value &val) : cleanup(CLEAN_NOTHING) { fillCopy(val); }
+    /**
+     * Create a value from a raptor_term
+     * @param term the term
+     */
+    Value(const raptor_term *term);
+    /**
+     * Create a value from a rasqal_literal
+     * @param literal the literal
+     * @pre literl->type != RASQAL_LITERAL_VARIABLE
+     */
+    Value(const rasqal_literal *literal);
     ~Value() { clean(); }
+
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Cleanup
 
     /**
      * @param flag
@@ -203,15 +246,18 @@ struct Value {
      */
     void clean();
 
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Fill methods
+
     /**
      * Make a copy of a value
      *
      * @param value the value
+     * @param deep should we perform a deep copy?
      */
-    void fillCopy(const Value *value) {
-        memcpy(this, value, sizeof(Value));
-        cleanup = CLEAN_NOTHING;
-    }
+    void fillCopy(const Value &value, bool deep=false);
     /**
      * Make a xsd:boolean
      *
@@ -240,23 +286,31 @@ struct Value {
      * Make a simple literal
      *
      * @param lexical the lexical form
+     * @param len length of the lexical form
      * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillSimpleLiteral(char *lexical, bool freeLexical);
+    void fillSimpleLiteral(char *lexical, unsigned len, bool freeLexical);
     /**
      * Make an IRI
      *
      * @param lexical the IRI
+     * @param len length of the lexical form
      * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillIRI(char *lexical, bool freeLexical);
-
+    void fillIRI(char *lexical, unsigned len, bool freeLexical);
     /**
-     * Retrieve the id of this value from the store and fill in the id field.
-     * Do nothing if id > 0.
-     * @param store the store
+     * Make a blank node
+     *
+     * @param lexical the blank node identifier
+     * @param len length of the lexical form
+     * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillId(Store *store);
+    void fillBlank(char *lexical, unsigned len, bool freeLexical);
+
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Tests and comparisons
 
     /**
      * @return whether this value is a blank node
@@ -277,7 +331,7 @@ struct Value {
     /**
      * @return whether this value is a simple literal
      */
-    bool isSimple() const { return isPlain() && language == 0; }
+    bool isSimple() const { return isPlain() && language == NULL; }
     /**
      * @return whether this value is a typed string
      */
@@ -333,11 +387,6 @@ struct Value {
      */
     int compare(const Value &o) const;
 
-    bool operator<(const Value &o) const;
-    bool operator>(const Value &o) const { return o < *this; }
-    bool operator==(const Value &o) const { return rdfequals(o) == 0; }
-    bool operator!=(const Value &o) const { return rdfequals(o) != 0; }
-
     /**
      * Test the RDFterm-equality as defined in SPARQL 1.0, section 11.4.10.
      *
@@ -347,6 +396,16 @@ struct Value {
      */
     int rdfequals(const Value &o) const;
 
+    bool operator<(const Value &o) const;
+    bool operator>(const Value &o) const { return o < *this; }
+    bool operator==(const Value &o) const { return rdfequals(o) == 0; }
+    bool operator!=(const Value &o) const { return rdfequals(o) != 0; }
+
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Utility functions
+
     /**
      * Ensure this value has a non-null lexical. A new lexical will be created
      * if necessary.
@@ -354,10 +413,15 @@ struct Value {
     void ensureLexical();
 
     /**
+     * Compute the hashcode of this value
+     * @pre the value must have a lexical form
+     */
+    uint32_t hash() const;
+
+    /**
      * @return a string representation of this value
      */
     std::string getString() const;
-
 
     /**
      * Apply numeric type promotion rules to make v1 and v2 the same type to
@@ -367,6 +431,19 @@ struct Value {
      * @param v2 second numeric value
      */
     static void promoteNumericType(Value &v1, Value &v2);
+
+    /**
+     * Get the type of a typed literal from its URI and interpret its lexical
+     * if it is a known type.
+     *
+     * @pre lexical is defined;
+     *      either type != TYPE_CUSTOM,
+     *      or type == TYPE_CUSTOM and typeUri is defined
+     * @post if known type: type is set to the correct value, data is filled,
+     *                      typeUri is cleaned and set to the static string
+     *       else: type is set to TYPE_CUSTOM
+     */
+    void interpretTypedLiteral();
 };
 
 std::ostream& operator<<(std::ostream &out, const Value &val);
@@ -376,9 +453,9 @@ std::ostream& operator<<(std::ostream &out, const Value *val);
  * Small statement structure containing ids.
  */
 struct Statement {
-    int subject;
-    int predicate;
-    int object;
+    Value::id_t subject;
+    Value::id_t predicate;
+    Value::id_t object;
 };
 
 }

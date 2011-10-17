@@ -67,6 +67,48 @@ public:
     }
 };
 
+
+/**
+ * RDF Parser handler
+ */
+class RDFParseHandler {
+public:
+    virtual ~RDFParseHandler() {}
+    virtual void parseTriple(raptor_statement* triple) = 0;
+};
+
+/**
+ * Wrapper for RDF parser
+ */
+class RDFParser {
+    raptor_parser *parser;
+    raptor_uri *fileURI;
+    unsigned char *fileURIstr;
+
+    static void stmt_handler(void* user_data, raptor_statement* triple) {
+        static_cast<RDFParseHandler*>(user_data)->parseTriple(triple);
+    }
+
+public:
+    RDFParser(const char *syntax, const char *path) {
+        parser = raptor_new_parser(World::instance().raptor, syntax);
+        if(parser == NULL)
+            throw "Unable to create parser";
+        fileURIstr = raptor_uri_filename_to_uri_string(path);
+        fileURI = raptor_new_uri(World::instance().raptor, fileURIstr);
+    }
+    ~RDFParser() {
+        raptor_free_parser(parser);
+        raptor_free_uri(fileURI);
+        raptor_free_memory(fileURIstr);
+    }
+    void parse(RDFParseHandler *handler) {
+        raptor_parser_set_statement_handler(parser, handler, stmt_handler);
+        raptor_parser_parse_file(parser, fileURI, NULL);
+    }
+};
+
+
 }
 }
 

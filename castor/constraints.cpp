@@ -25,45 +25,65 @@ namespace castor {
 StatementConstraint::StatementConstraint(Query *query, StatementPattern &stmt) :
         StatelessConstraint(CASTOR_CONSTRAINTS_STATEMENT_PRIORITY),
         store(query->getStore()), stmt(stmt) {
-#define REGISTER(part) \
-    if(stmt.part.isVariable()) { \
-        part = query->getVariable(stmt.part.getVariableId())->getCPVariable(); \
-        part->registerBind(this); \
-    } else { \
-        part = NULL; \
+    if(stmt.subject.isVariable()) {
+        subject = query->getVariable(stmt.subject.getVariableId())
+                            ->getCPVariable();
+        subject->registerBind(this);
+    } else {
+        subject = NULL;
     }
-    REGISTER(subject);
-    REGISTER(predicate);
-    REGISTER(object);
-#undef REGISTER
+    if(stmt.predicate.isVariable()) {
+        predicate = query->getVariable(stmt.predicate.getVariableId())
+                            ->getCPVariable();
+        predicate->registerBind(this);
+    } else {
+        predicate = NULL;
+    }
+    if(stmt.object.isVariable()) {
+        object = query->getVariable(stmt.object.getVariableId())
+                            ->getCPVariable();
+        object->registerBind(this);
+    } else {
+        object = NULL;
+    }
 }
 
 void StatementConstraint::restore() {
-    int bound = 0;
-    if(subject == NULL || subject->isBound()) bound++;
-    if(predicate == NULL || predicate->isBound()) bound++;
-    if(object == NULL || object->isBound()) bound++;
+    int bound = (subject == NULL || subject->isBound())
+              + (predicate == NULL || predicate->isBound())
+              + (object == NULL || object->isBound());
     done = (bound >= 2);
 }
 
 bool StatementConstraint::propagate() {
     StatelessConstraint::propagate();
 
-    int vs, vp, vo;
+    Statement q;
     int bound = 3;
-#define INIT(p, part) \
-    if(part == NULL) { \
-        v##p = stmt.part.getValueId(); \
-    } else if(part->isBound()) { \
-        v##p = part->getValue(); \
-    } else { \
-        v##p = -1; \
-        bound--; \
+    if(subject == NULL) {
+        q.subject = stmt.subject.getValueId();
+    } else if(subject->isBound()) {
+        q.subject = subject->getValue();
+    } else {
+        q.subject = 0;
+        bound--;
     }
-    INIT(s, subject)
-    INIT(p, predicate)
-    INIT(o, object)
-#undef INIT
+    if(predicate == NULL) {
+        q.predicate = stmt.predicate.getValueId();
+    } else if(predicate->isBound()) {
+        q.predicate = predicate->getValue();
+    } else {
+        q.predicate = 0;
+        bound--;
+    }
+    if(object == NULL) {
+        q.object = stmt.object.getValueId();
+    } else if(object->isBound()) {
+        q.object = object->getValue();
+    } else {
+        q.object = 0;
+        bound--;
+    }
 
     if(bound == 0)
         // nothing bound, we do not want to check all triples
@@ -72,29 +92,29 @@ bool StatementConstraint::propagate() {
     if(bound >= 2)
         done = true;
 
-    store->queryStatements(vs, vp, vo);
+    Store::StatementQuery query(*store, q);
 
     if(bound == 3) {
         // all variables are bound, just check
-        return store->fetchStatement(NULL);
+        return query.next(NULL);
     }
 
-    if(vs < 0) subject->clearMarks();
-    if(vp < 0) predicate->clearMarks();
-    if(vo < 0) object->clearMarks();
+    if(q.subject == 0) subject->clearMarks();
+    if(q.predicate == 0) predicate->clearMarks();
+    if(q.object == 0) object->clearMarks();
     Statement st;
-    while(store->fetchStatement(&st)) {
-        if((vs < 0 && !subject->contains(st.subject)) ||
-           (vp < 0 && !predicate->contains(st.predicate)) ||
-           (vo < 0 && !object->contains(st.object)))
+    while(query.next(&st)) {
+        if((q.subject == 0 && !subject->contains(st.subject)) ||
+           (q.predicate == 0 && !predicate->contains(st.predicate)) ||
+           (q.object == 0 && !object->contains(st.object)))
             continue;
-        if(vs < 0) subject->mark(st.subject);
-        if(vp < 0) predicate->mark(st.predicate);
-        if(vo < 0) object->mark(st.object);
+        if(q.subject == 0) subject->mark(st.subject);
+        if(q.predicate == 0) predicate->mark(st.predicate);
+        if(q.object == 0) object->mark(st.object);
     }
-    if(vs < 0 && !subject->restrictToMarks()) return false;
-    if(vp < 0 && !predicate->restrictToMarks()) return false;
-    if(vo < 0 && !object->restrictToMarks()) return false;
+    if(q.subject == 0 && !subject->restrictToMarks()) return false;
+    if(q.predicate == 0 && !predicate->restrictToMarks()) return false;
+    if(q.object == 0 && !object->restrictToMarks()) return false;
     return true;
 }
 
@@ -104,14 +124,14 @@ FilterConstraint::FilterConstraint(Store *store, Expression *expr) :
         StatelessConstraint(CASTOR_CONSTRAINTS_FILTER_PRIORITY),
         store(store), expr(expr) {
     VarInt** vars = expr->getVars().getCPVars();
-    for(int i = 0; i < expr->getVars().getSize(); i++)
+    for(unsigned i = 0; i < expr->getVars().getSize(); i++)
         vars[i]->registerBind(this);
 }
 
 void FilterConstraint::restore() {
     done = false;
     VariableSet &vars = expr->getVars();
-    for(int i = 0; i < vars.getSize(); i++) {
+    for(unsigned i = 0; i < vars.getSize(); i++) {
         VarInt *x = vars[i]->getCPVariable();
         if(!x->contains(0) && !x->isBound()) {
             if(done) {
@@ -130,12 +150,12 @@ bool FilterConstraint::propagate() {
     StatelessConstraint::propagate();
     VariableSet &vars = expr->getVars();
     Variable* unbound = NULL;
-    for(int i = 0; i < vars.getSize(); i++) {
+    for(unsigned i = 0; i < vars.getSize(); i++) {
         Variable *x = vars[i];
         if(x->getCPVariable()->contains(0))
-            x->setValue(NULL);
+            x->setValueId(0);
         else if(x->getCPVariable()->isBound())
-            x->setValue(store->getValue(x->getCPVariable()->getValue()));
+            x->setValueId(x->getCPVariable()->getValue());
         else if(unbound)
             return true; // too many unbound variables (> 1)
         else
@@ -149,10 +169,10 @@ bool FilterConstraint::propagate() {
         // all variables, except one, are bound -> forward checking
         VarInt *x = unbound->getCPVariable();
         x->clearMarks();
-        int n = x->getSize();
+        unsigned n = x->getSize();
         const int* dom = x->getDomain();
-        for(int i = 0; i < n; i++) {
-            unbound->setValue(store->getValue(dom[i]));
+        for(unsigned i = 0; i < n; i++) {
+            unbound->setValueId(dom[i]);
             if(expr->isTrue())
                 x->mark(dom[i]);
         }

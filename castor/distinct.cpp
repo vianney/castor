@@ -23,7 +23,7 @@ namespace castor {
 
 template <typename T>
 bool DistinctConstraint::LexLess::operator ()(T* a, T* b) const {
-    for(int i = 0; i < size; i++) {
+    for(unsigned i = 0; i < size; i++) {
         if(i == index)
             continue;
         if(a[i] < b[i])
@@ -36,18 +36,18 @@ bool DistinctConstraint::LexLess::operator ()(T* a, T* b) const {
 
 DistinctConstraint::DistinctConstraint(Query *query) {
     this->query = query;
-    int n = query->getRequestedCount();
+    unsigned n = query->getRequestedCount();
     assert(n > 0);
     solutions = new SolSet(LexLess(n));
     indexes = new SolSet*[n];
-    for(int i = 0; i < n; i++) {
+    for(unsigned i = 0; i < n; i++) {
         indexes[i] = new SolSet(LexLess(n, i));
         query->getVariable(i)->getCPVariable()->registerBind(this);
     }
 }
 
 DistinctConstraint::~DistinctConstraint() {
-    for(int i = 0; i < query->getRequestedCount(); i++)
+    for(unsigned i = 0; i < query->getRequestedCount(); i++)
         delete indexes[i];
     delete [] indexes;
     for(SolSet::iterator it = solutions->begin(), end = solutions->end();
@@ -58,20 +58,18 @@ DistinctConstraint::~DistinctConstraint() {
 }
 
 void DistinctConstraint::addSolution() {
-    int n = query->getRequestedCount();
-    int *sol = new int[n];
-    for(int i = 0; i < n; i++) {
-        Value *val = query->getVariable(i)->getValue();
-        sol[i] = (val == NULL ? 0 : val->id);
-    }
+    unsigned n = query->getRequestedCount();
+    Value::id_t *sol = new Value::id_t[n];
+    for(unsigned i = 0; i < n; i++)
+        sol[i] = query->getVariable(i)->getValueId();
     solutions->insert(sol);
-    for(int i = 0; i < n; i++)
+    for(unsigned i = 0; i < n; i++)
         indexes[i]->insert(sol);
     solver->refresh(this);
 }
 
 void DistinctConstraint::reset() {
-    for(int i = 0; i < query->getRequestedCount(); i++)
+    for(unsigned i = 0; i < query->getRequestedCount(); i++)
         indexes[i]->clear();
     for(SolSet::iterator it = solutions->begin(), end = solutions->end();
         it != end; ++it) {
@@ -81,9 +79,9 @@ void DistinctConstraint::reset() {
 }
 
 bool DistinctConstraint::propagate() {
-    int sol[query->getRequestedCount()];
+    Value::id_t sol[query->getRequestedCount()];
     int unbound = -1;
-    for(int i = 0; i < query->getRequestedCount(); i++) {
+    for(unsigned i = 0; i < query->getRequestedCount(); i++) {
         VarInt *x = query->getVariable(i)->getCPVariable();
         if(x->isBound())
             sol[i] = x->getValue();

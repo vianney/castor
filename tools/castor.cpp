@@ -19,6 +19,7 @@
 #include <iostream>
 #include <iomanip>
 #include <fstream>
+#include "store.h"
 #include "query.h"
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -64,9 +65,6 @@ int main(int argc, char *argv[]) {
     rusage ru[4];
     getrusage(RUSAGE_SELF, &ru[0]);
 
-    // disable sqlite mutexes, assuming we are single-threaded
-    sqlite3_config(SQLITE_CONFIG_SINGLETHREAD);
-
     Store store(dbpath);
 
     getrusage(RUSAGE_SELF, &ru[1]);
@@ -83,8 +81,11 @@ int main(int argc, char *argv[]) {
         if(query.getRequestedCount() == 0) {
             *fsol << "YES" << endl;
         } else {
-            for(int i = 0; i < query.getRequestedCount(); i++)
-                *fsol << query.getVariable(i)->getValue() << " ";
+            for(unsigned i = 0; i < query.getRequestedCount(); i++) {
+                Value val;
+                store.fetchValue(query.getVariable(i)->getValueId(), val);
+                *fsol << val << " ";
+            }
             *fsol << endl;
         }
     }

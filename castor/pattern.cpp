@@ -48,7 +48,7 @@ void BasicPattern::add(const StatementPattern &triple) {
 
 void BasicPattern::init() {
     sub = new Subtree(query->getSolver(), vars.getCPVars(), vars.getSize());
-    for(int i = 0; i < vars.getSize(); i++)
+    for(unsigned i = 0; i < vars.getSize(); i++)
         sub->add(new BoundConstraint(vars[i]->getCPVariable()));
     for(std::vector<StatementPattern>::iterator it = triples.begin(),
         end = triples.end(); it != end; ++it)
@@ -125,7 +125,7 @@ bool FilterPattern::next() {
         return subpattern->next();
     } else {
         while(subpattern->next()) {
-            for(int i = 0; i < condition->getVars().getSize(); i++)
+            for(unsigned i = 0; i < condition->getVars().getSize(); i++)
                 condition->getVars()[i]->setValueFromCP();
             if(condition->isTrue())
                 return true;

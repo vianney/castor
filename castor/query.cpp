@@ -24,15 +24,15 @@ namespace castor {
 
 void Variable::setValueFromCP() {
     if(var->contains(0))
-        value = NULL;
+        setValueId(0);
     else
-        value = query->getStore()->getValue(var->getValue());
+        setValueId(var->getValue());
 }
 
 Solution::Solution(Query *query) : query(query) {
-    values = new Value*[query->getVariablesCount()];
-    for(int i = 0; i < query->getVariablesCount(); i++)
-        values[i] = query->getVariable(i)->getValue();
+    values = new Value::id_t[query->getVariablesCount()];
+    for(unsigned i = 0; i < query->getVariablesCount(); i++)
+        values[i] = query->getVariable(i)->getValueId();
 }
 
 Solution::~Solution() {
@@ -40,15 +40,15 @@ Solution::~Solution() {
 }
 
 void Solution::restore() const {
-    for(int i = 0; i < query->getVariablesCount(); i++)
-        query->getVariable(i)->setValue(values[i]);
+    for(unsigned i = 0; i < query->getVariablesCount(); i++)
+        query->getVariable(i)->setValueId(values[i]);
 }
 
 bool Solution::operator <(const Solution &o) const {
     if(o.query != query)
         return false;
     Value v1, v2;
-    for(int i = 0; i < query->getOrderCount(); i++) {
+    for(unsigned i = 0; i < query->getOrderCount(); i++) {
         Expression *expr = query->getOrder(i);
         restore();
         if(!expr->evaluate(v1))
@@ -65,8 +65,8 @@ bool Solution::operator <(const Solution &o) const {
 
 using librdf::Sequence;
 
-Query::Query(Store *store, char *queryString) throw(QueryParseException) :
-        store(store) {
+Query::Query(Store *store, const char *queryString) throw(QueryParseException)
+        : store(store) {
     rasqal_query *query = rasqal_new_query(librdf::World::instance().rasqal,
                                            "sparql", NULL);
     vars = NULL;
@@ -74,17 +74,19 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
     solutions = NULL;
     try {
         if(rasqal_query_prepare(query,
-                                reinterpret_cast<unsigned char*>(queryString),
+                                reinterpret_cast<const unsigned char*>(queryString),
                                 NULL))
             throw QueryParseException("unable to parse query");
 
         // DISTINCT, LIMIT and OFFSET (+ check for unsupported verbs)
         rasqal_query_verb verb = rasqal_query_get_verb(query);
+        int rasqalOffset;
         switch(verb) {
         case RASQAL_QUERY_VERB_SELECT:
             distinct = rasqal_query_get_distinct(query); // ignores mode
             limit = rasqal_query_get_limit(query);
-            offset = rasqal_query_get_offset(query);
+            rasqalOffset = rasqal_query_get_offset(query);
+            offset = rasqalOffset < 0 ? 0 : rasqalOffset;
             break;
         case RASQAL_QUERY_VERB_ASK:
             distinct = false;
@@ -119,7 +121,7 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
 
         nbVars = nbReal + nbAnon;
         vars = new Variable[nbVars];
-        int i;
+        unsigned i;
         for(i = 0; i < nbRequestedVars; i++) {
             rasqal_variable *var = seq[i];
             var->user_data = &vars[i];
@@ -157,7 +159,7 @@ Query::Query(Store *store, char *queryString) throw(QueryParseException) :
             if(nbOrder > 0) {
                 order = new Expression*[nbOrder];
                 orderDescending = new bool[nbOrder];
-                for(int i = 0; i < nbOrder; i++) {
+                for(unsigned i = 0; i < nbOrder; i++) {
                     rasqal_expression *expr = seqOrder[i];
                     switch(expr->op) {
                     case RASQAL_EXPR_ORDER_COND_ASC:
@@ -224,7 +226,7 @@ Query::~Query() {
         delete solutions;
     }
     if(nbOrder > 0) {
-        for(int i = 0; i < nbOrder; i++)
+        for(unsigned i = 0; i < nbOrder; i++)
             delete order[i];
         delete [] order;
         delete [] orderDescending;
@@ -405,87 +407,9 @@ Expression* Query::convertExpression(rasqal_expression *expr)
             return new VariableExpression(
                 reinterpret_cast<Variable*>(lit->value.variable->user_data));
         } else {
-            VarVal v = getVarVal(lit);
-            if(!v.isUnknown())
-                return new ValueExpression(this,
-                                           store->getValue(v.getValueId()),
-                                           false);
-            Value *val = new Value;
-            val->id = 0;
-            val->lexical = NULL;
-            switch(lit->type) {
-            case RASQAL_LITERAL_BLANK:
-                val->type = Value::TYPE_BLANK;
-                break;
-            case RASQAL_LITERAL_URI:
-                val->type = Value::TYPE_IRI;
-                val->lexical = convertURI(lit->value.uri);
-                val->addCleanFlag(Value::CLEAN_LEXICAL);
-                break;
-            case RASQAL_LITERAL_STRING:
-                val->type = Value::TYPE_PLAIN_STRING;
-                if(lit->language == NULL || lit->language[0] == '\0') {
-                    val->language = 0;
-                    val->languageTag = const_cast<char*>("");
-                } else {
-                    val->language = -1;
-                    val->languageTag = new char[strlen(lit->language)+1];
-                    strcpy(val->languageTag, lit->language);
-                    val->addCleanFlag(Value::CLEAN_DATA);
-                }
-                break;
-            case RASQAL_LITERAL_XSD_STRING:
-                val->type = Value::TYPE_TYPED_STRING;
-                break;
-            case RASQAL_LITERAL_BOOLEAN:
-                val->type = Value::TYPE_BOOLEAN;
-                val->boolean = lit->value.integer;
-                val->lexical = val->boolean ? const_cast<char*>("true") :
-                                              const_cast<char*>("false");
-                break;
-            case RASQAL_LITERAL_INTEGER:
-                val->type = Value::TYPE_INTEGER;
-                val->integer = lit->value.integer;
-                break;
-            case RASQAL_LITERAL_FLOAT:
-                val->type = Value::TYPE_FLOAT;
-                val->floating = lit->value.floating;
-                break;
-            case RASQAL_LITERAL_DOUBLE:
-                val->type = Value::TYPE_DOUBLE;
-                val->floating = lit->value.floating;
-                break;
-            case RASQAL_LITERAL_DECIMAL:
-                val->type = Value::TYPE_DECIMAL;
-                val->decimal = new XSDDecimal(reinterpret_cast<const char*>(lit->string));
-                val->addCleanFlag(Value::CLEAN_DATA);
-                break;
-            case RASQAL_LITERAL_DATETIME:
-                val->type = Value::TYPE_DATETIME;
-                // TODO
-                delete val;
-                throw QueryParseException("datetime unimplemented");
-                break;
-            case RASQAL_LITERAL_UDT:
-                val->type = Value::TYPE_UNKOWN;
-                val->typeUri = convertURI(lit->datatype);
-                val->addCleanFlag(Value::CLEAN_TYPE_URI);
-                break;
-            default:
-                delete val;
-                std::ostringstream msg;
-                msg << "unknown rasqal literal type " << lit->type;
-                throw QueryParseException(msg.str());
-            }
-            if(val->type != Value::TYPE_UNKOWN &&
-               val->type < Value::TYPE_FIRST_CUSTOM)
-                val->typeUri = Value::TYPE_URIS[val->type];
-            if(val->lexical == NULL) {
-                val->lexical = new char[lit->string_len + 1];
-                strcpy(val->lexical, reinterpret_cast<const char*>(lit->string));
-                val->addCleanFlag(Value::CLEAN_LEXICAL);
-            }
-            return new ValueExpression(this, val, true);
+            Value *val = new Value(lit);
+            store->lookupId(*val);
+            return new ValueExpression(this, val);
         }
     }
     case RASQAL_EXPR_BANG:
@@ -580,51 +504,9 @@ VarVal Query::getVarVal(rasqal_literal* literal) throw(QueryParseException) {
     if(literal->type == RASQAL_LITERAL_VARIABLE) {
         return VarVal((Variable*) literal->value.variable->user_data);
     } else {
-        const char *lexical = reinterpret_cast<const char*>(literal->string);
-        const char *typeUri = NULL;
-        Value::Type type;
-        switch(literal->type) {
-        case RASQAL_LITERAL_BLANK:
-            type = Value::TYPE_BLANK;
-            break;
-        case RASQAL_LITERAL_URI:
-            type = Value::TYPE_IRI;
-            lexical = reinterpret_cast<const char*>(raptor_uri_as_string(literal->value.uri));
-            break;
-        case RASQAL_LITERAL_STRING:
-            type = Value::TYPE_PLAIN_STRING;
-            break;
-        case RASQAL_LITERAL_XSD_STRING:
-            type = Value::TYPE_TYPED_STRING;
-            break;
-        case RASQAL_LITERAL_BOOLEAN:
-            type = Value::TYPE_BOOLEAN;
-            break;
-        case RASQAL_LITERAL_FLOAT:
-            type = Value::TYPE_FLOAT;
-            break;
-        case RASQAL_LITERAL_DOUBLE:
-            type = Value::TYPE_DOUBLE;
-            break;
-        case RASQAL_LITERAL_DECIMAL:
-            type = Value::TYPE_DECIMAL;
-            break;
-        case RASQAL_LITERAL_DATETIME:
-            type = Value::TYPE_DATETIME;
-            break;
-        case RASQAL_LITERAL_INTEGER: // what kind of integer precisely?
-        case RASQAL_LITERAL_UDT:
-            type = Value::TYPE_UNKOWN;
-            typeUri = reinterpret_cast<const char*>(raptor_uri_as_string(literal->datatype));
-            break;
-        default:
-            std::ostringstream msg;
-            msg << "unknown rasqal literal type " << literal->type;
-            throw QueryParseException(msg.str());
-        }
-
-        return VarVal(store->getValueId(type, typeUri, lexical,
-                                        literal->language));
+        Value val(literal);
+        store->lookupId(val);
+        return VarVal(val);
     }
 }
 
@@ -638,10 +520,10 @@ std::ostream& operator<<(std::ostream &out, const Query &q) {
 
 bool Query::next() {
     if(solutions == NULL) {
-        if(limit >= 0 && nbSols >= limit)
+        if(limit >= 0 && nbSols >= static_cast<unsigned>(limit))
             return false;
         if(nbSols == 0) {
-            for(int i = 0; i < offset; i++) {
+            for(unsigned i = 0; i < offset; i++) {
                 if(!nextPatternSolution())
                     return false;
             }
@@ -655,8 +537,8 @@ bool Query::next() {
             while(nextPatternSolution()) {
                 solutions->insert(new Solution(this));
                 if(limit >= 0) {
-                    int n = static_cast<int>(solutions->size());
-                    if(n > limit + offset) {
+                    unsigned n = solutions->size();
+                    if(n > static_cast<unsigned>(limit) + offset) {
                         // only keep the first (offset + limit) solutions
                         SolutionSet::iterator it = solutions->end();
                         --it;
@@ -664,12 +546,12 @@ bool Query::next() {
                         solutions->erase(it);
                         n--;
                     }
-                    if(n == limit + offset)
+                    if(n == static_cast<unsigned>(limit) + offset)
                         bnbOrderCstr->updateBound(*solutions->rbegin());
                 }
             }
             it = solutions->begin();
-            for(int i = 0; i < offset && it != solutions->end(); i++)
+            for(unsigned i = 0; i < offset && it != solutions->end(); i++)
                 ++it;
         }
         if(it == solutions->end())
@@ -685,7 +567,7 @@ bool Query::next() {
 bool Query::nextPatternSolution() {
     if(!pattern->next())
         return false;
-    for(int i = 0; i < nbVars; i++)
+    for(unsigned i = 0; i < nbVars; i++)
         vars[i].setValueFromCP();
     if(distinctCstr != NULL)
         distinctCstr->addSolution();

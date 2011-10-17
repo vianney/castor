@@ -23,10 +23,10 @@ namespace castor {
 
 BnBOrderConstraint::BnBOrderConstraint(Query *query) : query(query) {
     VariableSet vars(query);
-    for(int i = 0; i < query->getOrderCount(); i++)
+    for(unsigned i = 0; i < query->getOrderCount(); i++)
         vars += query->getOrder(i)->getVars();
     assert(vars.getSize() > 0);
-    for(int i = 0; i < vars.getSize(); i++) {
+    for(unsigned i = 0; i < vars.getSize(); i++) {
         VarInt *x = vars[i]->getCPVariable();
         x->registerBind(this);
         x->maintainBounds(); // TODO only if really needed
@@ -44,7 +44,8 @@ BnBOrderConstraint::~BnBOrderConstraint() {
 void BnBOrderConstraint::updateBound(Solution *sol) {
     bound = sol;
     bound->restore();
-    for(int i = 0; i < query->getOrderCount(); i++) {
+    // TODO should not perform full evaluation for variable-only ordering
+    for(unsigned i = 0; i < query->getOrderCount(); i++) {
         boundOrderError[i] = !query->getOrder(i)->evaluate(boundOrderVals[i]);
     }
     solver->refresh(this);
@@ -57,7 +58,7 @@ void BnBOrderConstraint::reset() {
 bool BnBOrderConstraint::propagate() {
     if(bound == NULL)
         return true;
-    for(int i = 0; i < query->getOrderCount(); i++) {
+    for(unsigned i = 0; i < query->getOrderCount(); i++) {
         if(boundOrderError[i])
             return true; // don't know what to do if evaluation error
         Expression *expr = query->getOrder(i);
@@ -82,7 +83,7 @@ bool BnBOrderConstraint::propagate() {
                     (desc && x->getValue() > bval->id))
                 return true;
         } else {
-            for(int j = 0; j < expr->getVars().getSize(); j++) {
+            for(unsigned j = 0; j < expr->getVars().getSize(); j++) {
                 if(expr->getVars()[j]->isBound())
                     expr->getVars()[j]->setValueFromCP();
                 else
