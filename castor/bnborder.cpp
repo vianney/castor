@@ -44,9 +44,15 @@ BnBOrderConstraint::~BnBOrderConstraint() {
 void BnBOrderConstraint::updateBound(Solution *sol) {
     bound = sol;
     bound->restore();
-    // TODO should not perform full evaluation for variable-only ordering
     for(unsigned i = 0; i < query->getOrderCount(); i++) {
-        boundOrderError[i] = !query->getOrder(i)->evaluate(boundOrderVals[i]);
+        if(VariableExpression *varexpr = dynamic_cast<VariableExpression*>(query->getOrder(i))) {
+            boundOrderVals[i].id = varexpr->getVariable()->getValueId();
+            boundOrderError[i] = (boundOrderVals[i].id > 0);
+        } else {
+            boundOrderError[i] = !query->getOrder(i)->evaluate(boundOrderVals[i]);
+            if(!boundOrderError[i])
+                boundOrderVals[i].ensureInterpreted();
+        }
     }
     solver->refresh(this);
 }
@@ -92,6 +98,7 @@ bool BnBOrderConstraint::propagate() {
             Value val;
             if(!expr->evaluate(val))
                 return true;
+            val.ensureInterpreted();
             if(desc) {
                 if(val < *bval)
                     return false;

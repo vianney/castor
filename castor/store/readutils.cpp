@@ -47,10 +47,8 @@ void Cursor::readValue(Value &val) {
         val.language = const_cast<char*>(reinterpret_cast<const char*>(ptr));
         val.languageLen = typelen;
     }
+    val.isInterpreted = false;
     ptr += len;
-    // FIXME call to private function
-    // FIXME should be optional
-    val.interpretTypedLiteral(); // FIXME should not try to interpret custom
 }
 
 

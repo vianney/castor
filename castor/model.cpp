@@ -19,8 +19,8 @@
 #include <cstdio>
 #include <cassert>
 #include <sstream>
+#include <algorithm>
 #include "model.h"
-//#include "store/readutils.h"
 
 namespace castor {
 
@@ -78,7 +78,7 @@ unsigned Value::TYPE_URIS_LEN[] = {
 };
 
 #define XSD_PREFIX "http://www.w3.org/2001/XMLSchema#"
-#define XSD_PREFIX_LEN (sizeof(XSD_PREFIX) - 1)
+#define XSD_PREFIX_LEN static_cast<unsigned>(sizeof(XSD_PREFIX) - 1)
 
 
 
@@ -139,7 +139,7 @@ Value::Value(const raptor_term *term) {
             type = TYPE_CUSTOM;
             convertURI(term->value.literal.datatype, typeUri, typeUriLen);
             addCleanFlag(CLEAN_TYPE_URI);
-            interpretTypedLiteral();
+            interpretDatatype();
         }
         break;
     default:
@@ -199,11 +199,11 @@ Value::Value(const rasqal_literal *literal) {
         type = TYPE_CUSTOM;
         convertURI(literal->datatype, typeUri, typeUriLen);
         addCleanFlag(CLEAN_TYPE_URI);
+        interpretDatatype();
         break;
     default:
         assert(false);
     }
-    interpretTypedLiteral();
 }
 
 
@@ -260,7 +260,6 @@ void Value::fillCopy(const Value &value, bool deep)  {
             lexical[lexicalLen] = '\0';
             addCleanFlag(CLEAN_LEXICAL);
         }
-        interpretTypedLiteral();
         if(type == TYPE_CUSTOM) {
             typeUri = new char[typeUriLen + 1];
             memcpy(typeUri, value.typeUri, typeUriLen);
@@ -271,6 +270,10 @@ void Value::fillCopy(const Value &value, bool deep)  {
             language = new char[languageLen + 1];
             memcpy(language, value.language, languageLen);
             language[languageLen] = '\0';
+            addCleanFlag(CLEAN_DATA);
+        }
+        if(type == TYPE_DECIMAL && isInterpreted) {
+            decimal = new XSDDecimal(*value.decimal);
             addCleanFlag(CLEAN_DATA);
         }
     }
@@ -284,6 +287,7 @@ void Value::fillBoolean(bool value) {
     typeUriLen = TYPE_URIS_LEN[TYPE_BOOLEAN];
     lexical = NULL;
     lexicalLen = 0;
+    isInterpreted = true;
     boolean = value;
 }
 
@@ -295,6 +299,7 @@ void Value::fillInteger(long value) {
     typeUriLen = TYPE_URIS_LEN[TYPE_INTEGER];
     lexical = NULL;
     lexicalLen = 0;
+    isInterpreted = true;
     integer = value;
 }
 
@@ -306,6 +311,7 @@ void Value::fillFloating(double value) {
     typeUriLen = TYPE_URIS_LEN[TYPE_DOUBLE];
     lexical = NULL;
     lexicalLen = 0;
+    isInterpreted = true;
     floating = value;
 }
 
@@ -317,6 +323,7 @@ void Value::fillDecimal(XSDDecimal *value) {
     typeUriLen = TYPE_URIS_LEN[TYPE_DECIMAL];
     lexical = NULL;
     lexicalLen = 0;
+    isInterpreted = true;
     decimal = value;
     cleanup = CLEAN_DATA;
 }
@@ -331,6 +338,7 @@ void Value::fillSimpleLiteral(char *lexical, unsigned len, bool freeLexical) {
     lexicalLen = len;
     if(freeLexical)
         cleanup = CLEAN_LEXICAL;
+    isInterpreted = true;
 }
 
 void Value::fillIRI(char *lexical, unsigned len, bool freeLexical) {
@@ -343,6 +351,7 @@ void Value::fillIRI(char *lexical, unsigned len, bool freeLexical) {
     lexicalLen = len;
     if(freeLexical)
         cleanup = CLEAN_LEXICAL;
+    isInterpreted = true;
 }
 
 void Value::fillBlank(char *lexical, unsigned len, bool freeLexical) {
@@ -355,6 +364,7 @@ void Value::fillBlank(char *lexical, unsigned len, bool freeLexical) {
     lexicalLen = len;
     if(freeLexical)
         cleanup = CLEAN_LEXICAL;
+    isInterpreted = true;
 }
 
 
@@ -396,6 +406,8 @@ int Value::compare(const Value &o) const {
 }
 
 bool Value::operator<(const Value &o) const {
+    if(id > 0 && o.id > 0)
+        return id < o.id;
     Class cls = getClass();
     Class ocls = o.getClass();
     int cmp;
@@ -527,6 +539,25 @@ void Value::ensureLexical() {
     }
 }
 
+void Value::ensureInterpreted() {
+    if(isInterpreted)
+        return;
+    if(isBoolean()) {
+        boolean = (lexicalLen == 1 && memcmp(lexical, "1", 1) == 0) ||
+                  (lexicalLen == 4 && memcmp(lexical, "true", 4) == 0);
+    } else if(isInteger()) {
+        integer = atoi(lexical); // FIXME non-null terminated
+    } else if(isFloating()) {
+        floating = atof(lexical); // FIXME non-null terminated
+    } else if(isDecimal()) {
+        decimal = new XSDDecimal(lexical); // FIXME non-null terminated
+        addCleanFlag(CLEAN_DATA);
+    } else if(isDateTime()) {
+        // TODO
+    }
+    isInterpreted = true;
+}
+
 uint32_t Value::hash() const {
     uint32_t hash = type;
     if(type == TYPE_CUSTOM)
@@ -594,6 +625,8 @@ std::ostream& operator<<(std::ostream &out, const Value *val) {
 }
 
 void Value::promoteNumericType(Value &v1, Value &v2) {
+    v1.ensureInterpreted();
+    v2.ensureInterpreted();
     if(v1.isDecimal() && v2.isInteger())
         // convert v2 to xsd:decimal
         v2.fillDecimal(new XSDDecimal(v2.integer));
@@ -613,43 +646,31 @@ void Value::promoteNumericType(Value &v1, Value &v2) {
         v1.fillFloating(v1.decimal->getFloat());
 }
 
-void Value::interpretTypedLiteral() {
-    // check for known type
-    if(type == TYPE_CUSTOM) {
-        if(strncmp(typeUri, XSD_PREFIX, XSD_PREFIX_LEN) != 0)
-            return;
+void Value::interpretDatatype() {
+    if(type != TYPE_CUSTOM)
+        return;
 
-        char *fragment = &typeUri[XSD_PREFIX_LEN];
-        for(Type t = TYPE_FIRST_XSD; t <= TYPE_LAST_XSD;
-            t = static_cast<Type>(t+1)) {
-            if(strcmp(fragment, &TYPE_URIS[t][XSD_PREFIX_LEN]) == 0) {
-                type = t;
-                break;
+    if(typeUriLen < XSD_PREFIX_LEN + 1)
+        return;
+
+    if(memcmp(typeUri, XSD_PREFIX, XSD_PREFIX_LEN) != 0)
+        return;
+
+    char *fragment = &typeUri[XSD_PREFIX_LEN];
+    unsigned fragmentLen = typeUriLen - XSD_PREFIX_LEN;
+    for(Type t = TYPE_FIRST_XSD; t <= TYPE_LAST_XSD;
+        t = static_cast<Type>(t+1)) {
+        if(memcmp(fragment, &TYPE_URIS[t][XSD_PREFIX_LEN],
+                  std::min(fragmentLen, TYPE_URIS_LEN[t] - XSD_PREFIX_LEN)) == 0) {
+            type = t;
+            if(hasCleanFlag(CLEAN_TYPE_URI)) {
+                delete [] typeUri;
+                removeCleanFlag(CLEAN_TYPE_URI);
             }
-        }
-        if(type == TYPE_CUSTOM)
+            typeUri = TYPE_URIS[type];
+            typeUriLen = TYPE_URIS_LEN[type];
             return;
-    }
-    // update datatype URI of known type
-    if(hasCleanFlag(CLEAN_TYPE_URI)) {
-        delete [] typeUri;
-        removeCleanFlag(CLEAN_TYPE_URI);
-    }
-    typeUri = TYPE_URIS[type];
-    typeUriLen = TYPE_URIS_LEN[type];
-    // interpret lexical of known type
-    if(isBoolean()) {
-        boolean = strcmp(lexical, "true") == 0 ||
-                strcmp(lexical, "1") == 0;
-    } else if(isInteger()) {
-        integer = atoi(lexical);
-    } else if(isFloating()) {
-        floating = atof(lexical);
-    } else if(isDecimal()) {
-        decimal = new XSDDecimal(lexical);
-        addCleanFlag(CLEAN_DATA);
-    } else if(isDateTime()) {
-        // TODO
+        }
     }
 }
 

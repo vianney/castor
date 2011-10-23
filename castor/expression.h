@@ -60,7 +60,7 @@ public:
      * @pre isVarVal() == true
      * @return the VarVal corresponding to this variable or constant expression
      */
-    virtual VarVal getVarVal() { return VarVal(0); }
+    virtual VarVal getVarVal() { return VarVal(static_cast<Value::id_t>(0)); }
 
     /**
      * Post this expression as a constraint.

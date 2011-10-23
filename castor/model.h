@@ -157,6 +157,10 @@ struct Value {
      * Cleanup flags
      */
     CleanFlags cleanup;
+    /**
+     * Has the types literal been interpreted?
+     */
+    bool isInterpreted;
     union {
         /**
          * Language tag. Unspecified if type is not TYPE_PLAIN_STRING.
@@ -201,7 +205,7 @@ struct Value {
     /**
      * Create an uninitialized value
      */
-    Value() : id(0), cleanup(CLEAN_NOTHING) {}
+    Value() : id(0), cleanup(CLEAN_NOTHING), isInterpreted(false) {}
     /**
      * Copy constructor
      */
@@ -381,6 +385,7 @@ struct Value {
     /**
      * Compare this value with another.
      *
+     * @pre (id > 0 && o.id > 0) || ensureInterpreted()
      * @param o second value
      * @return 0 if this == o, -1 if this < o, 1 if this > o,
      *         -2 if a type error occured
@@ -390,6 +395,7 @@ struct Value {
     /**
      * Test the RDFterm-equality as defined in SPARQL 1.0, section 11.4.10.
      *
+     * @pre ensureLexical
      * @param o second value
      * @return 0 if this RDF-equals o, 1 if !(this RDF-equals o),
      *         -1 if a type error occured
@@ -409,8 +415,16 @@ struct Value {
     /**
      * Ensure this value has a non-null lexical. A new lexical will be created
      * if necessary.
+     *
+     * @pre lexical != NULL || isInterpreted == true
      */
     void ensureLexical();
+
+    /**
+     * Ensure this value is interpreted if it is a typed literal.
+     * @pre lexical != NULL
+     */
+    void ensureInterpreted();
 
     /**
      * Compute the hashcode of this value
@@ -427,23 +441,19 @@ struct Value {
      * Apply numeric type promotion rules to make v1 and v2 the same type to
      * evaluate arithmetic operators.
      *
+     * @note This also ensure that both values are interpreted.
+     *
      * @param v1 first numeric value
      * @param v2 second numeric value
      */
     static void promoteNumericType(Value &v1, Value &v2);
 
+private:
     /**
-     * Get the type of a typed literal from its URI and interpret its lexical
-     * if it is a known type.
-     *
-     * @pre lexical is defined;
-     *      either type != TYPE_CUSTOM,
-     *      or type == TYPE_CUSTOM and typeUri is defined
-     * @post if known type: type is set to the correct value, data is filled,
-     *                      typeUri is cleaned and set to the static string
-     *       else: type is set to TYPE_CUSTOM
+     * Check if the datatype is a known type and if so, update type accordingly,
+     * cleaning the old typeUri if necessary.
      */
-    void interpretTypedLiteral();
+    void interpretDatatype();
 };
 
 std::ostream& operator<<(std::ostream &out, const Value &val);

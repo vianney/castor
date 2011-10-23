@@ -89,6 +89,7 @@ CastExpression::~CastExpression() {
 int Expression::evaluateEBV(Value &buffer) {
     if(!evaluate(buffer))
         return -1;
+    buffer.ensureInterpreted();
     if(buffer.isBoolean())
         return buffer.boolean ? 1 : 0;
     else if(buffer.isInteger())
@@ -133,6 +134,7 @@ bool UPlusExpression::evaluate(Value &result) {
 bool UMinusExpression::evaluate(Value &result) {
     if(!arg->evaluate(result))
         return false;
+    result.ensureInterpreted();
     if(result.isInteger())
         result.fillInteger(-result.integer);
     else if(result.isDecimal())
@@ -238,6 +240,8 @@ bool EqExpression::evaluate(Value &result) {
     Value right;
     if(!arg1->evaluate(result) || !arg2->evaluate(right))
         return false;
+    result.ensureInterpreted();
+    right.ensureInterpreted();
     int cmp = result.compare(right);
     if(cmp == -2) {
         cmp = result.rdfequals(right);
@@ -255,6 +259,8 @@ bool NEqExpression::evaluate(Value &result) {
     Value right;
     if(!arg1->evaluate(result) || !arg2->evaluate(right))
         return false;
+    result.ensureInterpreted();
+    right.ensureInterpreted();
     int cmp = result.compare(right);
     if(cmp == -2) {
         cmp = result.rdfequals(right);
@@ -272,6 +278,8 @@ bool LTExpression::evaluate(Value &result) {
     Value right;
     if(!arg1->evaluate(result) || !arg2->evaluate(right))
         return false;
+    result.ensureInterpreted();
+    right.ensureInterpreted();
     int cmp = result.compare(right);
     if(cmp == -2)
         return false;
@@ -286,6 +294,8 @@ bool GTExpression::evaluate(Value &result) {
     Value right;
     if(!arg1->evaluate(result) || !arg2->evaluate(right))
         return false;
+    result.ensureInterpreted();
+    right.ensureInterpreted();
     int cmp = result.compare(right);
     if(cmp == -2)
         return false;
@@ -300,6 +310,8 @@ bool LEExpression::evaluate(Value &result) {
     Value right;
     if(!arg1->evaluate(result) || !arg2->evaluate(right))
         return false;
+    result.ensureInterpreted();
+    right.ensureInterpreted();
     int cmp = result.compare(right);
     if(cmp == -2)
         return false;
@@ -314,6 +326,8 @@ bool GEExpression::evaluate(Value &result) {
     Value right;
     if(!arg1->evaluate(result) || !arg2->evaluate(right))
         return false;
+    result.ensureInterpreted();
+    right.ensureInterpreted();
     int cmp = result.compare(right);
     if(cmp == -2)
         return false;
@@ -390,6 +404,8 @@ bool SameTermExpression::evaluate(Value &result) {
     Value right;
     if(!arg1->evaluate(result) || !arg2->evaluate(right))
         return false;
+    result.ensureLexical();
+    right.ensureLexical();
     result.fillBoolean(result.rdfequals(right) == 0);
     return true;
 }
