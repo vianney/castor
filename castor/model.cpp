@@ -565,61 +565,54 @@ uint32_t Value::hash() const {
     return Hash::hash(lexical, lexicalLen, hash);
 }
 
-std::string Value::getString() const {
-    std::ostringstream str;
-
-    switch(type) {
-    case TYPE_BLANK:
-        str << "_:";
-        if(lexical)
-            str.write(lexical, lexicalLen);
+std::ostream& operator<<(std::ostream &out, const Value &val) {
+    switch(val.type) {
+    case Value::TYPE_BLANK:
+        out << "_:";
+        if(val.lexical)
+            out.write(val.lexical, val.lexicalLen);
         break;
-    case TYPE_IRI:
-        str << '<';
-        str.write(lexical, lexicalLen);
-        str << '>';
+    case Value::TYPE_IRI:
+        out << '<';
+        out.write(val.lexical, val.lexicalLen);
+        out << '>';
         break;
-    case TYPE_PLAIN_STRING:
-        str << '"';
-        str.write(lexical, lexicalLen);
-        str << '"';
-        if(language != NULL) {
-            str << '@';
-            str.write(language, languageLen);
+    case Value::TYPE_PLAIN_STRING:
+        out << '"';
+        out.write(val.lexical, val.lexicalLen);
+        out << '"';
+        if(val.language != NULL) {
+            out << '@';
+            out.write(val.language, val.languageLen);
         }
         break;
     default:
-        str << '"';
-        if(lexical) {
+        out << '"';
+        if(val.lexical) {
             // FIXME escape quotes inside lexical
-            str.write(lexical, lexicalLen);
+            out.write(val.lexical, val.lexicalLen);
         } else {
-            if(isBoolean())
-                str << (boolean ? "true" : "false");
-            else if(isInteger())
-                str << integer;
-            else if(isFloating())
-                str << floating;
-            else if(isDecimal()) {
-                str << decimal->getString();
+            if(val.isBoolean())
+                out << (val.boolean ? "true" : "false");
+            else if(val.isInteger())
+                out << val.integer;
+            else if(val.isFloating())
+                out << val.floating;
+            else if(val.isDecimal()) {
+                out << val.decimal->getString();
             }
             // TODO datetime
         }
-        str << "\"^^<";
-        str.write(typeUri, typeUriLen);
-        str << '>';
+        out << "\"^^<";
+        out.write(val.typeUri, val.typeUriLen);
+        out << '>';
     }
-
-    return str.str();
-}
-
-std::ostream& operator<<(std::ostream &out, const Value &val) {
-    return out << val.getString();
+    return out;
 }
 
 std::ostream& operator<<(std::ostream &out, const Value *val) {
     if(val)
-        return out << val->getString();
+        return out << *val;
     else
         return out;
 }

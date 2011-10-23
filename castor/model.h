@@ -433,11 +433,6 @@ struct Value {
     uint32_t hash() const;
 
     /**
-     * @return a string representation of this value
-     */
-    std::string getString() const;
-
-    /**
      * Apply numeric type promotion rules to make v1 and v2 the same type to
      * evaluate arithmetic operators.
      *
