@@ -118,7 +118,7 @@ void TempFile::writeValue(const Value &val) {
     unsigned char *it = buffer;
     PageWriter::writeInt(it, val.id);
     PageWriter::writeInt(it, val.hash());
-    PageWriter::writeInt(it, typelen + val.lexicalLen);
+    PageWriter::writeInt(it, typelen + val.lexicalLen + 1);
     assert(val.type < 1<<16);
     assert(typelen < 1<<16);
     PageWriter::writeInt(it, val.type << 16 | typelen);

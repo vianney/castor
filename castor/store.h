@@ -37,7 +37,7 @@ namespace castor {
  */
 class Store {
 public:
-    static const unsigned VERSION = 1; //!< format version
+    static const unsigned VERSION = 2; //!< format version
 
     /**
      * Open a store.
@@ -77,8 +77,8 @@ public:
 private:
     PageReader db;
 
-    unsigned triplesStart[6]; //!< start of triples tables in all orderings
-    BTree<TripleKey>* triplesIndex[6]; //!< triples index in all orderings
+    unsigned triplesStart[3]; //!< start of triples tables in all orderings
+    BTree<TripleKey>* triplesIndex[3]; //!< triples index in all orderings
     unsigned nbValues; //!< number of values
     unsigned valuesStart; //!< start of values table
     unsigned valuesMapping; //!< start of values mapping
@@ -112,7 +112,7 @@ public:
     class StatementQuery {
 
         enum TripleOrder {
-            SPO = 0, POS = 5, OSP = 3 // FIXME we do not need other indexes
+            SPO = 0, POS = 1, OSP = 2
         };
 
         Store *store;

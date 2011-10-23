@@ -41,7 +41,7 @@ Store::Store(const char* fileName) : db(fileName) {
 
 
     // Get triples pointers
-    for(int i = 0; i < 6; i++) {
+    for(int i = 0; i < 3; i++) {
         triplesStart[i] = cur.readInt();
         triplesIndex[i] = new BTree<TripleKey>(&db, cur.readInt());
     }
@@ -68,7 +68,7 @@ Store::Store(const char* fileName) : db(fileName) {
 }
 
 Store::~Store() {
-    for(int i = 0; i < 6; i++)
+    for(int i = 0; i < 3; i++)
         delete triplesIndex[i];
     delete valuesIndex;
     delete [] triples[0];

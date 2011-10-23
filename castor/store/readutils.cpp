@@ -38,16 +38,24 @@ void Cursor::readValue(Value &val) {
     if(val.type == Value::TYPE_CUSTOM) {
         val.typeUri = const_cast<char*>(reinterpret_cast<const char*>(ptr));
         val.typeUriLen = typelen - 1;
+        val.isInterpreted = true;
     } else {
         assert(val.type >= Value::TYPE_BLANK && val.type < Value::TYPE_CUSTOM);
         val.typeUri = Value::TYPE_URIS[val.type];
         val.typeUriLen = Value::TYPE_URIS_LEN[val.type];
+        if(val.isPlain()) {
+            if(typelen > 0) {
+                val.language = const_cast<char*>(reinterpret_cast<const char*>(ptr));
+                val.languageLen = typelen - 1;
+            } else {
+                val.language = NULL;
+                val.languageLen = 0;
+            }
+            val.isInterpreted = true;
+        } else {
+            val.isInterpreted = false;
+        }
     }
-    if(val.isPlain() && val.language != NULL) {
-        val.language = const_cast<char*>(reinterpret_cast<const char*>(ptr));
-        val.languageLen = typelen - 1;
-    }
-    val.isInterpreted = false;
     ptr += len;
 }
 

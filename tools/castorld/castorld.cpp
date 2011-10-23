@@ -16,7 +16,6 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <string>
 #include <iostream>
 #include <fstream>
 #include <algorithm>
@@ -85,12 +84,12 @@ static void skipIntInt(Cursor &cur) {
 }
 
 /**
- * Compare function for values encoded as strings using SPARQL order
+ * Compare function for values using SPARQL order
  */
 static int compareValue(Cursor a, Cursor b) {
     Value va, vb;
-    a.readValue(va);
-    b.readValue(vb);
+    a.readValue(va); va.ensureInterpreted();
+    b.readValue(vb); vb.ensureInterpreted();
     if(va == vb) {
         return 0;
     } else if(va < vb) {
@@ -124,12 +123,12 @@ static int compareBigInt(Cursor a, Cursor b) {
  */
 static void buildDictionary(TempFile &rawValues, TempFile &values,
                             TempFile &valueIdMap) {
-    // sort strings using SPARQL order
+    // sort values using SPARQL order
     TempFile sortedValues(rawValues.getBaseName());
     FileSorter::sort(rawValues, sortedValues, skipValueInt, compareValue);
     rawValues.discard();
 
-    // construct strings list without duplicates and remember mappings
+    // construct values list without duplicates and remember mappings
     TempFile rawMap(rawValues.getBaseName());
     {
         MMapFile in(sortedValues.getFileName().c_str());
@@ -253,8 +252,8 @@ static void resolveIds(TempFile &rawTriples, TempFile &triples, TempFile &idMap)
 struct StoreBuilder {
     PageWriter w; //!< store output
 
-    unsigned triplesStart[6]; //!< start of triples tables in all orderings
-    unsigned triplesIndex[6]; //!< root of triples index in all orderings
+    unsigned triplesStart[3]; //!< start of triples tables in all orderings
+    unsigned triplesIndex[3]; //!< root of triples index in all orderings
     unsigned nbValues; //!< number of values
     unsigned valuesStart; //!< start of values table
     unsigned valuesMapping; //!< start of values mapping
@@ -381,16 +380,13 @@ static void storeTriplesOrderSorted(StoreBuilder &b, TempFile &triples, int orde
  */
 static void storeTriples(StoreBuilder &b, TempFile &triples) {
     storeTriplesOrder(b, triples, 0);
-    storeTriplesOrderSorted<1,3,2>(b, triples, 1);
-    storeTriplesOrderSorted<3,2,1>(b, triples, 2);
-    storeTriplesOrderSorted<3,1,2>(b, triples, 3);
-    storeTriplesOrderSorted<2,1,3>(b, triples, 4);
-    storeTriplesOrderSorted<2,3,1>(b, triples, 5);
+    storeTriplesOrderSorted<2,3,1>(b, triples, 1);
+    storeTriplesOrderSorted<3,1,2>(b, triples, 2);
     triples.discard();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Storing strings
+// Storing values
 
 /**
  * Store the raw values
@@ -502,7 +498,7 @@ static void storeValuesMapping(StoreBuilder &b, TempFile &loc) {
     b.w.flushPage();
 }
 
-struct StringHash {
+struct ValueHash {
     uint32_t h;
 
     static const unsigned SIZE = 4;
@@ -524,10 +520,10 @@ static void storeValuesIndex(StoreBuilder &b, TempFile &loc) {
     const unsigned SUBHEADER_SIZE = 4; // additional header size
     const unsigned ENTRY_SIZE = 8; // size of an entry
 
-    BTreeBuilder<StringHash> tb(&b.w);
+    BTreeBuilder<ValueHash> tb(&b.w);
     std::vector<unsigned> pages;
     MMapFile in(sorted.getFileName().c_str());
-    StringHash last;
+    ValueHash last;
     unsigned count = 0;
     tb.beginLeaf();
     unsigned countOffset = b.w.getOffset(); // offset of count header
@@ -611,7 +607,7 @@ static void storeHeader(StoreBuilder &b) {
     b.w.writeInt(Store::VERSION);
 
     // Triples
-    for(int i = 0; i < 6; i++) {
+    for(int i = 0; i < 3; i++) {
         b.w.writeInt(b.triplesStart[i]);
         b.w.writeInt(b.triplesIndex[i]);
     }
@@ -663,7 +659,7 @@ int main(int argc, char* argv[]) {
     rawTriples.close();
     rawValues.close();
 
-    cout << "Building string dictionary..." << endl;
+    cout << "Building value dictionary..." << endl;
     TempFile values(dbpath), valueIdMap(dbpath);
     buildDictionary(rawValues, values, valueIdMap);
     values.close();
