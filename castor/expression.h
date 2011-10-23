@@ -51,16 +51,16 @@ public:
     bool isConstant() { return vars.getSize() == 0; }
 
     /**
-     * @return true if this expression is a single variable or a constant
-     *         expression
+     * @return true if this expression is a single variable or a value from
+     *         the store
      */
-    virtual bool isVarVal() { return isConstant(); }
+    virtual bool isVarVal() { return false; }
 
     /**
      * @pre isVarVal() == true
      * @return the VarVal corresponding to this variable or constant expression
      */
-    virtual VarVal getVarVal();
+    virtual VarVal getVarVal() { return VarVal(0); }
 
     /**
      * Post this expression as a constraint.
@@ -155,6 +155,9 @@ public:
     ValueExpression(Query *query, Value *value);
     ~ValueExpression();
     bool evaluate(Value &result);
+
+    bool isVarVal() { return value->id != 0; }
+    VarVal getVarVal() { return value; }
 
     /**
      * @return the value

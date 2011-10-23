@@ -22,15 +22,6 @@
 
 namespace castor {
 
-VarVal Expression::getVarVal() {
-    Value val;
-    if(evaluate(val))
-        query->getStore()->lookupId(val);
-    else
-        val.id = 0;
-    return val;
-}
-
 UnaryExpression::UnaryExpression(Expression *arg) :
         Expression(arg->getQuery()), arg(arg) {
     vars = arg->getVars();
