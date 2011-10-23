@@ -88,7 +88,8 @@ public:
      * +----+------+--------+------+---------+-----------+------------------+
      *    4     4      4       2        2       typelen
      *
-     * length is the length of type/lang + lexical
+     * typelen includes terminal null character
+     * length is the length of type/lang + lexical (including terminal null)
      */
     void writeValue(const Value &val);
 };

@@ -33,11 +33,11 @@ void Cursor::readValue(Value &val) {
     unsigned typelen = readInt();
     val.type = static_cast<Value::Type>(typelen >> 16);
     typelen = typelen & 0xffff;
-    val.lexicalLen = len - typelen;
+    val.lexicalLen = len - typelen - 1;
     val.lexical = const_cast<char*>(reinterpret_cast<const char*>(ptr + typelen));
     if(val.type == Value::TYPE_CUSTOM) {
         val.typeUri = const_cast<char*>(reinterpret_cast<const char*>(ptr));
-        val.typeUriLen = typelen;
+        val.typeUriLen = typelen - 1;
     } else {
         assert(val.type >= Value::TYPE_BLANK && val.type < Value::TYPE_CUSTOM);
         val.typeUri = Value::TYPE_URIS[val.type];
@@ -45,7 +45,7 @@ void Cursor::readValue(Value &val) {
     }
     if(val.isPlain() && val.language != NULL) {
         val.language = const_cast<char*>(reinterpret_cast<const char*>(ptr));
-        val.languageLen = typelen;
+        val.languageLen = typelen - 1;
     }
     val.isInterpreted = false;
     ptr += len;

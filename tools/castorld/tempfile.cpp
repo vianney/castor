@@ -105,14 +105,14 @@ void TempFile::writeBigInt(uint64_t val) {
 }
 
 void TempFile::writeValue(const Value &val) {
-    unsigned typelen = 0;
+    unsigned typelen;
     if(val.type == Value::TYPE_CUSTOM)
-        typelen = val.typeUriLen;
+        typelen = val.typeUriLen + 1;
     else if(val.isPlain() && val.language != NULL)
-        typelen = val.languageLen;
+        typelen = val.languageLen + 1;
     else
         typelen = 0;
-    unsigned len = 16 + val.lexicalLen + typelen;
+    unsigned len = 16 + val.lexicalLen + 1 + typelen;
 
     unsigned char buffer[len];
     unsigned char *it = buffer;
@@ -127,7 +127,7 @@ void TempFile::writeValue(const Value &val) {
     else if(val.isPlain() && val.language != NULL)
         memcpy(it, val.language, typelen);
     it += typelen;
-    memcpy(it, val.lexical, val.lexicalLen);
+    memcpy(it, val.lexical, val.lexicalLen + 1);
 
     write(len, reinterpret_cast<char*>(buffer));
 }

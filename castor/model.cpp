@@ -87,14 +87,14 @@ unsigned Value::TYPE_URIS_LEN[] = {
 
 /**
  * @param uri a URI from raptor
- * @param[out] str a new string containing a copy of the URI (non-zero terminated)
+ * @param[out] str a new string containing a copy of the URI
  * @param[out] len the length of the URI
  */
 static void convertURI(raptor_uri *uri, char* &str, unsigned &len) {
     char *s = reinterpret_cast<char*>(raptor_uri_as_string(uri));
     len = strlen(s);
-    str = new char[len];
-    memcpy(str, s, len);
+    str = new char[len + 1];
+    memcpy(str, s, len + 1);
 }
 
 Value::Value(const raptor_term *term) {
@@ -107,7 +107,8 @@ Value::Value(const raptor_term *term) {
         typeUriLen = 0;
         lexicalLen = term->value.blank.string_len;
         lexical = new char[lexicalLen + 1];
-        strcpy(lexical, reinterpret_cast<char*>(term->value.blank.string));
+        memcpy(lexical, reinterpret_cast<char*>(term->value.blank.string),
+               lexicalLen + 1);
         addCleanFlag(CLEAN_LEXICAL);
         break;
     case RAPTOR_TERM_TYPE_URI:
@@ -120,7 +121,8 @@ Value::Value(const raptor_term *term) {
     case RAPTOR_TERM_TYPE_LITERAL:
         lexicalLen = term->value.literal.string_len;
         lexical = new char[lexicalLen + 1];
-        strcpy(lexical, reinterpret_cast<char*>(term->value.literal.string));
+        memcpy(lexical, reinterpret_cast<char*>(term->value.literal.string),
+               lexicalLen + 1);
         addCleanFlag(CLEAN_LEXICAL);
         if(term->value.literal.datatype == NULL) {
             type = TYPE_PLAIN_STRING;
@@ -132,7 +134,8 @@ Value::Value(const raptor_term *term) {
             } else {
                 languageLen = term->value.literal.language_len;
                 language = new char[languageLen + 1];
-                strcpy(language, reinterpret_cast<char*>(term->value.literal.language));
+                memcpy(language, reinterpret_cast<char*>(term->value.literal.language),
+                       languageLen + 1);
                 addCleanFlag(CLEAN_DATA);
             }
         } else {
@@ -155,7 +158,8 @@ Value::Value(const rasqal_literal *literal) {
     } else {
         lexicalLen = literal->string_len;
         lexical = new char[lexicalLen + 1];
-        strcpy(lexical, reinterpret_cast<const char*>(literal->string));
+        memcpy(lexical, reinterpret_cast<const char*>(literal->string),
+               lexicalLen + 1);
     }
     addCleanFlag(CLEAN_LEXICAL);
     switch(literal->type) {
@@ -170,7 +174,7 @@ Value::Value(const rasqal_literal *literal) {
         if(literal->language != NULL && literal->language[0] != '\0') {
             languageLen = strlen(literal->language);
             language = new char[languageLen + 1];
-            strcpy(language, literal->language);
+            memcpy(language, literal->language, languageLen + 1);
             addCleanFlag(CLEAN_DATA);
         } else {
             language = NULL;
@@ -256,19 +260,19 @@ void Value::fillCopy(const Value &value, bool deep)  {
     if(deep) {
         if(lexical) {
             lexical = new char[lexicalLen + 1];
-            memcpy(lexical, value.lexical, lexicalLen);
+            memcpy(lexical, value.lexical, lexicalLen + 1);
             lexical[lexicalLen] = '\0';
             addCleanFlag(CLEAN_LEXICAL);
         }
         if(type == TYPE_CUSTOM) {
             typeUri = new char[typeUriLen + 1];
-            memcpy(typeUri, value.typeUri, typeUriLen);
+            memcpy(typeUri, value.typeUri, typeUriLen + 1);
             typeUri[typeUriLen] = '\0';
             addCleanFlag(CLEAN_TYPE_URI);
         }
         if(type == TYPE_PLAIN_STRING && language) {
             language = new char[languageLen + 1];
-            memcpy(language, value.language, languageLen);
+            memcpy(language, value.language, languageLen + 1);
             language[languageLen] = '\0';
             addCleanFlag(CLEAN_DATA);
         }
@@ -546,11 +550,11 @@ void Value::ensureInterpreted() {
         boolean = (lexicalLen == 1 && memcmp(lexical, "1", 1) == 0) ||
                   (lexicalLen == 4 && memcmp(lexical, "true", 4) == 0);
     } else if(isInteger()) {
-        integer = atoi(lexical); // FIXME non-null terminated
+        integer = atoi(lexical);
     } else if(isFloating()) {
-        floating = atof(lexical); // FIXME non-null terminated
+        floating = atof(lexical);
     } else if(isDecimal()) {
-        decimal = new XSDDecimal(lexical); // FIXME non-null terminated
+        decimal = new XSDDecimal(lexical);
         addCleanFlag(CLEAN_DATA);
     } else if(isDateTime()) {
         // TODO
@@ -653,8 +657,8 @@ void Value::interpretDatatype() {
     unsigned fragmentLen = typeUriLen - XSD_PREFIX_LEN;
     for(Type t = TYPE_FIRST_XSD; t <= TYPE_LAST_XSD;
         t = static_cast<Type>(t+1)) {
-        if(memcmp(fragment, &TYPE_URIS[t][XSD_PREFIX_LEN],
-                  std::min(fragmentLen, TYPE_URIS_LEN[t] - XSD_PREFIX_LEN)) == 0) {
+        if(typeUriLen == TYPE_URIS_LEN[t] &&
+           memcmp(fragment, &TYPE_URIS[t][XSD_PREFIX_LEN], fragmentLen) == 0) {
             type = t;
             if(hasCleanFlag(CLEAN_TYPE_URI)) {
                 delete [] typeUri;

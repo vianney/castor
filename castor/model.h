@@ -143,16 +143,16 @@ struct Value {
     Type type;
     /**
      * URI of the datatype. NULL if type <= TYPE_PLAIN_STRING.
-     * @note not necessarily null-terminated
+     * @note always null-terminated
      */
     char* typeUri;
-    unsigned typeUriLen; //!< length of typeUri
+    unsigned typeUriLen; //!< length of typeUri (without terminal null)
     /**
      * Lexical form. May be NULL if there is a native representation.
-     * @note not necessarily null-terminated
+     * @note always null-terminated
      */
     char* lexical;
-    unsigned lexicalLen; //!< length of lexical
+    unsigned lexicalLen; //!< length of lexical (without terminal null)
     /**
      * Cleanup flags
      */
@@ -164,7 +164,7 @@ struct Value {
     union {
         /**
          * Language tag. Unspecified if type is not TYPE_PLAIN_STRING.
-         * @note not necessarily null-terminated
+         * @note always null-terminated
          */
         struct {
             char* language;
