@@ -47,17 +47,25 @@ void Solution::restore() const {
 bool Solution::operator <(const Solution &o) const {
     if(o.query != query)
         return false;
-    Value v1, v2;
     for(unsigned i = 0; i < query->getOrderCount(); i++) {
         Expression *expr = query->getOrder(i);
-        restore();
-        if(!expr->evaluate(v1))
-            return false;
-        o.restore();
-        if(!expr->evaluate(v2))
-            return false;
-        if(v1 != v2)
-            return query->isOrderDescending(i) ? v1 > v2 : v1 < v2;
+        if(VariableExpression *varexpr = dynamic_cast<VariableExpression*>(expr)) {
+            unsigned varid = varexpr->getVariable()->getId();
+            if(getValueId(varid) != o.getValueId(varid))
+                return query->isOrderDescending(i) ?
+                       getValueId(varid) > o.getValueId(varid) :
+                       getValueId(varid) < o.getValueId(varid);
+        } else {
+            Value v1, v2;
+            restore();
+            if(!expr->evaluate(v1))
+                return false;
+            o.restore();
+            if(!expr->evaluate(v2))
+                return false;
+            if(v1 != v2)
+                return query->isOrderDescending(i) ? v1 > v2 : v1 < v2;
+        }
     }
     return false;
 }

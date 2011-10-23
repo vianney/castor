@@ -128,8 +128,8 @@ public:
     Solution(Query *query);
     ~Solution();
 
-    Value::id_t getValueId(int i) { return values[i]; }
-    Value::id_t getValueId(Variable &var) { return getValueId(var.getId()); }
+    Value::id_t getValueId(int i) const { return values[i]; }
+    Value::id_t getValueId(Variable &var) const { return getValueId(var.getId()); }
 
     /**
      * Assign the stored values to the variables of the query.
