@@ -98,7 +98,7 @@ int Expression::evaluateEBV(Value &buffer) {
     else if(buffer.isDecimal())
         return buffer.decimal->isZero() ? 0 : 1;
     else if(buffer.isPlain() || buffer.isXSDString())
-        return buffer.lexical[0] == '\0' ? 0 : 1;
+        return buffer.lexicalLen == 0 ? 0 : 1;
     else
         return -1;
 }
