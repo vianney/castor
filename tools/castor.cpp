@@ -110,5 +110,8 @@ int main(int argc, char *argv[]) {
     cout << "Post: " << query.getSolver()->getStatPost() << endl;
     cout << "Propagate: " << query.getSolver()->getStatPropagate() << endl;
 
+    cout << "Cache hit: " << store.getStatTripleCacheHit() << endl;
+    cout << "Cache miss: " << store.getStatTripleCacheMiss() << endl;
+
     return 0;
 }

@@ -71,6 +71,9 @@ public:
      */
     void lookupId(Value &val);
 
+    unsigned getStatTripleCacheHit() { return statTripleCacheHit; }
+    unsigned getStatTripleCacheMiss() { return statTripleCacheMiss; }
+
 private:
     PageReader db;
 
@@ -80,6 +83,24 @@ private:
     unsigned valuesStart; //!< start of values table
     unsigned valuesMapping; //!< start of values mapping
     ValueHashTree* valuesIndex; //!< values index (hash->page mapping)
+
+    static const unsigned TRIPLE_CACHE_SIZE = 100;
+    static const unsigned TRIPLE_UNCACHED = 0xffffffff; //!< triple not in cache marker
+    static const unsigned TRIPLE_CACHE_PAGESIZE = PageReader::PAGE_SIZE; //!< max triples in a page
+
+    TripleKey *triples[TRIPLE_CACHE_SIZE]; //!< triples cache
+    unsigned triplesCount[TRIPLE_CACHE_SIZE]; //!< number of triples in cache line
+    unsigned triplesPage[TRIPLE_CACHE_SIZE]; //!< page number of the cache line
+    unsigned triplesNextPage[TRIPLE_CACHE_SIZE]; //!< next page pointer cache
+
+    unsigned *triplesMap; //!< map from page number to cach line
+    unsigned triplesCached; //!< number of triple pages in cache
+    unsigned triplesNext[TRIPLE_CACHE_SIZE];
+    unsigned triplesPrev[TRIPLE_CACHE_SIZE];
+    unsigned triplesHead, triplesTail;
+
+    unsigned statTripleCacheHit;
+    unsigned statTripleCacheMiss;
 
 public:
     /**
@@ -94,14 +115,12 @@ public:
             SPO = 0, POS = 5, OSP = 3 // FIXME we do not need other indexes
         };
 
-        PageReader *db;
+        Store *store;
         TripleKey key; //!< the key we are looking for
         TripleOrder order; //!< order of components in the key
 
         unsigned nextPage; //!< next page to read or 0 if no more
 
-        static const unsigned CACHE_SIZE = PageReader::PAGE_SIZE; //!< max triples in a page
-        TripleKey triples[CACHE_SIZE]; //!< triples cache
         TripleKey *it; //!< current triple
         TripleKey *end; //!< last triple in cache
 
