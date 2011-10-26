@@ -22,6 +22,8 @@
 #include <cstdint>
 #include <cassert>
 #include <unistd.h>
+#include <sys/stat.h>
+
 
 #include "librdfwrapper.h"
 #include "model.h"
@@ -626,7 +628,7 @@ static void storeHeader(StoreBuilder &b) {
 
 int main(int argc, char* argv[]) {
     // Parse options
-    bool force = false; // TODO unimplemented
+    bool force = false;
     const char *syntax = "turtle";
     int c;
     while((c = getopt(argc, argv, "s:f")) != -1) {
@@ -648,6 +650,17 @@ int main(int argc, char* argv[]) {
     }
     char *dbpath = argv[optind++];
     char *rdfpath = argv[optind++];
+
+    struct stat stbuf;
+    if(lstat(rdfpath, &stbuf) == -1) {
+        cerr << "Cannot find RDF input '" << rdfpath << "'." << endl;
+        return 2;
+    }
+    if(!force && lstat(dbpath, &stbuf) != -1) {
+        cerr << "Output file '" << dbpath << "' already exists. Exiting." << endl;
+        return 2;
+    }
+
 
     cout << "Parsing RDF..." << endl;
     TempFile rawTriples(dbpath), rawValues(dbpath);
