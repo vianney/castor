@@ -403,14 +403,24 @@ bool Store::StatementQuery::readNextPage() {
         store->triplesCount[cacheLine] = (end - it);
     }
 
-    // find first triple of interest
-    for(; it < end; it++) {
-        if(key.matches(*it))
+    // find first matching triple
+    if(key.matches(*it)) // quick check for first triple of page
+        return true;
+    // binary search
+    TripleKey *left = it, *right = end;
+    while(left != right) {
+        TripleKey *middle = left + (right - left) / 2;
+        if(*middle < key) {
+            left = middle + 1;
+        } else if(middle == it || *(middle - 1) < key) {
+            it = middle;
             break;
+        } else {
+            right = middle;
+        }
     }
-
-    if(it == end) {
-        // no triples found
+    if(left == right || !key.matches(*it)) {
+        // unsuccessful search
         nextPage = 0;
         return false;
     }
