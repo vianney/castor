@@ -62,14 +62,14 @@ void PageWriter::writeByte(unsigned char byte) {
     *(iter++) = byte;
 }
 
-void PageWriter::writeInt(unsigned char* &it, uint32_t value) {
+void PageWriter::writeInt(unsigned char* &it, unsigned value) {
     *(it++) = value >> 24;
     *(it++) = (value >> 16) & 0xff;
     *(it++) = (value >> 8) & 0xff;
     *(it++) = value & 0xff;
 }
 
-unsigned PageWriter::lenDelta(uint32_t value) {
+unsigned PageWriter::lenDelta(unsigned value) {
     if(value >= 1 << 24)
         return 4;
     else if(value >= 1 << 16)
@@ -82,7 +82,7 @@ unsigned PageWriter::lenDelta(uint32_t value) {
         return 0;
 }
 
-void PageWriter::writeDelta(uint32_t value) {
+void PageWriter::writeDelta(unsigned value) {
     if(value >= 1 << 24) {
         writeInt(value);
     } else if(value >= 1 << 16) {

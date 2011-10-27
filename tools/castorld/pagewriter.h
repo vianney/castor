@@ -104,34 +104,34 @@ public:
      *
      * @pre enough room should be available in the page
      */
-    void writeInt(uint32_t value) { writeInt(iter, value); }
+    void writeInt(unsigned value) { writeInt(iter, value); }
 
     /**
      * Write a 32-bit unsigned integer to the page in big endian encoding at
      * the specified offset. Do not move the write pointer.
      */
-    void writeInt(uint32_t value, unsigned offset) {
+    void writeInt(unsigned value, unsigned offset) {
         unsigned char *it = buffer + offset;
         writeInt(it, value);
     }
     /**
-     * Static version of writeInt(uint32_t) to write in other buffers.
+     * Static version of writeInt(unsigned) to write in other buffers.
      * Advances the write pointer.
      */
-    static void writeInt(unsigned char* &it, uint32_t value);
+    static void writeInt(unsigned char* &it, unsigned value);
 
     /**
      * @return the number of bytes value would take to write using delta
      *         compression
      */
-    static unsigned lenDelta(uint32_t value);
+    static unsigned lenDelta(unsigned value);
     /**
      * Write an integer using delta compression (variable size).
      * Advances the write pointer.
      *
      * @pre enough room should be available in the page
      */
-    void writeDelta(uint32_t value);
+    void writeDelta(unsigned value);
 };
 
 }
