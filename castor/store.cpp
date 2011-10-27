@@ -81,8 +81,7 @@ void Store::fetchValue(Value::id_t id, Value &val) {
     id--;
     Cursor cur = db.getPage(valuesMapping + id / EPP) + 8*(id % EPP);
     unsigned page = cur.readInt();
-    unsigned offlen = cur.readInt();
-    unsigned offset = offlen >> 16;
+    unsigned offset = cur.readInt();
 
     // read value
     cur = db.getPage(page) + offset;

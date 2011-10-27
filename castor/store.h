@@ -37,7 +37,7 @@ namespace castor {
  */
 class Store {
 public:
-    static const unsigned VERSION = 2; //!< format version
+    static const unsigned VERSION = 3; //!< format version
 
     /**
      * Open a store.

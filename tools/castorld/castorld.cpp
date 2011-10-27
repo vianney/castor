@@ -395,7 +395,7 @@ static void storeTriples(StoreBuilder &b, TempFile &triples) {
  *
  * @param b store builder
  * @param values file with ordered values. Will be discarded.
- * @param loc will contain (hash, page, offset|length) triple for each value
+ * @param loc will contain (hash, page, offset) triple for each value
  */
 static void storeValuesRaw(StoreBuilder &b, TempFile &values, TempFile &loc) {
     const unsigned HEADER_SIZE = 8;
@@ -428,7 +428,7 @@ static void storeValuesRaw(StoreBuilder &b, TempFile &values, TempFile &loc) {
             // write location
             loc.writeBigInt(hash);
             loc.writeBigInt(b.w.getPage());
-            loc.writeBigInt(b.w.getOffset() << 16 | 0xffff);
+            loc.writeBigInt(b.w.getOffset());
 
             // first page
             b.w.writeInt(b.w.getPage() + pages, 0);
@@ -446,7 +446,7 @@ static void storeValuesRaw(StoreBuilder &b, TempFile &values, TempFile &loc) {
             }
 
             // last page
-            if(len) {
+            if(len > 0) {
                 b.w.write(data.get(), len);
                 b.w.flushPage(); // needed to pad with zeros
             }
@@ -456,7 +456,7 @@ static void storeValuesRaw(StoreBuilder &b, TempFile &values, TempFile &loc) {
             // write location
             loc.writeBigInt(hash);
             loc.writeBigInt(b.w.getPage());
-            loc.writeBigInt(b.w.getOffset() << 16 | len);
+            loc.writeBigInt(b.w.getOffset());
 
             // write value
             b.w.write(data.get(), len);
@@ -479,7 +479,7 @@ static void storeValuesRaw(StoreBuilder &b, TempFile &values, TempFile &loc) {
  * Store the value mappings
  *
  * @param b store builder
- * @param loc file with (hash, page, offset|length) triple of each value
+ * @param loc file with (hash, page, offset) triple of each value
  */
 static void storeValuesMapping(StoreBuilder &b, TempFile &loc) {
     b.valuesMapping = b.w.getPage();
@@ -488,13 +488,13 @@ static void storeValuesMapping(StoreBuilder &b, TempFile &loc) {
     for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
         cur.skipBigInt(); // skip hash
         unsigned page = cur.readBigInt();
-        unsigned offlen = cur.readBigInt();
+        unsigned offset = cur.readBigInt();
 
-        if(b.w.getRemaining() == 0)
+        if(b.w.getRemaining() < 8)
             b.w.flushPage();
 
         b.w.writeInt(page);
-        b.w.writeInt(offlen);
+        b.w.writeInt(offset);
     }
 
     b.w.flushPage();
@@ -511,7 +511,7 @@ struct ValueHash {
  * Store the values index
  *
  * @param b store builder
- * @param loc file with (hash, page, offset|length) triple of each value.
+ * @param loc file with (hash, page, offset) triple of each value.
  *            Will be discarded.
  */
 static void storeValuesIndex(StoreBuilder &b, TempFile &loc) {
@@ -535,12 +535,12 @@ static void storeValuesIndex(StoreBuilder &b, TempFile &loc) {
         // collect identical hash values
         uint32_t hash = cur.readBigInt();
         pages.push_back(cur.readBigInt());
-        cur.skipBigInt(); // skip offset|length
+        cur.skipBigInt(); // skip offset
         while(cur != end) {
             Cursor oldcur = cur;
             if(cur.readBigInt() == hash) {
                 pages.push_back(cur.readBigInt());
-                cur.skipBigInt(); // skip offset|length
+                cur.skipBigInt(); // skip offset
             } else {
                 cur = oldcur;
                 break;
