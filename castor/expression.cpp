@@ -429,26 +429,34 @@ bool CastExpression::evaluate(Value &result) {
 ////////////////////////////////////////////////////////////////////////////////
 // Posting constraints
 
-void BinaryExpression::post(Subtree &sub) {
+void CompareExpression::post(Subtree &sub) {
     VariableExpression *var1 = dynamic_cast<VariableExpression*>(arg1);
     VariableExpression *var2 = dynamic_cast<VariableExpression*>(arg2);
     if(var1 && var2) {
-        postVars(sub, var1->getVariable()->getCPVariable(),
-                      var2->getVariable()->getCPVariable());
+        VarInt *x1 = var1->getVariable()->getCPVariable();
+        VarInt *x2 = var2->getVariable()->getCPVariable();
+        sub.add(new ComparableConstraint(query->getStore(), x1));
+        sub.add(new ComparableConstraint(query->getStore(), x2));
+        sub.add(new SameClassConstraint(query->getStore(), x1, x2));
+        postVars(sub, x1, x2);
     } else if(var1 && arg2->isConstant()) {
         Value val;
-        if(arg2->evaluate(val)) {
+        if(arg2->evaluate(val) && val.isComparable()) {
             VarInt *x = var1->getVariable()->getCPVariable();
             query->getStore()->lookupId(val);
+            sub.add(new InRangeConstraint(x,
+                        query->getStore()->getClassValues(val.getClass())));
             postConst(sub, x, val);
         } else {
             sub.add(new FalseConstraint());
         }
     } else if(var2 && arg1->isConstant()) {
         Value val;
-        if(arg1->evaluate(val)) {
+        if(arg1->evaluate(val) && val.isComparable()) {
             VarInt *x = var2->getVariable()->getCPVariable();
             query->getStore()->lookupId(val);
+            sub.add(new InRangeConstraint(x,
+                        query->getStore()->getClassValues(val.getClass())));
             postConst(sub, val, x);
         } else {
             sub.add(new FalseConstraint());

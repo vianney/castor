@@ -134,7 +134,6 @@ protected:
 public:
     BinaryExpression(Expression *arg1, Expression *arg2);
     ~BinaryExpression();
-    void post(Subtree &sub);
 
     /**
      * @return left argument
@@ -145,6 +144,16 @@ public:
      * @return left argument
      */
     Expression* getRight() { return arg2; }
+};
+
+/**
+ * Base class for a compare expression
+ */
+class CompareExpression : public BinaryExpression {
+public:
+    CompareExpression(Expression *arg1, Expression *arg2)
+        : BinaryExpression(arg1, arg2) {}
+    void post(Subtree &sub);
 
     // Handlers for default post implementation
     /**
@@ -323,10 +332,10 @@ public:
 /**
  * arg1 = arg2
  */
-class EqExpression : public BinaryExpression {
+class EqExpression : public CompareExpression {
 public:
     EqExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(arg1, arg2) {}
+            CompareExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x, Value &v);
@@ -335,10 +344,10 @@ public:
 /**
  * arg1 != arg2
  */
-class NEqExpression : public BinaryExpression {
+class NEqExpression : public CompareExpression {
 public:
     NEqExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(arg1, arg2) {}
+            CompareExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x, Value &v);
@@ -347,10 +356,10 @@ public:
 /**
  * arg1 < arg2
  */
-class LTExpression : public BinaryExpression {
+class LTExpression : public CompareExpression {
 public:
     LTExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(arg1, arg2) {}
+            CompareExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x1, Value &v2);
@@ -360,10 +369,10 @@ public:
 /**
  * arg1 > arg2
  */
-class GTExpression : public BinaryExpression {
+class GTExpression : public CompareExpression {
 public:
     GTExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(arg1, arg2) {}
+            CompareExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x1, Value &v2);
@@ -373,10 +382,10 @@ public:
 /**
  * arg1 <= arg2
  */
-class LEExpression : public BinaryExpression {
+class LEExpression : public CompareExpression {
 public:
     LEExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(arg1, arg2) {}
+            CompareExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x1, Value &v2);
@@ -386,10 +395,10 @@ public:
 /**
  * arg1 >= arg2
  */
-class GEExpression : public BinaryExpression {
+class GEExpression : public CompareExpression {
 public:
     GEExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(arg1, arg2) {}
+            CompareExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x1, Value &v2);

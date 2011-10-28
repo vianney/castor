@@ -61,6 +61,17 @@ public:
 };
 
 /**
+ * Restrict domain to values that are comparable in SPARQL filters
+ * (i.e., simple literals, typed strings, booleans, numbers and dates)
+ */
+class ComparableConstraint : public InRangeConstraint {
+public:
+    ComparableConstraint(Store *store, VarInt *x) : InRangeConstraint(x,
+        store->getClassValues(Value::CLASS_SIMPLE_LITERAL,
+                              Value::CLASS_DATETIME)) {}
+};
+
+/**
  * Remove a specified range from a domain
  */
 class NotInRangeConstraint : public Constraint {
@@ -127,6 +138,18 @@ class FilterConstraint : public StatelessConstraint {
     Expression *expr; //!< The expression
 public:
     FilterConstraint(Store *store, Expression *expr);
+    void restore();
+    bool propagate();
+};
+
+/**
+ * Variables must take values of the same classes.
+ */
+class SameClassConstraint : public StatelessConstraint {
+    Store *store;
+    VarInt *x1, *x2;
+public:
+    SameClassConstraint(Store *store, VarInt *x1, VarInt *x2);
     void restore();
     bool propagate();
 };

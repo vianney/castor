@@ -182,6 +182,45 @@ bool FilterConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+SameClassConstraint::SameClassConstraint(Store *store, VarInt *x1, VarInt *x2)
+        : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
+    x1->registerMin(this);
+    x1->registerMax(this);
+    x2->registerMin(this);
+    x2->registerMax(this);
+}
+
+void SameClassConstraint::restore() {
+    Value::Class clsMin1 = store->getValueClass(x1->getMin());
+    Value::Class clsMax1 = store->getValueClass(x1->getMax());
+    Value::Class clsMin2 = store->getValueClass(x2->getMin());
+    Value::Class clsMax2 = store->getValueClass(x2->getMax());
+    Value::Class clsMin = std::max(clsMin1, clsMin2);
+    Value::Class clsMax = std::min(clsMax1, clsMax2);
+    done = (clsMin == clsMax);
+}
+
+bool SameClassConstraint::propagate() {
+    StatelessConstraint::propagate();
+    Value::Class clsMin1 = store->getValueClass(x1->getMin());
+    Value::Class clsMax1 = store->getValueClass(x1->getMax());
+    Value::Class clsMin2 = store->getValueClass(x2->getMin());
+    Value::Class clsMax2 = store->getValueClass(x2->getMax());
+    Value::Class clsMin = std::max(clsMin1, clsMin2);
+    Value::Class clsMax = std::min(clsMax1, clsMax2);
+    if(clsMin > clsMax)
+        return false;
+    if(clsMin == clsMax)
+        done = true;
+    ValueRange allowed = store->getClassValues(clsMin, clsMax);
+    if(allowed.empty())
+        return false;
+    return x1->updateMin(allowed.from) && x1->updateMax(allowed.to) &&
+           x2->updateMin(allowed.from) && x2->updateMax(allowed.to);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 VarDiffConstraint::VarDiffConstraint(Store *store, VarInt *x1, VarInt *x2)
         : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
     x1->registerBind(this);

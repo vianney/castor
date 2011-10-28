@@ -48,11 +48,13 @@ Store::Store(const char* fileName) : db(fileName) {
     }
 
     // Get values pointers
-    nbValues = cur.readInt();
     valuesStart = cur.readInt();
     valuesMapping = cur.readInt();
     valuesIndex = new ValueHashTree(&db, cur.readInt());
     valuesEqClasses = cur.readInt();
+    for(Value::Class cls = Value::CLASS_BLANK; cls <= Value::CLASSES_COUNT; ++cls)
+        valuesClassStart[cls] = cur.readInt();
+    nbValues = valuesClassStart[Value::CLASSES_COUNT] - 1;
 
     // initialize triples cache
     triples[0] = new TripleKey[TRIPLE_CACHE_SIZE * TRIPLE_CACHE_PAGESIZE];
@@ -197,6 +199,16 @@ ValueRange Store::getValueEqClass(const Value &val) {
     }
     ValueRange result = {left, left - 1};
     return result;
+}
+
+Value::Class Store::getValueClass(Value::id_t id) {
+    for(Value::Class cls = Value::CLASS_BLANK; cls <= Value::CLASSES_COUNT; ++cls) {
+        if(valuesClassStart[cls] > id)
+            return --cls;
+    }
+    // should not happen
+    assert(false);
+    return Value::CLASSES_COUNT;
 }
 
 Store::StatementQuery::StatementQuery(Store &store, Statement &stmt) : store(&store) {

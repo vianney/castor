@@ -123,13 +123,19 @@ static int compareBigInt(Cursor a, Cursor b) {
  * @param valueIdMap will contain the (old id, new id) mapping ordered by
  *                   old id
  * @param valueEqClasses will contain the equivalence classes boundaries
+ * @param classStart array that will contain the start ids for each class
+ *                   (including virtual last class)
  */
 static void buildDictionary(TempFile &rawValues, TempFile &values,
-                            TempFile &valueIdMap, TempFile &valueEqClasses) {
+                            TempFile &valueIdMap, TempFile &valueEqClasses,
+                            Value::id_t *classStart) {
     // sort values using SPARQL order
     TempFile sortedValues(rawValues.getBaseName());
     FileSorter::sort(rawValues, sortedValues, skipValueInt, compareValue);
     rawValues.discard();
+
+    for(Value::Class cls = Value::CLASS_BLANK; cls <= Value::CLASSES_COUNT; ++cls)
+        classStart[cls] = 0;
 
     // construct values list without duplicates and remember mappings
     TempFile rawMap(rawValues.getBaseName());
@@ -151,6 +157,8 @@ static void buildDictionary(TempFile &rawValues, TempFile &values,
                     eqBuf = 0;
                     eqShift = 0;
                 }
+                if(last.id == 0 || last.getClass() != val.getClass())
+                    classStart[val.getClass()] = val.id;
                 last.fillMove(val);
             }
             rawMap.writeBigInt(id);
@@ -159,6 +167,12 @@ static void buildDictionary(TempFile &rawValues, TempFile &values,
         // terminate equivalence classes boundaries
         eqBuf |= 1 << eqShift;
         valueEqClasses.writeInt(eqBuf);
+        // terminate class starts
+        classStart[Value::CLASSES_COUNT] = last.id + 1;
+        for(Value::Class cls = Value::CLASSES_COUNT; cls >= Value::CLASS_BLANK; --cls) {
+            if(classStart[cls] == 0)
+                classStart[cls] = classStart[cls + 1];
+        }
     }
     rawMap.close();
     sortedValues.discard();
@@ -268,11 +282,11 @@ struct StoreBuilder {
 
     unsigned triplesStart[3]; //!< start of triples tables in all orderings
     unsigned triplesIndex[3]; //!< root of triples index in all orderings
-    unsigned nbValues; //!< number of values
     unsigned valuesStart; //!< start of values table
     unsigned valuesMapping; //!< start of values mapping
     unsigned valuesIndex; //!< root of values index (hash->page mapping)
     unsigned valueEqClasses; //!< start of value equivalence classes boundaries
+    Value::id_t classStart[Value::CLASSES_COUNT + 1]; //!< first id of each class
 
     StoreBuilder(const char* fileName) : w(fileName) {}
 };
@@ -416,9 +430,8 @@ static void storeValuesRaw(StoreBuilder &b, TempFile &values, TempFile &loc) {
 
     MMapFile in(values.getFileName().c_str());
     b.w.skip(HEADER_SIZE); // skip header (next page, count)
-    unsigned count = 0, total = 0;
+    unsigned count = 0;
     for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
-        total++;
         uint32_t hash = cur.peekValueHash();
         unsigned len = cur.peekValueSize();
         Cursor data = cur;
@@ -484,8 +497,6 @@ static void storeValuesRaw(StoreBuilder &b, TempFile &values, TempFile &loc) {
     b.w.flushPage();
 
     values.discard();
-
-    b.nbValues = total;
 }
 
 /**
@@ -655,11 +666,13 @@ static void storeHeader(StoreBuilder &b) {
     }
 
     // Values
-    b.w.writeInt(b.nbValues);
     b.w.writeInt(b.valuesStart);
     b.w.writeInt(b.valuesMapping);
     b.w.writeInt(b.valuesIndex);
     b.w.writeInt(b.valueEqClasses);
+    for(Value::Class cls = Value::CLASS_BLANK; cls <= Value::CLASSES_COUNT; ++cls) {
+        b.w.writeInt(b.classStart[cls]);
+    }
 
     b.w.flushPage();
 }
@@ -715,7 +728,8 @@ int main(int argc, char* argv[]) {
 
     cout << "Building value dictionary..." << endl;
     TempFile values(dbpath), valueIdMap(dbpath), valueEqClasses(dbpath);
-    buildDictionary(rawValues, values, valueIdMap, valueEqClasses);
+    Value::id_t classStart[Value::CLASSES_COUNT + 1];
+    buildDictionary(rawValues, values, valueIdMap, valueEqClasses, classStart);
     values.close();
     valueIdMap.close();
     valueEqClasses.close();
@@ -729,6 +743,7 @@ int main(int argc, char* argv[]) {
 
     StoreBuilder b(dbpath);
     b.w.flushPage(); // reserve page 0 for header
+    memcpy(b.classStart, classStart, sizeof(classStart));
 
     cout << "Storing triples..." << endl;
     storeTriples(b, triples);

@@ -390,6 +390,14 @@ struct Value {
     }
 
     /**
+     * @return whether this value can appear in a SPARQL comparison
+     */
+    bool isComparable() const {
+        return isSimple() || isXSDString() || isBoolean() || isNumeric() ||
+               isDateTime();
+    }
+
+    /**
      * Compare this value with another.
      *
      * @pre (id > 0 && o.id > 0) || ensureInterpreted()
@@ -460,6 +468,15 @@ private:
 
 std::ostream& operator<<(std::ostream &out, const Value &val);
 std::ostream& operator<<(std::ostream &out, const Value *val);
+
+static inline Value::Class& operator++(Value::Class &cls) {
+    cls = static_cast<Value::Class>(cls + 1);
+    return cls;
+}
+static inline Value::Class& operator--(Value::Class &cls) {
+    cls = static_cast<Value::Class>(cls - 1);
+    return cls;
+}
 
 /**
  * Range of value identifiers.

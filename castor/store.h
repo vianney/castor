@@ -37,7 +37,7 @@ namespace castor {
  */
 class Store {
 public:
-    static const unsigned VERSION = 4; //!< format version
+    static const unsigned VERSION = 5; //!< format version
 
     /**
      * Open a store.
@@ -55,6 +55,24 @@ public:
      * @return the number of values in the store or -1 if error
      */
     unsigned getValueCount() { return nbValues; }
+
+    /**
+     * @return range of values of a class in the store
+     */
+    ValueRange getClassValues(Value::Class cls) {
+        ValueRange result = {valuesClassStart[cls],
+                             valuesClassStart[cls+1] - 1};
+        return result;
+    }
+
+    /**
+     * @return range of values spanning given classes in the store
+     */
+    ValueRange getClassValues(Value::Class from, Value::Class to) {
+        ValueRange result = {valuesClassStart[from],
+                             valuesClassStart[to+1] - 1};
+        return result;
+    }
 
     /**
      * Fetch a value from the store
@@ -75,7 +93,7 @@ public:
      * @param id the identifier of a value in the store
      * @return the equivalence class of that value
      */
-    ValueRange getValueEqClass(const Value::id_t id);
+    ValueRange getValueEqClass(Value::id_t id);
 
     /**
      * Get the equivalence class of a value. If val.id > 0, this is equivalent
@@ -94,6 +112,12 @@ public:
      */
     ValueRange getValueEqClass(const Value &val);
 
+    /**
+     * @param id the identifier of a value in the store
+     * @return the class of the value
+     */
+    Value::Class getValueClass(Value::id_t id);
+
     unsigned getStatTripleCacheHit() { return statTripleCacheHit; }
     unsigned getStatTripleCacheMiss() { return statTripleCacheMiss; }
 
@@ -107,6 +131,7 @@ private:
     unsigned valuesMapping; //!< start of values mapping
     ValueHashTree* valuesIndex; //!< values index (hash->page mapping)
     unsigned valuesEqClasses; //!< start of value equivalence classes boundaries
+    Value::id_t valuesClassStart[Value::CLASSES_COUNT + 1]; //!< first id of each class
 
     static const unsigned TRIPLE_CACHE_SIZE = 100;
     static const unsigned TRIPLE_UNCACHED = 0xffffffff; //!< triple not in cache marker
