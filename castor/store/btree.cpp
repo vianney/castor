@@ -44,8 +44,7 @@ Cursor ValueHashTree::lookup(uint32_t hash) {
             return pageCur + middle * 8;
         }
     }
-    // should not happen
-    assert(false);
+    // not found
     return Cursor(0);
 }
 

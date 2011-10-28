@@ -134,6 +134,7 @@ protected:
 public:
     BinaryExpression(Expression *arg1, Expression *arg2);
     ~BinaryExpression();
+    void post(Subtree &sub);
 
     /**
      * @return left argument
@@ -144,6 +145,25 @@ public:
      * @return left argument
      */
     Expression* getRight() { return arg2; }
+
+    // Handlers for default post implementation
+    /**
+     * Post the constraint when both arguments are variables.
+     */
+    virtual void postVars(Subtree &sub, VarInt *x1, VarInt *x2) { postOther(sub); }
+    /**
+     * Post the constraint when arg1 is a variable and arg2 is constant.
+     */
+    virtual void postConst(Subtree &sub, VarInt *x1, Value &v2) { postOther(sub); }
+    /**
+     * Post the constraint when arg1 is constant and arg2 is a variable.
+     * The default implementation assumes the operator is reflexive.
+     */
+    virtual void postConst(Subtree &sub, Value &v1, VarInt *x2) { postConst(sub, x2, v1); }
+    /**
+     * Post the constraint for the other cases.
+     */
+    virtual void postOther(Subtree &sub) { Expression::post(sub); }
 };
 
 /**
@@ -307,8 +327,9 @@ class EqExpression : public BinaryExpression {
 public:
     EqExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
-    void post(Subtree &sub);
     bool evaluate(Value &result);
+    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
+    void postConst(Subtree &sub, VarInt *x, Value &v);
 };
 
 /**
@@ -318,8 +339,9 @@ class NEqExpression : public BinaryExpression {
 public:
     NEqExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
-    void post(Subtree &sub);
     bool evaluate(Value &result);
+    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
+    void postConst(Subtree &sub, VarInt *x, Value &v);
 };
 
 /**
@@ -329,8 +351,10 @@ class LTExpression : public BinaryExpression {
 public:
     LTExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
-    void post(Subtree &sub);
     bool evaluate(Value &result);
+    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
+    void postConst(Subtree &sub, VarInt *x1, Value &v2);
+    void postConst(Subtree &sub, Value &v1, VarInt *x2);
 };
 
 /**
@@ -340,8 +364,10 @@ class GTExpression : public BinaryExpression {
 public:
     GTExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
-    void post(Subtree &sub);
     bool evaluate(Value &result);
+    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
+    void postConst(Subtree &sub, VarInt *x1, Value &v2);
+    void postConst(Subtree &sub, Value &v1, VarInt *x2);
 };
 
 /**
@@ -352,6 +378,9 @@ public:
     LEExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
+    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
+    void postConst(Subtree &sub, VarInt *x1, Value &v2);
+    void postConst(Subtree &sub, Value &v1, VarInt *x2);
 };
 
 /**
@@ -362,6 +391,9 @@ public:
     GEExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
     bool evaluate(Value &result);
+    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
+    void postConst(Subtree &sub, VarInt *x1, Value &v2);
+    void postConst(Subtree &sub, Value &v1, VarInt *x2);
 };
 
 /**

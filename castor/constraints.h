@@ -25,6 +25,15 @@
 namespace castor {
 
 /**
+ * Always-false constraint
+ */
+class FalseConstraint : public Constraint {
+public:
+    FalseConstraint() : Constraint(PRIOR_HIGH) {}
+    bool post() { return false; }
+};
+
+/**
  * Ensure a SPARQL variable is bound by removing value 0 from the CP domain
  */
 class BoundConstraint : public Constraint {
@@ -32,6 +41,65 @@ class BoundConstraint : public Constraint {
 public:
     BoundConstraint(VarInt *x) : Constraint(PRIOR_HIGH), x(x) {}
     bool post() { return x->remove(0); }
+};
+
+/**
+ * Restrict domain to a specified range
+ */
+class InRangeConstraint : public Constraint {
+    VarInt *x;
+    ValueRange rng;
+public:
+    InRangeConstraint(VarInt *x, ValueRange rng)
+        : Constraint(PRIOR_HIGH), x(x), rng(rng) {}
+    bool post() {
+        x->clearMarks();
+        for(Value::id_t id : rng)
+            x->mark(id);
+        return x->restrictToMarks();
+    }
+};
+
+/**
+ * Remove a specified range from a domain
+ */
+class NotInRangeConstraint : public Constraint {
+    VarInt *x;
+    ValueRange rng;
+public:
+    NotInRangeConstraint(VarInt *x, ValueRange rng)
+        : Constraint(PRIOR_HIGH), x(x), rng(rng) {}
+    bool post() {
+        for(Value::id_t id : rng) {
+            if(!x->remove(id))
+                return false;
+        }
+        return true;
+    }
+};
+
+/**
+ * x >= v
+ */
+class ConstGEConstraint : public Constraint {
+    VarInt *x;
+    Value::id_t v;
+public:
+    ConstGEConstraint(VarInt *x, Value::id_t v)
+        : Constraint(PRIOR_HIGH), x(x), v(v) {}
+    bool post() { return x->updateMin(v); }
+};
+
+/**
+ * x <= v
+ */
+class ConstLEConstraint : public Constraint {
+    VarInt *x;
+    Value::id_t v;
+public:
+    ConstLEConstraint(VarInt *x, Value::id_t v)
+        : Constraint(PRIOR_HIGH), x(x), v(v) {}
+    bool post() { return x->updateMax(v); }
 };
 
 /**
@@ -64,45 +132,41 @@ public:
 };
 
 /**
- * Difference constraint v1 != v2
+ * Variable difference constraint x1 != x2
  */
-class DiffConstraint : public StatelessConstraint {
-    Query *query;
-    VarVal v1, v2;
-    VarInt *x1, *x2; //!< CP variable or NULL if fixed value
+class VarDiffConstraint : public StatelessConstraint {
+    Store *store;
+    VarInt *x1, *x2;
 public:
-    DiffConstraint(Query *query, VarVal v1, VarVal v2);
+    VarDiffConstraint(Store *store, VarInt *x1, VarInt *x2);
     void restore();
-    bool post();
     bool propagate();
 };
 
 /**
- * Equality constraint v1 = v2
+ * Variable equality constraint x1 = x2
  */
-class EqConstraint : public Constraint {
-    Query *query;
-    VarVal v1, v2;
-    VarInt *x1, *x2; //!< CP variable or NULL if fixed value
+class VarEqConstraint : public Constraint {
+    Store *store;
+    VarInt *x1, *x2;
     int s1, s2; //!< previous size of the domain
 public:
-    EqConstraint(Query *query, VarVal v1, VarVal v2);
+    VarEqConstraint(Store *store, VarInt *x1, VarInt *x2);
     void restore();
     bool post();
     bool propagate();
 };
 
 /**
- * Inequality constraint v1 < v2
+ * Variable inequality constraint x1 {<,<=} x2
  */
-class LessConstraint : public StatelessConstraint {
-    Query *query;
-    VarVal v1, v2;
-    VarInt *x1, *x2; //!< CP variable or NULL if fixed value
+class VarLessConstraint : public StatelessConstraint {
+    Store *store;
+    VarInt *x1, *x2;
+    bool equality; //!< true for <=, false for <
 public:
-    LessConstraint(Query *query, VarVal v1, VarVal v2);
+    VarLessConstraint(Store *store, VarInt *x1, VarInt *x2, bool equality);
     void restore();
-    bool post();
     bool propagate();
 };
 

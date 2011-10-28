@@ -82,9 +82,14 @@ int main(int argc, char *argv[]) {
             *fsol << "YES" << endl;
         } else {
             for(unsigned i = 0; i < query.getRequestedCount(); i++) {
-                Value val;
-                store.fetchValue(query.getVariable(i)->getValueId(), val);
-                *fsol << val << " ";
+                Value::id_t id = query.getVariable(i)->getValueId();
+                if(id == 0) {
+                    *fsol << " ";
+                } else {
+                    Value val;
+                    store.fetchValue(id, val);
+                    *fsol << val << " ";
+                }
             }
             *fsol << endl;
         }

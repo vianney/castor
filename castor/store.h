@@ -37,7 +37,7 @@ namespace castor {
  */
 class Store {
 public:
-    static const unsigned VERSION = 3; //!< format version
+    static const unsigned VERSION = 4; //!< format version
 
     /**
      * Open a store.
@@ -71,6 +71,29 @@ public:
      */
     void lookupId(Value &val);
 
+    /**
+     * @param id the identifier of a value in the store
+     * @return the equivalence class of that value
+     */
+    ValueRange getValueEqClass(const Value::id_t id);
+
+    /**
+     * Get the equivalence class of a value. If val.id > 0, this is equivalent
+     * to getValueEqClass(val.id). Otherwise, it finds an equivalence class in
+     * the store. If there is no equivalent value in the store, the returned
+     * range will be empty (from == to + 1), but still denote the
+     * glb (from - 1) and lub (to + 1).
+     *
+     * To summarize, the following assertions hold (using SPARQL compare):
+     * v.id < result.from   <=>  v < val
+     * v.id > result.to     <=>  v > val
+     * v.id <= result.to    <=>  v <= val
+     * v.id >= result.from  <=>  v >= val
+     *
+     * @pre val.ensureInterpreted()
+     */
+    ValueRange getValueEqClass(const Value &val);
+
     unsigned getStatTripleCacheHit() { return statTripleCacheHit; }
     unsigned getStatTripleCacheMiss() { return statTripleCacheMiss; }
 
@@ -83,6 +106,7 @@ private:
     unsigned valuesStart; //!< start of values table
     unsigned valuesMapping; //!< start of values mapping
     ValueHashTree* valuesIndex; //!< values index (hash->page mapping)
+    unsigned valuesEqClasses; //!< start of value equivalence classes boundaries
 
     static const unsigned TRIPLE_CACHE_SIZE = 100;
     static const unsigned TRIPLE_UNCACHED = 0xffffffff; //!< triple not in cache marker

@@ -209,7 +209,7 @@ struct Value {
     /**
      * Copy constructor
      */
-    Value(const Value &val) : cleanup(CLEAN_NOTHING) { fillCopy(val); }
+    Value(const Value &val) : cleanup(CLEAN_NOTHING) { fillCopy(val, true); }
     /**
      * Create a value from a raptor_term
      * @param term the term
@@ -259,9 +259,16 @@ struct Value {
      * Make a copy of a value
      *
      * @param value the value
-     * @param deep should we perform a deep copy?
+     * @param deep should we perform a deep copy, i.e., recreate every owned
+     *             pointers (unowned pointers will be left as is)?
      */
     void fillCopy(const Value &value, bool deep=false);
+    /**
+     * Make a copy of a value, taking over the ownership of the pointers.
+     *
+     * @param value the value
+     */
+    void fillMove(Value &value);
     /**
      * Make a xsd:boolean
      *
@@ -453,6 +460,29 @@ private:
 
 std::ostream& operator<<(std::ostream &out, const Value &val);
 std::ostream& operator<<(std::ostream &out, const Value *val);
+
+/**
+ * Range of value identifiers.
+ */
+struct ValueRange {
+    Value::id_t from, to;
+
+    bool empty() { return to < from; }
+    bool contains(Value::id_t id) { return id >= from && id <= to; }
+
+    // support C++11 iterators
+    struct Iterator {
+        Value::id_t id;
+
+        Iterator(Value::id_t id) : id(id) {}
+        Iterator(const Iterator& o) : id(o.id) {}
+        Value::id_t operator*() const { return id; }
+        bool operator!=(const Iterator &o) const { return id != o.id; }
+        Iterator& operator++() { ++id; return *this; }
+    };
+    Iterator begin() { return from; }
+    Iterator end() { return to + 1; }
+};
 
 /**
  * Small statement structure containing ids.

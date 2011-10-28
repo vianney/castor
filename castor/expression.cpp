@@ -44,6 +44,7 @@ BinaryExpression::~BinaryExpression() {
 
 ValueExpression::ValueExpression(Query *query, Value *value) :
         Expression(query), value(value) {
+    value->ensureInterpreted();
 }
 
 ValueExpression::~ValueExpression() {
@@ -428,44 +429,112 @@ bool CastExpression::evaluate(Value &result) {
 ////////////////////////////////////////////////////////////////////////////////
 // Posting constraints
 
+void BinaryExpression::post(Subtree &sub) {
+    VariableExpression *var1 = dynamic_cast<VariableExpression*>(arg1);
+    VariableExpression *var2 = dynamic_cast<VariableExpression*>(arg2);
+    if(var1 && var2) {
+        postVars(sub, var1->getVariable()->getCPVariable(),
+                      var2->getVariable()->getCPVariable());
+    } else if(var1 && arg2->isConstant()) {
+        Value val;
+        if(arg2->evaluate(val)) {
+            VarInt *x = var1->getVariable()->getCPVariable();
+            query->getStore()->lookupId(val);
+            postConst(sub, x, val);
+        } else {
+            sub.add(new FalseConstraint());
+        }
+    } else if(var2 && arg1->isConstant()) {
+        Value val;
+        if(arg1->evaluate(val)) {
+            VarInt *x = var2->getVariable()->getCPVariable();
+            query->getStore()->lookupId(val);
+            postConst(sub, val, x);
+        } else {
+            sub.add(new FalseConstraint());
+        }
+    } else {
+        postOther(sub);
+    }
+}
+
+
 void Expression::post(Subtree &sub) {
     sub.add(new FilterConstraint(query->getStore(), this));
 }
+
 
 void AndExpression::post(Subtree &sub) {
     arg1->post(sub);
     arg2->post(sub);
 }
 
-void EqExpression::post(Subtree &sub) {
-    if(arg1->isVarVal() && arg2->isVarVal())
-        sub.add(new EqConstraint(query, arg1->getVarVal(), arg2->getVarVal()));
-    else
-        Expression::post(sub);
+
+void EqExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarEqConstraint(query->getStore(), x1, x2));
+}
+void EqExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
+    sub.add(new InRangeConstraint(x, query->getStore()->getValueEqClass(v)));
 }
 
-void NEqExpression::post(Subtree &sub) {
-    if(arg1->isVarVal() && arg2->isVarVal())
-        sub.add(new DiffConstraint(query,
-                                   arg1->getVarVal(), arg2->getVarVal()));
-    else
-        Expression::post(sub);
+
+void NEqExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarDiffConstraint(query->getStore(), x1, x2));
+}
+void NEqExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
+    sub.add(new NotInRangeConstraint(x, query->getStore()->getValueEqClass(v)));
 }
 
-void LTExpression::post(Subtree &sub) {
-    if(arg1->isVarVal() && arg2->isVarVal())
-        sub.add(new LessConstraint(query,
-                                   arg1->getVarVal(), arg2->getVarVal()));
-    else
-        Expression::post(sub);
+
+void LTExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarLessConstraint(query->getStore(), x1, x2, false));
+}
+void LTExpression::postConst(Subtree &sub, VarInt *x1, Value &v2) {
+    sub.add(new ConstLEConstraint(x1,
+                        query->getStore()->getValueEqClass(v2).from - 1));
+}
+void LTExpression::postConst(Subtree &sub, Value &v1, VarInt *x2) {
+    sub.add(new ConstGEConstraint(x2,
+                        query->getStore()->getValueEqClass(v1).to + 1));
 }
 
-void GTExpression::post(Subtree &sub) {
-    if(arg1->isVarVal() && arg2->isVarVal())
-        sub.add(new LessConstraint(query,
-                                   arg2->getVarVal(), arg1->getVarVal()));
-    else
-        Expression::post(sub);
+
+void GTExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarLessConstraint(query->getStore(), x2, x1, false));
+}
+void GTExpression::postConst(Subtree &sub, VarInt *x1, Value &v2) {
+    sub.add(new ConstGEConstraint(x1,
+                        query->getStore()->getValueEqClass(v2).to + 1));
+}
+void GTExpression::postConst(Subtree &sub, Value &v1, VarInt *x2) {
+    sub.add(new ConstLEConstraint(x2,
+                        query->getStore()->getValueEqClass(v1).from - 1));
+}
+
+
+void LEExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarLessConstraint(query->getStore(), x1, x2, true));
+}
+void LEExpression::postConst(Subtree &sub, VarInt *x1, Value &v2) {
+    sub.add(new ConstLEConstraint(x1,
+                        query->getStore()->getValueEqClass(v2).to));
+}
+void LEExpression::postConst(Subtree &sub, Value &v1, VarInt *x2) {
+    sub.add(new ConstGEConstraint(x2,
+                        query->getStore()->getValueEqClass(v1).from));
+}
+
+
+void GEExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarLessConstraint(query->getStore(), x2, x1, true));
+}
+void GEExpression::postConst(Subtree &sub, VarInt *x1, Value &v2) {
+    sub.add(new ConstGEConstraint(x1,
+                        query->getStore()->getValueEqClass(v2).from));
+}
+void GEExpression::postConst(Subtree &sub, Value &v1, VarInt *x2) {
+    sub.add(new ConstLEConstraint(x2,
+                        query->getStore()->getValueEqClass(v1).to));
 }
 
 }

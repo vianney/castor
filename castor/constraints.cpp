@@ -182,44 +182,33 @@ bool FilterConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DiffConstraint::DiffConstraint(Query *query, VarVal v1, VarVal v2) :
-        StatelessConstraint(PRIOR_HIGH), query(query), v1(v1), v2(v2) {
-    x1 = v1.isVariable() ?
-                query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
-    x2 = v2.isVariable() ?
-                query->getVariable(v2.getVariableId())->getCPVariable() : NULL;
-    if(x1 && x2) {
-        x1->registerBind(this);
-        x2->registerBind(this);
-    }
+VarDiffConstraint::VarDiffConstraint(Store *store, VarInt *x1, VarInt *x2)
+        : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
+    x1->registerBind(this);
+    x2->registerBind(this);
 }
 
-void DiffConstraint::restore() {
-    if(x1 && x2)
-        done = (x1->isBound() || x2->isBound());
+void VarDiffConstraint::restore() {
+    done = (x1->isBound() || x2->isBound());
 }
 
-bool DiffConstraint::post() {
-    if(v1.isUnknown() || v2.isUnknown())
-        return false;
-    if(x1 && x2)
-        return StatelessConstraint::post();
-    else if(x1)
-        return x1->remove(v2.getValueId());
-    else if(x2)
-        return x2->remove(v1.getValueId());
-    else
-        return v1 != v2;
-}
-
-bool DiffConstraint::propagate() {
+bool VarDiffConstraint::propagate() {
     StatelessConstraint::propagate();
+    // TODO we could start propagating once only equivalent values remain
     if(x1->isBound()) {
         done = true;
-        return x2->remove(x1->getValue());
+        for(Value::id_t id : store->getValueEqClass(x1->getValue())) {
+            if(!x2->remove(id))
+                return false;
+        }
+        return true;
     } else if(x2->isBound()) {
         done = true;
-        return x1->remove(x2->getValue());
+        for(Value::id_t id : store->getValueEqClass(x2->getValue())) {
+            if(!x1->remove(id))
+                return false;
+        }
+        return true;
     } else {
         return true;
     }
@@ -227,41 +216,23 @@ bool DiffConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-EqConstraint::EqConstraint(Query *query, VarVal v1, VarVal v2) :
-        Constraint(PRIOR_HIGH), query(query), v1(v1), v2(v2) {
-    x1 = v1.isVariable() ?
-                query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
-    x2 = v2.isVariable() ?
-                query->getVariable(v2.getVariableId())->getCPVariable() : NULL;
-    if(x1 && x2) {
-        x1->registerChange(this);
-        x2->registerChange(this);
-    }
+VarEqConstraint::VarEqConstraint(Store *store, VarInt *x1, VarInt *x2) :
+        Constraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
+    x1->registerChange(this);
+    x2->registerChange(this);
 }
 
-void EqConstraint::restore() {
-    if(x1 && x2) {
-        s1 = x1->getSize();
-        s2 = x2->getSize();
-    }
+void VarEqConstraint::restore() {
+    s1 = x1->getSize();
+    s2 = x2->getSize();
 }
 
-bool EqConstraint::post() {
-    if(v1.isUnknown() || v2.isUnknown())
-        return false;
-    if(x1 && x2) {
-        restore();
-        return propagate();
-    } else if(x1) {
-        return x1->bind(v2.getValueId());
-    } else if(x2) {
-        return x2->bind(v2.getValueId());
-    } else {
-        return v1 == v2;
-    }
+bool VarEqConstraint::post() {
+    restore();
+    return propagate();
 }
 
-bool EqConstraint::propagate() {
+bool VarEqConstraint::propagate() {
     VarInt *x1 = this->x1, *x2 = this->x2;
     int n1 = x1->getSize(), n2 = x2->getSize();
     int oldn1 = s1, oldn2 = s2;
@@ -272,13 +243,37 @@ bool EqConstraint::propagate() {
     if(removed > 0 && removed < n1 && removed < n2) {
         const int *dom = x1->getDomain();
         for(int i = n1; i < oldn1; i++) {
-            if(!x2->remove(dom[i]))
-                return false;
+            ValueRange eqClass = store->getValueEqClass(dom[i]);
+            bool prune = true;
+            for(Value::id_t id : eqClass) {
+                if(x1->contains(id)) {
+                    prune = false;
+                    break;
+                }
+            }
+            if(prune) {
+                for(Value::id_t id : eqClass) {
+                    if(!x2->remove(id))
+                        return false;
+                }
+            }
         }
         dom = x2->getDomain();
         for(int i = n2; i < oldn2; i++) {
-            if(!x1->remove(dom[i]))
-                return false;
+            ValueRange eqClass = store->getValueEqClass(dom[i]);
+            bool prune = true;
+            for(Value::id_t id : eqClass) {
+                if(x2->contains(id)) {
+                    prune = false;
+                    break;
+                }
+            }
+            if(prune) {
+                for(Value::id_t id : eqClass) {
+                    if(!x1->remove(id))
+                        return false;
+                }
+            }
         }
     } else {
         if(n2 < n1) {
@@ -290,13 +285,22 @@ bool EqConstraint::propagate() {
         const int *dom = x1->getDomain();
         for(int i = 0; i < n1; i++) {
             int v = dom[i];
-            if(x2->contains(v)) {
-                x2->mark(v);
-            } else {
-                if(!x1->remove(v))
-                    return false;
-                n1--;
-                i--;
+            ValueRange eqClass = store->getValueEqClass(v);
+            bool prune = true;
+            for(Value::id_t id : eqClass) {
+                if(x2->contains(id))
+                    prune = false;
+                x2->mark(id);
+            }
+            if(prune) {
+                for(Value::id_t id : eqClass) {
+                    if(x1->contains(id)) {
+                        if(!x1->remove(id))
+                            return false;
+                        n1--;
+                    }
+                    i--;
+                }
             }
         }
         if(!x2->restrictToMarks())
@@ -309,48 +313,34 @@ bool EqConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-LessConstraint::LessConstraint(Query *query, VarVal v1, VarVal v2) :
-        StatelessConstraint(PRIOR_HIGH), query(query), v1(v1), v2(v2) {
-    x1 = v1.isVariable() ?
-                query->getVariable(v1.getVariableId())->getCPVariable() : NULL;
-    x2 = v2.isVariable() ?
-                query->getVariable(v2.getVariableId())->getCPVariable() : NULL;
-    if(x1 && x2) {
-        x1->registerMin(this);
-        x1->registerMax(this);
-        x2->registerMin(this);
-        x2->registerMax(this);
-    }
+VarLessConstraint::VarLessConstraint(Store *store, VarInt *x1, VarInt *x2, bool equality)
+        : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2), equality(equality) {
+    x1->registerMin(this);
+    x1->registerMax(this);
+    x2->registerMin(this);
+    x2->registerMax(this);
 }
 
-void LessConstraint::restore() {
-    if(x1 && x2)
-        done = x1->getMax() < x2->getMin();
+void VarLessConstraint::restore() {
+    ValueRange eqClass1 = store->getValueEqClass(x1->getMax());
+    ValueRange eqClass2 = store->getValueEqClass(x2->getMin());
+    done = equality ? eqClass1.to <= eqClass2.to
+                    : eqClass1.to < eqClass2.from;
 }
 
-bool LessConstraint::post() {
-    if(v1.isUnknown() || v2.isUnknown())
-        return false;
-    if(x1 && x2) {
-        return StatelessConstraint::post();
-    } else if(x1) {
-        return x1->updateMax(v2.getValueId() - 1);
-    } else if(x2) {
-        return x2->updateMin(v1.getValueId() + 1);
-    } else {
-        return v1.getValueId() < v2.getValueId();
-    }
-}
-
-bool LessConstraint::propagate() {
+bool VarLessConstraint::propagate() {
     StatelessConstraint::propagate();
-    if(x1->getMax() < x2->getMin()) {
-        done = true;
+    ValueRange eqClassMax1 = store->getValueEqClass(x1->getMax());
+    ValueRange eqClassMin2 = store->getValueEqClass(x2->getMin());
+    done = equality ? eqClassMax1.to <= eqClassMin2.to
+                    : eqClassMax1.to < eqClassMin2.from;
+    if(done)
         return true;
-    }
-    if(!x1->updateMax(x2->getMax() - 1))
+    ValueRange eqClassMax2 = store->getValueEqClass(x2->getMax());
+    if(!x1->updateMax(equality ? eqClassMax2.to : eqClassMax2.from - 1))
         return false;
-    return x2->updateMin(x1->getMin() + 1);
+    ValueRange eqClassMin1 = store->getValueEqClass(x1->getMin());
+    return x2->updateMin(equality ? eqClassMin1.from : eqClassMin1.to + 1);
 }
 
 

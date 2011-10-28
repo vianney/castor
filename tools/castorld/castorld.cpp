@@ -122,9 +122,10 @@ static int compareBigInt(Cursor a, Cursor b) {
  * @param values will contain the sorted values
  * @param valueIdMap will contain the (old id, new id) mapping ordered by
  *                   old id
+ * @param valueEqClasses will contain the equivalence classes boundaries
  */
 static void buildDictionary(TempFile &rawValues, TempFile &values,
-                            TempFile &valueIdMap) {
+                            TempFile &valueIdMap, TempFile &valueEqClasses) {
     // sort values using SPARQL order
     TempFile sortedValues(rawValues.getBaseName());
     FileSorter::sort(rawValues, sortedValues, skipValueInt, compareValue);
@@ -135,18 +136,29 @@ static void buildDictionary(TempFile &rawValues, TempFile &values,
     {
         MMapFile in(sortedValues.getFileName().c_str());
         Value last;
+        unsigned eqBuf = 0, eqShift = 0;
         for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
             Value val;
             cur.readValue(val);
             uint64_t id = cur.readBigInt();
+            val.ensureInterpreted();
             if(last.id == 0 || last != val) {
                 val.id = last.id + 1;
                 values.writeValue(val);
-                last = val;
+                eqBuf |= (last.id != 0 && last.compare(val) == 0 ? 0 : 1) << (eqShift++);
+                if(eqShift == 32) {
+                    valueEqClasses.writeInt(eqBuf);
+                    eqBuf = 0;
+                    eqShift = 0;
+                }
+                last.fillMove(val);
             }
             rawMap.writeBigInt(id);
             rawMap.writeBigInt(last.id);
         }
+        // terminate equivalence classes boundaries
+        eqBuf |= 1 << eqShift;
+        valueEqClasses.writeInt(eqBuf);
     }
     rawMap.close();
     sortedValues.discard();
@@ -260,6 +272,7 @@ struct StoreBuilder {
     unsigned valuesStart; //!< start of values table
     unsigned valuesMapping; //!< start of values mapping
     unsigned valuesIndex; //!< root of values index (hash->page mapping)
+    unsigned valueEqClasses; //!< start of value equivalence classes boundaries
 
     StoreBuilder(const char* fileName) : w(fileName) {}
 };
@@ -579,17 +592,44 @@ static void storeValuesIndex(StoreBuilder &b, TempFile &loc) {
 }
 
 /**
+ * Store the values equivalence classes boundaries
+ *
+ * @param b store builder
+ * @param valueEqClasses file with the boundaries
+ */
+static void storeValuesEqClasses(StoreBuilder &b, TempFile &valueEqClasses) {
+    b.valueEqClasses = b.w.getPage();
+
+    MMapFile in(valueEqClasses.getFileName().c_str());
+    Cursor cur = in.begin();
+    unsigned len = in.end() - cur;
+    while(len > PageWriter::PAGE_SIZE) {
+        b.w.directWrite(cur.get());
+        cur += PageWriter::PAGE_SIZE;
+        len -= PageWriter::PAGE_SIZE;
+    }
+
+    if(len > 0) {
+        b.w.write(cur.get(), len);
+        b.w.flushPage();
+    }
+}
+
+/**
  * Store the values
  *
  * @param b store builder
  * @param values file with ordered values. Will be discarded.
+ * @param valueEqClasses value equivalence classes boundaries
  */
-static void storeValues(StoreBuilder &b, TempFile &values) {
+static void storeValues(StoreBuilder &b, TempFile &values,
+                        TempFile &valueEqClasses) {
     TempFile loc(values.getBaseName());
     storeValuesRaw(b, values, loc);
     loc.close();
     storeValuesMapping(b, loc);
     storeValuesIndex(b, loc);
+    storeValuesEqClasses(b, valueEqClasses);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -619,6 +659,7 @@ static void storeHeader(StoreBuilder &b) {
     b.w.writeInt(b.valuesStart);
     b.w.writeInt(b.valuesMapping);
     b.w.writeInt(b.valuesIndex);
+    b.w.writeInt(b.valueEqClasses);
 
     b.w.flushPage();
 }
@@ -673,10 +714,11 @@ int main(int argc, char* argv[]) {
     rawValues.close();
 
     cout << "Building value dictionary..." << endl;
-    TempFile values(dbpath), valueIdMap(dbpath);
-    buildDictionary(rawValues, values, valueIdMap);
+    TempFile values(dbpath), valueIdMap(dbpath), valueEqClasses(dbpath);
+    buildDictionary(rawValues, values, valueIdMap, valueEqClasses);
     values.close();
     valueIdMap.close();
+    valueEqClasses.close();
 
     cout << "Resolving ids..." << endl;
     TempFile triples(dbpath);
@@ -692,7 +734,7 @@ int main(int argc, char* argv[]) {
     storeTriples(b, triples);
 
     cout << "Storing values..." << endl;
-    storeValues(b, values);
+    storeValues(b, values, valueEqClasses);
 
     cout << "Storing header..." << endl;
     storeHeader(b);

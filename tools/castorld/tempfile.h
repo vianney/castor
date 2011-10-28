@@ -76,7 +76,12 @@ public:
      */
     void write(unsigned len, const char* data);
     /**
-     * Write an integer
+     * Write a 32-bit unsigned integer to the page in big endian encoding.
+     * @see PageWriter::writeInt(unsigned)
+     */
+    void writeInt(unsigned val);
+    /**
+     * Write a big integer with variable-length encoding
      */
     void writeBigInt(uint64_t val);
     /**

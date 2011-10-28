@@ -258,29 +258,35 @@ void Value::fillCopy(const Value &value, bool deep)  {
     memcpy(this, &value, sizeof(Value));
     cleanup = CLEAN_NOTHING;
     if(deep) {
-        if(lexical) {
+        if(lexical && value.hasCleanFlag(CLEAN_LEXICAL)) {
             lexical = new char[lexicalLen + 1];
             memcpy(lexical, value.lexical, lexicalLen + 1);
             lexical[lexicalLen] = '\0';
             addCleanFlag(CLEAN_LEXICAL);
         }
-        if(type == TYPE_CUSTOM) {
+        if(type == TYPE_CUSTOM && value.hasCleanFlag(CLEAN_TYPE_URI)) {
             typeUri = new char[typeUriLen + 1];
             memcpy(typeUri, value.typeUri, typeUriLen + 1);
             typeUri[typeUriLen] = '\0';
             addCleanFlag(CLEAN_TYPE_URI);
         }
-        if(type == TYPE_PLAIN_STRING && language) {
+        if(type == TYPE_PLAIN_STRING && language && value.hasCleanFlag(CLEAN_DATA)) {
             language = new char[languageLen + 1];
             memcpy(language, value.language, languageLen + 1);
             language[languageLen] = '\0';
             addCleanFlag(CLEAN_DATA);
         }
-        if(type == TYPE_DECIMAL && isInterpreted) {
+        if(type == TYPE_DECIMAL && isInterpreted && value.hasCleanFlag(CLEAN_DATA)) {
             decimal = new XSDDecimal(*value.decimal);
             addCleanFlag(CLEAN_DATA);
         }
     }
+}
+
+void Value::fillMove(Value &value)  {
+    clean();
+    memcpy(this, &value, sizeof(Value));
+    value.cleanup = CLEAN_NOTHING;
 }
 
 void Value::fillBoolean(bool value) {

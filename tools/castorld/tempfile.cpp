@@ -104,6 +104,12 @@ void TempFile::writeBigInt(uint64_t val) {
     *(iter++) = static_cast<unsigned char>(val);
 }
 
+void TempFile::writeInt(unsigned val) {
+    unsigned char buf[4], *it = buf;
+    PageWriter::writeInt(it, val);
+    write(4, reinterpret_cast<char*>(buf));
+}
+
 void TempFile::writeValue(const Value &val) {
     unsigned typelen;
     if(val.type == Value::TYPE_CUSTOM)
