@@ -193,6 +193,30 @@ public:
     bool propagate();
 };
 
+/**
+ * Variable difference in sameTerm sense
+ */
+class VarDiffTermConstraint : public StatelessConstraint {
+    VarInt *x1, *x2;
+public:
+    VarDiffTermConstraint(VarInt *x1, VarInt *x2);
+    void restore();
+    bool propagate();
+};
+
+/**
+ * Variable equality in sameTerm sense
+ */
+class VarSameTermConstraint : public Constraint {
+    VarInt *x1, *x2;
+    int s1, s2; //!< previous size of the domain
+public:
+    VarSameTermConstraint(VarInt *x1, VarInt *x2);
+    void restore();
+    bool post();
+    bool propagate();
+};
+
 }
 
 #endif // CASTOR_CONSTRAINTS_H

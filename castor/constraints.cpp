@@ -382,5 +382,94 @@ bool VarLessConstraint::propagate() {
     return x2->updateMin(equality ? eqClassMin1.from : eqClassMin1.to + 1);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+VarDiffTermConstraint::VarDiffTermConstraint(VarInt *x1, VarInt *x2) :
+        StatelessConstraint(PRIOR_HIGH), x1(x1), x2(x2) {
+    x1->registerBind(this);
+    x2->registerBind(this);
+}
+
+void VarDiffTermConstraint::restore() {
+    done = (x1->isBound() || x2->isBound());
+}
+
+bool VarDiffTermConstraint::propagate() {
+    StatelessConstraint::propagate();
+    if(x1->isBound()) {
+        done = true;
+        return x2->remove(x1->getValue());
+    } else if(x2->isBound()) {
+        done = true;
+        return x1->remove(x2->getValue());
+    } else {
+        return true;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+VarSameTermConstraint::VarSameTermConstraint(VarInt *x1, VarInt *x2) :
+        Constraint(PRIOR_HIGH), x1(x1), x2(x2) {
+    x1->registerChange(this);
+    x2->registerChange(this);
+}
+
+void VarSameTermConstraint::restore() {
+    s1 = x1->getSize();
+    s2 = x2->getSize();
+}
+
+bool VarSameTermConstraint::post() {
+    restore();
+    return propagate();
+}
+
+bool VarSameTermConstraint::propagate() {
+    VarInt *x1 = this->x1, *x2 = this->x2;
+    int n1 = x1->getSize(), n2 = x2->getSize();
+    int oldn1 = s1, oldn2 = s2;
+    int removed = (oldn1 - n1) + (oldn2 - n2);
+    /* removed is 0 on initial propagation. In such case, we must compute the
+     * union of both domains.
+     */
+    if(removed > 0 && removed < n1 && removed < n2) {
+        const int *dom = x1->getDomain();
+        for(int i = n1; i < oldn1; i++) {
+            if(!x2->remove(dom[i]))
+                return false;
+        }
+        dom = x2->getDomain();
+        for(int i = n2; i < oldn2; i++) {
+            if(!x1->remove(dom[i]))
+                return false;
+        }
+    } else {
+        if(n2 < n1) {
+            x1 = x2;
+            x2 = this->x1;
+            n1 = n2;
+        }
+        x2->clearMarks();
+        const int *dom = x1->getDomain();
+        for(int i = 0; i < n1; i++) {
+            int v = dom[i];
+            if(x2->contains(v)) {
+                x2->mark(v);
+            } else {
+                if(!x1->remove(v))
+                    return false;
+                n1--;
+                i--;
+            }
+        }
+        if(!x2->restrictToMarks())
+            return false;
+    }
+    s1 = x1->getSize();
+    s2 = x2->getSize();
+    return true;
+}
+
 
 }

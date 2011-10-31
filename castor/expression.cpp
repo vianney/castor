@@ -26,9 +26,13 @@ UnaryExpression::UnaryExpression(Expression *arg) :
         Expression(arg->getQuery()), arg(arg) {
     vars = arg->getVars();
 }
-
 UnaryExpression::~UnaryExpression() {
-    delete arg;
+    if(arg != NULL)
+        delete arg;
+}
+void UnaryExpression::deleteThisOnly() {
+    arg = NULL;
+    delete this;
 }
 
 BinaryExpression::BinaryExpression(Expression *arg1, Expression *arg2) :
@@ -36,17 +40,22 @@ BinaryExpression::BinaryExpression(Expression *arg1, Expression *arg2) :
     vars = arg1->getVars();
     vars += arg2->getVars();
 }
-
 BinaryExpression::~BinaryExpression() {
-    delete arg1;
-    delete arg2;
+    if(arg1 != NULL)
+        delete arg1;
+    if(arg2 != NULL)
+        delete arg2;
+}
+void BinaryExpression::deleteThisOnly() {
+    arg1 = NULL;
+    arg2 = NULL;
+    delete this;
 }
 
 ValueExpression::ValueExpression(Query *query, Value *value) :
         Expression(query), value(value) {
     value->ensureInterpreted();
 }
-
 ValueExpression::~ValueExpression() {
     delete value;
 }
@@ -55,7 +64,6 @@ VariableExpression::VariableExpression(Variable *variable) :
         Expression(variable->getQuery()), variable(variable) {
     vars += variable;
 }
-
 BoundExpression::BoundExpression(Variable *variable) :
         Expression(variable->getQuery()), variable(variable) {
     vars += variable;
@@ -68,21 +76,49 @@ RegExExpression::RegExExpression(Expression *arg1, Expression *arg2,
     vars += arg2->getVars();
     vars += arg3->getVars();
 }
-
 RegExExpression::~RegExExpression() {
-    delete arg1;
-    delete arg2;
-    delete arg3;
+    if(arg1 != NULL)
+        delete arg1;
+    if(arg2 != NULL)
+        delete arg2;
+    if(arg3 != NULL)
+        delete arg3;
+}
+void RegExExpression::deleteThisOnly() {
+    arg1 = NULL;
+    arg2 = NULL;
+    arg3 = NULL;
+    delete this;
 }
 
 CastExpression::CastExpression(Value::Type destination, Expression *arg) :
         Expression(arg->getQuery()), destination(destination), arg(arg) {
     vars = arg->getVars();
 }
-
 CastExpression::~CastExpression() {
-    delete arg;
+    if(arg != NULL)
+        delete arg;
 }
+void CastExpression::deleteThisOnly() {
+    arg = NULL;
+    delete this;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Optimzing expressions
+
+Expression* BangExpression::optimize() {
+    UnaryExpression::optimize();
+    if(SameTermExpression *e = dynamic_cast<SameTermExpression*>(arg)) {
+        Expression *result = new DiffTermExpression(e->getLeft(), e->getRight());
+        arg->deleteThisOnly();
+        arg = NULL;
+        delete this;
+        return result;
+    }
+    return this;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Evaluation functions
@@ -411,6 +447,16 @@ bool SameTermExpression::evaluate(Value &result) {
     return true;
 }
 
+bool DiffTermExpression::evaluate(Value &result) {
+    Value right;
+    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+        return false;
+    result.ensureLexical();
+    right.ensureLexical();
+    result.fillBoolean(result.rdfequals(right) != 0);
+    return true;
+}
+
 bool LangMatchesExpression::evaluate(Value &result) {
     result.clean();
     throw "unsupported";
@@ -429,7 +475,91 @@ bool CastExpression::evaluate(Value &result) {
 ////////////////////////////////////////////////////////////////////////////////
 // Posting constraints
 
-void CompareExpression::post(Subtree &sub) {
+void Expression::post(Subtree &sub) {
+    sub.add(new FilterConstraint(query->getStore(), this));
+}
+
+void AndExpression::post(Subtree &sub) {
+    arg1->post(sub);
+    arg2->post(sub);
+}
+
+void EqualityExpression::post(Subtree &sub) {
+    VariableExpression *var1 = dynamic_cast<VariableExpression*>(arg1);
+    VariableExpression *var2 = dynamic_cast<VariableExpression*>(arg2);
+    if(var1 && var2) {
+        VarInt *x1 = var1->getVariable()->getCPVariable();
+        VarInt *x2 = var2->getVariable()->getCPVariable();
+        postVars(sub, x1, x2);
+    } else if(var1 && arg2->isConstant()) {
+        Value val;
+        if(arg2->evaluate(val)) {
+            VarInt *x = var1->getVariable()->getCPVariable();
+            query->getStore()->lookupId(val);
+            postConst(sub, x, val);
+        } else {
+            sub.add(new FalseConstraint());
+        }
+    } else if(var2 && arg1->isConstant()) {
+        Value val;
+        if(arg1->evaluate(val)) {
+            VarInt *x = var2->getVariable()->getCPVariable();
+            query->getStore()->lookupId(val);
+            postConst(sub, x, val);
+        } else {
+            sub.add(new FalseConstraint());
+        }
+    } else {
+        Expression::post(sub);
+    }
+}
+void EqExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarEqConstraint(query->getStore(), x1, x2));
+}
+void EqExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
+    sub.add(new InRangeConstraint(x, query->getStore()->getValueEqClass(v)));
+}
+void NEqExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    /* FIXME this is not entirely spec-compliant: comparing two literals with
+     * different datatypes yields an error and makes this constraint thus false.
+     * Stating the variables shall be of the same class is not sufficient for
+     * values with type TYPE_UNKOWN.
+     */
+    sub.add(new SameClassConstraint(query->getStore(), x1, x2));
+    sub.add(new VarDiffConstraint(query->getStore(), x1, x2));
+}
+void NEqExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
+    /* FIXME this is not entirely spec-compliant: comparing two literals with
+     * different datatypes yields an error and makes this constraint thus false.
+     * Stating the variable shall be of the same class than the value is not
+     * sufficient if v.type == Value::TYPE_UNKOWN.
+     */
+    sub.add(new InRangeConstraint(x,
+                query->getStore()->getClassValues(v.getClass())));
+    sub.add(new NotInRangeConstraint(x, query->getStore()->getValueEqClass(v)));
+}
+void SameTermExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarSameTermConstraint(x1, x2));
+}
+void SameTermExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
+    if(v.id == 0) {
+        sub.add(new FalseConstraint());
+    } else {
+        ValueRange rng = {v.id, v.id};
+        sub.add(new InRangeConstraint(x, rng));
+    }
+}
+void DiffTermExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
+    sub.add(new VarDiffTermConstraint(x1, x2));
+}
+void DiffTermExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
+    if(v.id != 0) {
+        ValueRange rng = {v.id, v.id};
+        sub.add(new NotInRangeConstraint(x, rng));
+    }
+}
+
+void InequalityExpression::post(Subtree &sub) {
     VariableExpression *var1 = dynamic_cast<VariableExpression*>(arg1);
     VariableExpression *var2 = dynamic_cast<VariableExpression*>(arg2);
     if(var1 && var2) {
@@ -462,38 +592,9 @@ void CompareExpression::post(Subtree &sub) {
             sub.add(new FalseConstraint());
         }
     } else {
-        postOther(sub);
+        Expression::post(sub);
     }
 }
-
-
-void Expression::post(Subtree &sub) {
-    sub.add(new FilterConstraint(query->getStore(), this));
-}
-
-
-void AndExpression::post(Subtree &sub) {
-    arg1->post(sub);
-    arg2->post(sub);
-}
-
-
-void EqExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
-    sub.add(new VarEqConstraint(query->getStore(), x1, x2));
-}
-void EqExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
-    sub.add(new InRangeConstraint(x, query->getStore()->getValueEqClass(v)));
-}
-
-
-void NEqExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
-    sub.add(new VarDiffConstraint(query->getStore(), x1, x2));
-}
-void NEqExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
-    sub.add(new NotInRangeConstraint(x, query->getStore()->getValueEqClass(v)));
-}
-
-
 void LTExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
     sub.add(new VarLessConstraint(query->getStore(), x1, x2, false));
 }

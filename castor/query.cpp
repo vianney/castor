@@ -181,7 +181,7 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
                     default:
                         orderDescending[i] = false;
                     }
-                    order[i] = convertExpression(expr);
+                    order[i] = convertExpression(expr)->optimize();
                 }
                 solutions = new SolutionSet;
                 if(limit >= 0) {
@@ -312,7 +312,8 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
                 case RASQAL_GRAPH_PATTERN_OPERATOR_FILTER:
                 {
                     Expression *subexpr = convertExpression(
-                            rasqal_graph_pattern_get_filter_expression(subgp));
+                            rasqal_graph_pattern_get_filter_expression(subgp))
+                            ->optimize();
                     if(expr == NULL)
                         expr = subexpr;
                     else
@@ -394,7 +395,7 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
     {
         // lone filter pattern
         Expression *expr = convertExpression(
-                rasqal_graph_pattern_get_filter_expression(gp));
+                rasqal_graph_pattern_get_filter_expression(gp))->optimize();
         return new FilterPattern(new BasicPattern(this), expr);
     }
     default:

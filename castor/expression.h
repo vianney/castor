@@ -63,6 +63,22 @@ public:
     virtual VarVal getVarVal() { return VarVal(static_cast<Value::id_t>(0)); }
 
     /**
+     * Same effect as "delete this", but do not delete subexpressions.
+     * This is useful if the subexpressions were reused for building another
+     * pattern.
+     */
+    virtual void deleteThisOnly() { delete this; }
+
+    /**
+     * Optimize this expression and its subexpressions. Beware: the expressions
+     * may change. You shouldn't use this object anymore, but instead use the
+     * returned pointer (which may or may not be the same as this).
+     *
+     * @return the optimized expression
+     */
+    virtual Expression* optimize() { return this; }
+
+    /**
      * Post this expression as a constraint.
      * @param sub subtree in which to add the constraint
      */
@@ -117,6 +133,12 @@ protected:
 public:
     UnaryExpression(Expression *arg);
     ~UnaryExpression();
+    void deleteThisOnly();
+
+    Expression *optimize() {
+        arg = arg->optimize();
+        return this;
+    }
 
     /**
      * @return argument
@@ -134,6 +156,13 @@ protected:
 public:
     BinaryExpression(Expression *arg1, Expression *arg2);
     ~BinaryExpression();
+    void deleteThisOnly();
+
+    Expression *optimize() {
+        arg1 = arg1->optimize();
+        arg2 = arg2->optimize();
+        return this;
+    }
 
     /**
      * @return left argument
@@ -144,35 +173,6 @@ public:
      * @return left argument
      */
     Expression* getRight() { return arg2; }
-};
-
-/**
- * Base class for a compare expression
- */
-class CompareExpression : public BinaryExpression {
-public:
-    CompareExpression(Expression *arg1, Expression *arg2)
-        : BinaryExpression(arg1, arg2) {}
-    void post(Subtree &sub);
-
-    // Handlers for default post implementation
-    /**
-     * Post the constraint when both arguments are variables.
-     */
-    virtual void postVars(Subtree &sub, VarInt *x1, VarInt *x2) { postOther(sub); }
-    /**
-     * Post the constraint when arg1 is a variable and arg2 is constant.
-     */
-    virtual void postConst(Subtree &sub, VarInt *x1, Value &v2) { postOther(sub); }
-    /**
-     * Post the constraint when arg1 is constant and arg2 is a variable.
-     * The default implementation assumes the operator is reflexive.
-     */
-    virtual void postConst(Subtree &sub, Value &v1, VarInt *x2) { postConst(sub, x2, v1); }
-    /**
-     * Post the constraint for the other cases.
-     */
-    virtual void postOther(Subtree &sub) { Expression::post(sub); }
 };
 
 /**
@@ -234,6 +234,7 @@ class BangExpression : public UnaryExpression {
 public:
     BangExpression(Expression *arg) : UnaryExpression(arg) {}
     bool evaluate(Value &result);
+    Expression *optimize();
 };
 
 /**
@@ -330,12 +331,32 @@ public:
 };
 
 /**
+ * Base class for a equality expression
+ */
+class EqualityExpression : public BinaryExpression {
+public:
+    EqualityExpression(Expression *arg1, Expression *arg2)
+        : BinaryExpression(arg1, arg2) {}
+    void post(Subtree &sub);
+
+    /**
+     * Post the constraint when both arguments are variables.
+     */
+    virtual void postVars(Subtree &sub, VarInt *x1, VarInt *x2) = 0;
+    /**
+     * Post the constraint when one argument is a variable and the other is
+     * constant.
+     */
+    virtual void postConst(Subtree &sub, VarInt *x1, Value &v2) = 0;
+};
+
+/**
  * arg1 = arg2
  */
-class EqExpression : public CompareExpression {
+class EqExpression : public EqualityExpression {
 public:
     EqExpression(Expression *arg1, Expression *arg2) :
-            CompareExpression(arg1, arg2) {}
+            EqualityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x, Value &v);
@@ -344,22 +365,46 @@ public:
 /**
  * arg1 != arg2
  */
-class NEqExpression : public CompareExpression {
+class NEqExpression : public EqualityExpression {
 public:
     NEqExpression(Expression *arg1, Expression *arg2) :
-            CompareExpression(arg1, arg2) {}
+            EqualityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x, Value &v);
 };
 
 /**
+ * Base class for a inequality expression
+ */
+class InequalityExpression : public BinaryExpression {
+public:
+    InequalityExpression(Expression *arg1, Expression *arg2)
+        : BinaryExpression(arg1, arg2) {}
+    void post(Subtree &sub);
+
+    // Handlers for default post implementation
+    /**
+     * Post the constraint when both arguments are variables.
+     */
+    virtual void postVars(Subtree &sub, VarInt *x1, VarInt *x2) = 0;
+    /**
+     * Post the constraint when arg1 is a variable and arg2 is constant.
+     */
+    virtual void postConst(Subtree &sub, VarInt *x1, Value &v2) = 0;
+    /**
+     * Post the constraint when arg1 is constant and arg2 is a variable.
+     */
+    virtual void postConst(Subtree &sub, Value &v1, VarInt *x2) = 0;
+};
+
+/**
  * arg1 < arg2
  */
-class LTExpression : public CompareExpression {
+class LTExpression : public InequalityExpression {
 public:
     LTExpression(Expression *arg1, Expression *arg2) :
-            CompareExpression(arg1, arg2) {}
+            InequalityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x1, Value &v2);
@@ -369,10 +414,10 @@ public:
 /**
  * arg1 > arg2
  */
-class GTExpression : public CompareExpression {
+class GTExpression : public InequalityExpression {
 public:
     GTExpression(Expression *arg1, Expression *arg2) :
-            CompareExpression(arg1, arg2) {}
+            InequalityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x1, Value &v2);
@@ -382,10 +427,10 @@ public:
 /**
  * arg1 <= arg2
  */
-class LEExpression : public CompareExpression {
+class LEExpression : public InequalityExpression {
 public:
     LEExpression(Expression *arg1, Expression *arg2) :
-            CompareExpression(arg1, arg2) {}
+            InequalityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x1, Value &v2);
@@ -395,10 +440,10 @@ public:
 /**
  * arg1 >= arg2
  */
-class GEExpression : public CompareExpression {
+class GEExpression : public InequalityExpression {
 public:
     GEExpression(Expression *arg1, Expression *arg2) :
-            CompareExpression(arg1, arg2) {}
+            InequalityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
     void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
     void postConst(Subtree &sub, VarInt *x1, Value &v2);
@@ -448,11 +493,25 @@ public:
 /**
  * SAMETERM(arg1, arg2)
  */
-class SameTermExpression : public BinaryExpression {
+class SameTermExpression : public EqualityExpression {
 public:
     SameTermExpression(Expression *arg1, Expression *arg2) :
-            BinaryExpression(arg1, arg2) {}
+            EqualityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
+    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
+    void postConst(Subtree &sub, VarInt *x, Value &v);
+};
+
+/**
+ * !(SAMETERM(arg1, arg2))
+ */
+class DiffTermExpression : public EqualityExpression {
+public:
+    DiffTermExpression(Expression *arg1, Expression *arg2) :
+            EqualityExpression(arg1, arg2) {}
+    bool evaluate(Value &result);
+    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
+    void postConst(Subtree &sub, VarInt *x, Value &v);
 };
 
 /**
@@ -475,7 +534,15 @@ class RegExExpression : public Expression {
 public:
     RegExExpression(Expression *arg1, Expression *arg2, Expression* arg3);
     ~RegExExpression();
+    void deleteThisOnly();
     bool evaluate(Value &result);
+
+    Expression *optimize() {
+        arg1 = arg1->optimize();
+        arg2 = arg2->optimize();
+        arg3 = arg3->optimize();
+        return this;
+    }
 
     /**
      * @return the first argument
@@ -502,7 +569,13 @@ class CastExpression : public Expression {
 public:
     CastExpression(Value::Type destination, Expression *arg);
     ~CastExpression();
+    void deleteThisOnly();
     bool evaluate(Value &result);
+
+    Expression *optimize() {
+        arg = arg->optimize();
+        return this;
+    }
 
     /**
      * @return destination type
