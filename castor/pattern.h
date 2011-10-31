@@ -155,7 +155,7 @@ class BasicPattern : public Pattern {
     std::vector<StatementPattern> triples;
     Subtree *sub;
 public:
-    BasicPattern(Query *query) : Pattern(query) {}
+    BasicPattern(Query *query) : Pattern(query), sub(NULL) {}
     ~BasicPattern();
 
     /**
