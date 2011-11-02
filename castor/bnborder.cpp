@@ -29,7 +29,6 @@ BnBOrderConstraint::BnBOrderConstraint(Query *query) : query(query) {
     for(unsigned i = 0; i < vars.getSize(); i++) {
         VarInt *x = vars[i]->getCPVariable();
         x->registerBind(this);
-        x->maintainBounds(); // TODO only if really needed
     }
     boundOrderVals = new Value[query->getOrderCount()];
     boundOrderError = new bool[query->getOrderCount()];

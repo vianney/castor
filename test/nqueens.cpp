@@ -130,7 +130,6 @@ class Maximize : public Constraint {
 
 public:
     Maximize(VarInt *x) : x(x) {
-        x->maintainBounds();
         currentBound = x->getMin();
     }
 

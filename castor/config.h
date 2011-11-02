@@ -18,14 +18,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-
-/**
- * Sparsity threshold for choosing the method of finding the bound of the
- * domain.
- * @see castor::VarInt::_searchMin()
- */
-#define CASTOR_SOLVER_VARINT_BOUND_SPARSITY 2
-
 /**
  * Priority of castor::StatementConstraint
  */

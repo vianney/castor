@@ -27,6 +27,13 @@ class Constraint;
 
 /**
  * Integer variable.
+ *
+ * Variables have two representations: a discrete (unordered) representation
+ * with every values still in the domain and a bounds representation. Those two
+ * representations are not tightly linked to avoid overhead. The following
+ * assertions hold:
+ * - size = number of values left in the discrete representation
+ * - size == 1 <=> min == max == value
  */
 class VarInt {
 public:
@@ -58,11 +65,6 @@ public:
      * @return the parent solver
      */
     Solver* getSolver() { return solver; }
-
-    /**
-     * Maintain lower and upper bounds
-     */
-    void maintainBounds();
 
     /**
      * @return the value selection strategy used by select()
@@ -108,18 +110,17 @@ public:
 
     /**
      * @param v a value
-     * @return whether value v is in the domain
+     * @return whether value v is in the domain (intersection of both
+     *         representations)
      */
-    bool contains(int v) { return map[v-minVal] < size; }
+    bool contains(int v) { return v >= min && v <= max && map[v-minVal] < size; }
 
     /**
-     * @pre maintainMin() has been called
-     * @return the lower bound
+     * @return the lower bound (may not be consistent)
      */
     int getMin() { return min; }
     /**
-     * @pre maintainMax() has been called
-     * @return the upper bound
+     * @return the upper bound (may not be consistent)
      */
     int getMax() { return max; }
 
@@ -212,20 +213,18 @@ public:
     /**
      * Register constraint c to the update min event of this variable.
      * A constraint must not register twice for the same variable.
-     * @note This automatically calls maintainMin().
      *
      * @param c the constraint
      */
-    void registerMin(Constraint *c) { maintainBounds(); evMin.push_back(c); }
+    void registerMin(Constraint *c) { evMin.push_back(c); }
 
     /**
      * Register constraint c to the update max event of this variable.
      * A constraint must not register twice for the same variable.
-     * @note This automatically calls maintainMax().
      *
      * @param c the constraint
      */
-    void registerMax(Constraint *c) { maintainBounds(); evMax.push_back(c); }
+    void registerMax(Constraint *c) { evMax.push_back(c); }
 
 private:
     /**
@@ -244,15 +243,10 @@ private:
     int size;
 
     /**
-     * Are the bounds maintained for this variable?
-     */
-    bool bounds;
-
-    /**
      * Lower and upper bounds of the values in the domain.
-     * If bounds is true, the bounds are thight (i.e., contains(min) and
-     * contains(max) return true). Otherwise, these values should still be
-     * valid bounds, but their thightness is not guaranteed.
+     * The thightness of the bounds is not guaranteed when size > 1.
+     * In other words, these bounds may be inconsistent, except when the
+     * variable is bound.
      */
     int min, max;
 
@@ -302,27 +296,6 @@ private:
      * Value selection strategy.
      */
     ValueSelector strategy;
-
-    /**
-     * Removes a value from the domain. Does not update the bounds, nor does it
-     * enqueue any events.
-     *
-     * @param v the value to remove
-     * @return 0 if the domain becomes empty, -1 if nothing has changed,
-     *         1 otherwise
-     */
-    int _remove(int v);
-
-    /**
-     * Set min to the lowest value in the domain.
-     * @pre !contains(min)
-     */
-    void _searchMin();
-    /**
-     * Set max to the highest value in the domain.
-     * @pre !contains(max)
-     */
-    void _searchMax();
 
     friend class Subtree;
 };

@@ -35,9 +35,8 @@ VarInt::VarInt(Solver *solver, int minVal, int maxVal) :
         domain[i] = v;
         map[v] = i;
     }
-    bounds = false;
-    min = minVal - 1; // set for the first call to _searchMin()
-    max = maxVal + 1; // set for the first call to _searchMax()
+    min = minVal;
+    max = maxVal;
     clearMarks();
     strategy = SELECT_RANDOM;
 }
@@ -47,33 +46,21 @@ VarInt::~VarInt() {
     delete[] map;
 }
 
-void VarInt::maintainBounds() {
-    if(bounds)
-        return;
-    bounds = true;
-    _searchMin();
-    _searchMax();
-}
-
 int VarInt::select() {
     switch(strategy) {
     case SELECT_RANDOM:
         return domain[0];
     case SELECT_MIN:
-        if(!bounds)
-            _searchMin();
-        return min;
+        return min; // FIXME handle inconsistent value
     case SELECT_MAX:
-        if(!bounds)
-            _searchMax();
-        return max;
+        return max; // FIXME handle inconsistent value
     }
     assert(false); // should not happen
     return 0;
 }
 
 void VarInt::mark(int v) {
-    if(v < minVal || v > maxVal)
+    if(v < min || v > max)
         return;
     int i = map[v-minVal];
     if(i >= size || i < marked)
@@ -94,7 +81,7 @@ void VarInt::mark(int v) {
 
 bool VarInt::bind(int v) {
     clearMarks();
-    if(v < minVal || v > maxVal)
+    if(v < min || v > max)
         return false;
     int i = map[v-minVal];
     if(i >= size)
@@ -109,11 +96,11 @@ bool VarInt::bind(int v) {
         map[v-minVal] = 0;
     }
     size = 1;
-    if(bounds && v != min) {
+    if(v != min) {
         min = v;
         solver->enqueue(evMin);
     }
-    if(bounds && v != max) {
+    if(v != max) {
         max = v;
         solver->enqueue(evMax);
     }
@@ -122,14 +109,15 @@ bool VarInt::bind(int v) {
     return true;
 }
 
-inline int VarInt::_remove(int v) {
+bool VarInt::remove(int v) {
+    clearMarks();
     if(v < minVal || v > maxVal)
-        return -1;
+        return true;
     int i = map[v-minVal];
     if(i >= size)
-        return -1;
+        return true;
     if(size <= 1)
-        return 0;
+        return false;
     size--;
     if(i != size) {
         int v2 = domain[size];
@@ -138,26 +126,29 @@ inline int VarInt::_remove(int v) {
         map[v2-minVal] = i;
         map[v-minVal] = size;
     }
-    return 1;
-}
-
-bool VarInt::remove(int v) {
-    clearMarks();
-    switch(_remove(v)) {
-    case -1: return true;
-    case 0: return false;
-    }
-    if(bounds && v == min) {
-        _searchMin();
-        solver->enqueue(evMin);
-    }
-    if(bounds && v == max) {
-        _searchMax();
-        solver->enqueue(evMax);
+    if(size == 1) {
+        if(domain[0] < min || domain[0] > max)  // check representations consistency
+            return false;
+        solver->enqueue(evBind);
+        if(v != min) {
+            min = v;
+            solver->enqueue(evMin);
+        }
+        if(v != max) {
+            max = v;
+            solver->enqueue(evMax);
+        }
+    } else {
+        if(v == min) {
+            min++; // not perfect bound
+            solver->enqueue(evMin);
+        }
+        if(v == max) {
+            max--; // not perfect bound
+            solver->enqueue(evMax);
+        }
     }
     solver->enqueue(evChange);
-    if(size == 1)
-        solver->enqueue(evBind);
     return true;
 }
 
@@ -168,11 +159,11 @@ bool VarInt::restrictToMarks() {
         size = m;
         if(m == 0)
             return false;
-        if(bounds && min != mmin) {
+        if(min != mmin) {
             min = mmin;
             solver->enqueue(evMin);
         }
-        if(bounds && max != mmax) {
+        if(max != mmax) {
             max = mmax;
             solver->enqueue(evMax);
         }
@@ -185,74 +176,30 @@ bool VarInt::restrictToMarks() {
 
 bool VarInt::updateMin(int v) {
     clearMarks();
-    if(!bounds)
-        _searchMin();
     if(v <= min)
         return true;
-    while(v > min) {
-        if(!_remove(min))
-            return false;
-        _searchMin();
-    }
+    if(v > max)
+        return false;
+    if(v == max)
+        return bind(v);
+    min = v;
     solver->enqueue(evChange);
-    if(bounds)
-        solver->enqueue(evMin);
-    if(size == 1)
-        solver->enqueue(evBind);
+    solver->enqueue(evMin);
     return true;
 }
 
 bool VarInt::updateMax(int v) {
     clearMarks();
-    if(!bounds)
-        _searchMax();
     if(v >= max)
         return true;
-    while(v < max) {
-        if(!_remove(max))
-            return false;
-        _searchMax();
-    }
+    if(v < min)
+        return false;
+    if(v == min)
+        return bind(v);
+    max = v;
     solver->enqueue(evChange);
-    if(bounds)
-        solver->enqueue(evMax);
-    if(size == 1)
-        solver->enqueue(evBind);
+    solver->enqueue(evMax);
     return true;
-}
-
-inline void VarInt::_searchMin() {
-    if(max - min + 1 > CASTOR_SOLVER_VARINT_BOUND_SPARSITY * size) {
-        // lots of "holes" in the domain: check all remaining values
-        min = maxVal + 1;
-        for(int i = 0; i < size; i++)
-            if(domain[i] < min)
-                min = domain[i];
-    } else {
-        // else: check values successively from current min upwards
-        while(true) {
-            min++;
-            if(contains(min))
-                return;
-        }
-    }
-}
-
-inline void VarInt::_searchMax() {
-    if(max - min + 1 > CASTOR_SOLVER_VARINT_BOUND_SPARSITY * size) {
-        // lots of "holes" in the domain: check all remaining values
-        max = minVal - 1;
-        for(int i = 0; i < size; i++)
-            if(domain[i] > max)
-                max = domain[i];
-    } else {
-        // else: check values successively from current max downwards
-        while(true) {
-            max--;
-            if(contains(max))
-                return;
-        }
-    }
 }
 
 }
