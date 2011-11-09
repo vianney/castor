@@ -41,6 +41,14 @@ static inline int cmpstr(const char *a, size_t alen, const char *b, size_t blen)
     else return 0;
 }
 
+/**
+ * Check whether two (non-null terminated) strings with specified length are
+ * equal
+ */
+static inline bool eqstr(const char* a, size_t alen, const char *b, size_t blen) {
+    return alen == blen && cmpstr(a, alen, b, blen) == 0;
+}
+
 class Hash {
 public:
     /**

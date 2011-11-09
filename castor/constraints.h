@@ -61,6 +61,32 @@ public:
 };
 
 /**
+ * Restrict domain to a set of ranges
+ */
+class InRangesConstraint : public Constraint {
+    VarInt *x;
+    ValueRange *ranges;
+    unsigned nbRanges;
+public:
+    InRangesConstraint(VarInt *x, ValueRange ranges[], unsigned nbRanges)
+        : Constraint(PRIOR_HIGH), x(x), nbRanges(nbRanges) {
+        this->ranges = new ValueRange[nbRanges];
+        memcpy(this->ranges, ranges, nbRanges * sizeof(ValueRange));
+    }
+    ~InRangesConstraint() {
+        delete [] ranges;
+    }
+    bool post() {
+        x->clearMarks();
+        for(unsigned i = 0; i < nbRanges; i++) {
+            for(Value::id_t id : ranges[i])
+                x->mark(id);
+        }
+        return x->restrictToMarks();
+    }
+};
+
+/**
  * Restrict domain to values that are comparable in SPARQL filters
  * (i.e., simple literals, typed strings, booleans, numbers and dates)
  */

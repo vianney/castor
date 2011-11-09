@@ -234,23 +234,23 @@ void VarDiffConstraint::restore() {
 bool VarDiffConstraint::propagate() {
     StatelessConstraint::propagate();
     // TODO we could start propagating once only equivalent values remain
-    if(x1->isBound()) {
-        done = true;
-        for(Value::id_t id : store->getValueEqClass(x1->getValue())) {
-            if(!x2->remove(id))
-                return false;
-        }
+    if(!x1->isBound() && !x2->isBound())
         return true;
-    } else if(x2->isBound()) {
-        done = true;
-        for(Value::id_t id : store->getValueEqClass(x2->getValue())) {
-            if(!x1->remove(id))
-                return false;
-        }
-        return true;
-    } else {
-        return true;
+    VarInt *x1 = this->x1->isBound() ? this->x1 : this->x2;
+    VarInt *x2 = this->x1->isBound() ? this->x2 : this->x1;
+    done = true;
+    for(Value::id_t id : store->getValueEqClass(x1->getValue())) {
+        if(!x2->remove(id))
+            return false;
     }
+    Value::Class cls = store->getValueClass(x1->getValue());
+    if(cls > Value::CLASS_IRI) {
+        // Comparing two literals of different class result in type error
+        ValueRange rng = store->getClassValues(cls);
+        if(!x2->updateMin(rng.from) || !x2->updateMax(rng.to))
+            return false;
+    }
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

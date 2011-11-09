@@ -478,32 +478,23 @@ bool Value::operator<(const Value &o) const {
 int Value::rdfequals(const Value &o) const {
     if(id > 0 && id == o.id)
         return 0;
-    if(type == TYPE_UNKOWN || o.type == TYPE_UNKOWN) {
-        if(typeUri == NULL || o.typeUri == NULL)
-            return 1; // FIXME not sure
-        if(typeUriLen != o.typeUriLen ||
-                cmpstr(typeUri, typeUriLen, o.typeUri, o.typeUriLen) != 0)
-            return -1;
+    int falseret = isLiteral() && o.isLiteral() ? -1 : 1;
+    if(type == TYPE_CUSTOM || o.type == TYPE_CUSTOM) {
+        if(!eqstr(typeUri, typeUriLen, o.typeUri, o.typeUriLen))
+            return falseret;
     } else if(type != o.type) {
-        if(type >= TYPE_PLAIN_STRING || o.type >= TYPE_PLAIN_STRING)
-            return -1;
-        else
-            return 1;
+        return falseret;
     }
     if(isPlain()) {
-        // FIXME
         if(language != NULL && o.language != NULL) {
-            if(languageLen != o.languageLen ||
-                    cmpstr(language, languageLen, o.language, o.languageLen) != 0)
-                return 1;
+            if(!eqstr(language, languageLen, o.language, o.languageLen))
+                return falseret;
         } else if(language != NULL || o.language != NULL) {
-            return 1;
+            return falseret;
         }
     }
-    if(lexicalLen != o.lexicalLen ||
-            cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) != 0)
-        return typeUri == NULL ? 1 : -1;
-
+    if(!eqstr(lexical, lexicalLen, o.lexical, o.lexicalLen))
+        return falseret;
     return 0;
 }
 

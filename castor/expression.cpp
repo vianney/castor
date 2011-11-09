@@ -520,22 +520,27 @@ void EqExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
     sub.add(new InRangeConstraint(x, query->getStore()->getValueEqClass(v)));
 }
 void NEqExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {
-    /* FIXME this is not entirely spec-compliant: comparing two literals with
-     * different datatypes yields an error and makes this constraint thus false.
-     * Stating the variables shall be of the same class is not sufficient for
-     * values with type TYPE_UNKOWN.
+    /* In class CUSTOM, either two values are equal (and thus return false) or
+     * the comparison produces a type error (making the constraint false).
      */
-    sub.add(new SameClassConstraint(query->getStore(), x1, x2));
+    sub.add(new NotInRangeConstraint(x1,
+                    query->getStore()->getClassValues(Value::CLASS_OTHER)));
+    sub.add(new NotInRangeConstraint(x2,
+                    query->getStore()->getClassValues(Value::CLASS_OTHER)));
     sub.add(new VarDiffConstraint(query->getStore(), x1, x2));
 }
 void NEqExpression::postConst(Subtree &sub, VarInt *x, Value &v) {
-    /* FIXME this is not entirely spec-compliant: comparing two literals with
-     * different datatypes yields an error and makes this constraint thus false.
-     * Stating the variable shall be of the same class than the value is not
-     * sufficient if v.type == Value::TYPE_UNKOWN.
-     */
-    sub.add(new InRangeConstraint(x,
-                query->getStore()->getClassValues(v.getClass())));
+    if(v.isLiteral() && v.type != Value::TYPE_CUSTOM) {
+        ValueRange ranges[2] =
+            { query->getStore()->getClassValues(Value::CLASS_BLANK,
+                                                Value::CLASS_IRI),
+              query->getStore()->getClassValues(v.getClass()) };
+        sub.add(new InRangesConstraint(x, ranges, 2));
+    } else {
+        sub.add(new InRangeConstraint(x,
+                        query->getStore()->getClassValues(Value::CLASS_BLANK,
+                                                          Value::CLASS_IRI)));
+    }
     sub.add(new NotInRangeConstraint(x, query->getStore()->getValueEqClass(v)));
 }
 void SameTermExpression::postVars(Subtree &sub, VarInt *x1, VarInt *x2) {

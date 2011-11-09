@@ -84,7 +84,6 @@ struct Value {
         TYPE_DATETIME,      //!< xsd:dateTime
 
         TYPE_CUSTOM,        //!< custom datatype
-        TYPE_UNKOWN = -1,
 
         // internal values
         TYPE_FIRST_XSD = TYPE_TYPED_STRING,
