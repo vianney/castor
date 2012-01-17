@@ -35,5 +35,4 @@ set(CMAKE_CXX_FLAGS "-std=c++0x")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -Wall")
 
 add_subdirectory(castor)
-add_subdirectory(test)
 add_subdirectory(tools)
