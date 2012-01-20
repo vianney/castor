@@ -22,13 +22,13 @@
 #include <iostream>
 #include <typeinfo>
 
-namespace castor { class Pattern; }
-
-#include "query.h"
+#include "solver/subtree.h"
+#include "variable.h"
 #include "expression.h"
-#include "solver/solver.h"
 
 namespace castor {
+
+class Query;
 
 /**
  * Statement pattern.
@@ -153,10 +153,9 @@ public:
  */
 class BasicPattern : public Pattern {
     std::vector<StatementPattern> triples;
-    Subtree *sub;
+    cp::Subtree sub;
 public:
-    BasicPattern(Query *query) : Pattern(query), sub(NULL) {}
-    ~BasicPattern();
+    BasicPattern(Query *query);
 
     /**
      * Add a triple pattern

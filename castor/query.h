@@ -18,29 +18,21 @@
 #ifndef CASTOR_QUERY_H
 #define CASTOR_QUERY_H
 
-namespace castor {
-    class Variable;
-    class Solution;
-    class VarVal;
-    class VariableSet;
-    class Query;
-    class Pattern;
-    class Expression;
-    class DistinctConstraint;
-    class BnBOrderConstraint;
-}
-
 #include <string>
 #include <iostream>
 #include <set>
 #include "librdfwrapper.h"
 #include "store.h"
 #include "solver/solver.h"
-#include "distinct.h"
-#include "bnborder.h"
+#include "variable.h"
 #include "util.h"
 
 namespace castor {
+
+class Pattern;
+class Expression;
+class DistinctConstraint;
+class BnBOrderConstraint;
 
 /**
  * Exception while parsing the query
@@ -55,63 +47,6 @@ public:
     ~QueryParseException() throw() {}
 
     const char *what() const throw() { return msg.c_str(); }
-};
-
-/**
- * SPARQL variable
- */
-class Variable {
-public:
-    /**
-     * @return parent query
-     */
-    Query* getQuery() const { return query; }
-
-    /**
-     * @return id of the variable
-     */
-    unsigned getId() const { return id; }
-
-    /**
-     * @return the value id bound to this variable or 0 if unbound
-     */
-    Value::id_t getValueId() const { return val; }
-
-    /**
-     * @return whether the variable is bound
-     */
-    bool isBound() const { return val != 0; }
-
-    /**
-     * @return the CP variable corrsponding to this variable.
-     */
-    VarInt* getCPVariable() const { return var; }
-
-    /**
-     * Set the value of this variable using an id from the store
-     * @param the id of the new value or 0 for unbound
-     */
-    void setValueId(Value::id_t id) { val = id; }
-
-    /**
-     * Set the value of this variable according to the value of the CP variable
-     */
-    void setValueFromCP();
-
-private:
-    Query* query;       //!< Parent query
-    unsigned id;        //!< Id of the variable
-    std::string name;   //!< Name of the variable
-    VarInt *var;        //!< CP variable
-    Value::id_t val;    //!< value (0 means unbound)
-
-    Variable() : var(NULL), val(0) {}
-    ~Variable() {
-        if(var != NULL)
-            delete var;
-    }
-
-    friend class Query;
 };
 
 /**
@@ -166,7 +101,7 @@ public:
     /**
      * @return the CP solver
      */
-    Solver* getSolver() { return &solver; }
+    cp::Solver* getSolver() { return &solver; }
     /**
      * @return the number of variables
      */
@@ -274,7 +209,7 @@ private:
 
 private:
     Store *store; //!< store associated to this query
-    Solver solver; //!< CP solver
+    cp::Solver solver; //!< CP solver
     unsigned nbVars; //!< number of variables
     unsigned nbRequestedVars; //!< number of requested variables
     /**
@@ -336,165 +271,6 @@ private:
 };
 
 std::ostream& operator<<(std::ostream &out, const Query &q);
-
-/**
- * Small structure containing a value or variable id.
- */
-class VarVal {
-    Value::id_t valid; //!< id of the value or 0 if variable or unknown
-    unsigned varid; //!< id of the variable + 1 or 0 if value or unknown
-
-public:
-
-    explicit VarVal(Value::id_t valid) : valid(valid), varid(0) {}
-    VarVal(const Variable &variable) : valid(0), varid(variable.getId()+1) {}
-    VarVal(const Variable *variable) : valid(0), varid(variable->getId()+1) {}
-    VarVal(const Value &value) : valid(value.id), varid(0) {}
-    VarVal(const Value *value) : valid(value->id), varid(0) {}
-
-    /**
-     * @return whether the id refers to a variable
-     */
-    bool isVariable() const { return varid > 0; }
-    /**
-     * @return whether this refers to an unknown value (id 0)
-     */
-    bool isUnknown() const { return valid == 0 && varid == 0; }
-    /**
-     * @pre !isVariable()
-     * @return the value id
-     */
-    Value::id_t getValueId() const { return valid; }
-    /**
-     * @pre isVariable()
-     * @return the variable id
-     */
-    unsigned getVariableId() const { return varid - 1; }
-
-    bool operator==(const VarVal &o) const { return valid == o.valid && varid == o.varid; }
-    bool operator!=(const VarVal &o) const { return valid != o.valid || varid != o.varid; }
-};
-
-/**
- * Set of variables
- */
-class VariableSet {
-    void _init(unsigned capacity) {
-        // TODO refactor this with C++11
-        this->capacity = capacity;
-        vars = new Variable*[capacity];
-        varMap = new bool[capacity];
-        memset(varMap, 0, capacity * sizeof(bool));
-        size = 0;
-        cpvars = NULL;
-    }
-
-public:
-    VariableSet(unsigned capacity) {
-        _init(capacity);
-    }
-    VariableSet(Query *query) {
-        _init(query->getVariablesCount());
-    }
-    VariableSet(const VariableSet &o) {
-        capacity = o.capacity;
-        vars = new Variable*[capacity];
-        memcpy(vars, o.vars, capacity * sizeof(Variable*));
-        varMap = new bool[capacity];
-        memcpy(varMap, o.varMap, capacity * sizeof(bool));
-        size = o.size;
-        cpvars = NULL;
-    }
-    ~VariableSet() {
-        delete [] vars;
-        delete [] varMap;
-        if(cpvars)
-            delete [] cpvars;
-    }
-
-    VariableSet& operator=(const VariableSet &o) {
-        memcpy(vars, o.vars, capacity * sizeof(Variable*));
-        memcpy(varMap, o.varMap, capacity * sizeof(bool));
-        size = o.size;
-        if(cpvars) {
-            delete [] cpvars;
-            cpvars = NULL;
-        }
-        return *this;
-    }
-
-    /**
-     * Add a variable to this set
-     */
-    VariableSet& operator+=(Variable *v) {
-        if(!varMap[v->getId()]) {
-            vars[size++] = v;
-            varMap[v->getId()] = true;
-            if(cpvars) {
-                delete [] cpvars;
-                cpvars = NULL;
-            }
-        }
-        return *this;
-    }
-
-    /**
-     * Union with another set
-     */
-    VariableSet& operator+=(const VariableSet &o) {
-        for(unsigned i = 0; i < o.size; i++)
-            *this += o.vars[i];
-        return *this;
-    }
-
-    /**
-     * Intersection with another set
-     */
-    VariableSet operator*(const VariableSet &o) const {
-        VariableSet result(capacity);
-        for(unsigned i = 0; i < size; i++) {
-            if(o.contains(vars[i]))
-                result += vars[i];
-        }
-        return result;
-    }
-
-    unsigned getSize() const { return size; }
-    Variable* operator[](unsigned i) { return vars[i]; }
-
-    /**
-     * @param v a variable
-     * @return whether v is in this set
-     */
-    bool contains(Variable *v) const { return varMap[v->getId()]; }
-
-    /**
-     * @return the list of variables
-     */
-    const Variable** getList() const {
-        return const_cast<const Variable**>(vars);
-    }
-
-    /**
-     * @return the list of CP variables corresponding to the variables in the
-     *         set
-     */
-    VarInt** getCPVars() {
-        if(!cpvars) {
-            cpvars = new VarInt*[size];
-            for(unsigned i = 0; i < size; i++)
-                cpvars[i] = vars[i]->getCPVariable();
-        }
-        return cpvars;
-    }
-
-private:
-    unsigned size; //!< number of variables in the list
-    unsigned capacity; //!< maximum number of variables
-    Variable **vars; //!< array of variables
-    bool *varMap; //!< map of ids
-    VarInt **cpvars; //!< List of CP variables. NULL if not yet created.
-};
 
 }
 

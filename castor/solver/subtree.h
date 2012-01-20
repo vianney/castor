@@ -15,16 +15,17 @@
  * You should have received a copy of the GNU General Public License
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef CASTOR_SUBTREE_H
-#define CASTOR_SUBTREE_H
+#ifndef CASTOR_CP_SUBTREE_H
+#define CASTOR_CP_SUBTREE_H
 
 #include <vector>
 
 #include "solver.h"
-#include "varint.h"
+#include "variable.h"
 #include "constraint.h"
 
 namespace castor {
+namespace cp {
 
 class Checkpoint;
 
@@ -37,13 +38,8 @@ public:
      * Initialize a subtree.
      *
      * @param solver the solver
-     * @param vars array of variables to label in the subtree
-     * @param nbVars number of variables to label
-     * @param nbDecision number of decision variables (0 for all)
-     * @param nbOrder number of variables that should be labeled first
      */
-    Subtree(Solver *solver, VarInt **vars, int nbVars,
-            int nbDecision = 0, int nbOrder = 0);
+    Subtree(Solver *solver);
 
     /**
      * Destructor.
@@ -51,8 +47,24 @@ public:
     ~Subtree();
 
     /**
+     * Add a variable. Make sure to add all variables that need to be
+     * backtracked.
+     *
+     * The subtree does NOT take ownership of the variable.
+     *
+     * @note Should not be called once the tree has been activated once.
+     *
+     * @param x the variable
+     * @param label true if x is a decision variable that should be labeled on
+     *              search, false if x is an auxiliary variable
+     */
+    void add(Variable *x, bool label = false);
+
+    /**
      * Add a constraint.
      * The subtree takes ownership of the constraint.
+     *
+     * @note Should not be called once the tree has been activated once.
      *
      * @param c the constraint
      */
@@ -92,9 +104,8 @@ private:
      * Create a checkpoint.
      *
      * @param x chosen variable
-     * @param v chosen value
      */
-    void checkpoint(VarInt *x, int v);
+    void checkpoint(Variable *x);
 
     /**
      * Backtrack to the previous checkpoint. Remove the chosen value from the
@@ -102,9 +113,9 @@ private:
      * backtrack to an older checkpoint.
      *
      * @return the chosen variable of the last restored checkpoint
-     *         or null if the whole search tree has been explored
+     *         or NULL if the whole search tree has been explored
      */
-    VarInt* backtrack();
+    Variable* backtrack();
 
 private:
     /**
@@ -133,23 +144,14 @@ private:
     bool started;
 
     /**
-     * Variables to label.
+     * Variables.
      */
-    VarInt **vars;
-    /**
-     * Number of variables to keep track of.
-     */
-    int nbVars;
+    std::vector<Variable*> vars;
     /**
      * Number of decision variables to label. The decision variables appear
      * first in the vars array.
      */
     int nbDecision;
-    /**
-     * Number of decision variables that should be labeled in that order. Such
-     * variables appear first in the vars array.
-     */
-    int nbOrder;
 
     /**
      * Posted constraints.
@@ -168,5 +170,6 @@ private:
 };
 
 }
+}
 
-#endif // CASTOR_SUBTREE_H
+#endif // CASTOR_CP_SUBTREE_H

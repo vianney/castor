@@ -18,14 +18,14 @@
 #ifndef CASTOR_EXPRESSION_H
 #define CASTOR_EXPRESSION_H
 
-namespace castor { class Expression; }
-
 #include <vector>
 #include "model.h"
-#include "query.h"
+#include "variable.h"
 #include "solver/subtree.h"
 
 namespace castor {
+
+class Query;
 
 /**
  * Base class for a SPARQL expression
@@ -82,7 +82,7 @@ public:
      * Post this expression as a constraint.
      * @param sub subtree in which to add the constraint
      */
-    virtual void post(Subtree &sub);
+    virtual void post(cp::Subtree &sub);
 
     /**
      * Evaluate the expression given the current assignment in query. The result
@@ -326,7 +326,7 @@ class AndExpression : public BinaryExpression {
 public:
     AndExpression(Expression *arg1, Expression *arg2) :
             BinaryExpression(arg1, arg2) {}
-    void post(Subtree &sub);
+    void post(cp::Subtree &sub);
     bool evaluate(Value &result);
 };
 
@@ -337,17 +337,17 @@ class EqualityExpression : public BinaryExpression {
 public:
     EqualityExpression(Expression *arg1, Expression *arg2)
         : BinaryExpression(arg1, arg2) {}
-    void post(Subtree &sub);
+    void post(cp::Subtree &sub);
 
     /**
      * Post the constraint when both arguments are variables.
      */
-    virtual void postVars(Subtree &sub, VarInt *x1, VarInt *x2) = 0;
+    virtual void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) = 0;
     /**
      * Post the constraint when one argument is a variable and the other is
      * constant.
      */
-    virtual void postConst(Subtree &sub, VarInt *x1, Value &v2) = 0;
+    virtual void postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2) = 0;
 };
 
 /**
@@ -358,8 +358,8 @@ public:
     EqExpression(Expression *arg1, Expression *arg2) :
             EqualityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
-    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
-    void postConst(Subtree &sub, VarInt *x, Value &v);
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2);
+    void postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v);
 };
 
 /**
@@ -370,8 +370,8 @@ public:
     NEqExpression(Expression *arg1, Expression *arg2) :
             EqualityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
-    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
-    void postConst(Subtree &sub, VarInt *x, Value &v);
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2);
+    void postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v);
 };
 
 /**
@@ -381,21 +381,21 @@ class InequalityExpression : public BinaryExpression {
 public:
     InequalityExpression(Expression *arg1, Expression *arg2)
         : BinaryExpression(arg1, arg2) {}
-    void post(Subtree &sub);
+    void post(cp::Subtree &sub);
 
     // Handlers for default post implementation
     /**
      * Post the constraint when both arguments are variables.
      */
-    virtual void postVars(Subtree &sub, VarInt *x1, VarInt *x2) = 0;
+    virtual void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) = 0;
     /**
      * Post the constraint when arg1 is a variable and arg2 is constant.
      */
-    virtual void postConst(Subtree &sub, VarInt *x1, Value &v2) = 0;
+    virtual void postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2) = 0;
     /**
      * Post the constraint when arg1 is constant and arg2 is a variable.
      */
-    virtual void postConst(Subtree &sub, Value &v1, VarInt *x2) = 0;
+    virtual void postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2) = 0;
 };
 
 /**
@@ -406,9 +406,9 @@ public:
     LTExpression(Expression *arg1, Expression *arg2) :
             InequalityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
-    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
-    void postConst(Subtree &sub, VarInt *x1, Value &v2);
-    void postConst(Subtree &sub, Value &v1, VarInt *x2);
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2);
+    void postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2);
+    void postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2);
 };
 
 /**
@@ -419,9 +419,9 @@ public:
     GTExpression(Expression *arg1, Expression *arg2) :
             InequalityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
-    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
-    void postConst(Subtree &sub, VarInt *x1, Value &v2);
-    void postConst(Subtree &sub, Value &v1, VarInt *x2);
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2);
+    void postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2);
+    void postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2);
 };
 
 /**
@@ -432,9 +432,9 @@ public:
     LEExpression(Expression *arg1, Expression *arg2) :
             InequalityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
-    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
-    void postConst(Subtree &sub, VarInt *x1, Value &v2);
-    void postConst(Subtree &sub, Value &v1, VarInt *x2);
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2);
+    void postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2);
+    void postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2);
 };
 
 /**
@@ -445,9 +445,9 @@ public:
     GEExpression(Expression *arg1, Expression *arg2) :
             InequalityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
-    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
-    void postConst(Subtree &sub, VarInt *x1, Value &v2);
-    void postConst(Subtree &sub, Value &v1, VarInt *x2);
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2);
+    void postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2);
+    void postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2);
 };
 
 /**
@@ -498,8 +498,8 @@ public:
     SameTermExpression(Expression *arg1, Expression *arg2) :
             EqualityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
-    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
-    void postConst(Subtree &sub, VarInt *x, Value &v);
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2);
+    void postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v);
 };
 
 /**
@@ -510,8 +510,8 @@ public:
     DiffTermExpression(Expression *arg1, Expression *arg2) :
             EqualityExpression(arg1, arg2) {}
     bool evaluate(Value &result);
-    void postVars(Subtree &sub, VarInt *x1, VarInt *x2);
-    void postConst(Subtree &sub, VarInt *x, Value &v);
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2);
+    void postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v);
 };
 
 /**

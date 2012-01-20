@@ -16,6 +16,7 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "pattern.h"
+#include "query.h"
 #include "constraints.h"
 
 namespace castor {
@@ -25,10 +26,8 @@ std::ostream& operator<<(std::ostream &out, const Pattern &p) {
     return out;
 }
 
-BasicPattern::~BasicPattern() {
-    if(sub)
-        delete sub;
-}
+BasicPattern::BasicPattern(Query *query) :
+    Pattern(query), sub(query->getSolver()) {}
 
 void BasicPattern::add(const StatementPattern &triple) {
     triples.push_back(triple);
@@ -47,25 +46,25 @@ void BasicPattern::add(const StatementPattern &triple) {
 }
 
 void BasicPattern::init() {
-    sub = new Subtree(query->getSolver(), vars.getCPVars(), vars.getSize());
-    for(unsigned i = 0; i < vars.getSize(); i++)
-        sub->add(new BoundConstraint(vars[i]->getCPVariable()));
-    for(std::vector<StatementPattern>::iterator it = triples.begin(),
-        end = triples.end(); it != end; ++it)
-        sub->add(new StatementConstraint(query, *it));
+    for(Variable* x : vars) {
+        sub.add(x->getCPVariable(), true);
+        sub.add(new BoundConstraint(x->getCPVariable()));
+    }
+    for(StatementPattern& st : triples)
+        sub.add(new StatementConstraint(query, st));
 }
 
 bool BasicPattern::next() {
-    if(!sub->isActive())
-        sub->activate();
-    else if(!sub->isCurrent())
+    if(!sub.isActive())
+        sub.activate();
+    else if(!sub.isCurrent())
         return true; // another BGP is posted further down
-    return sub->search();
+    return sub.search();
 }
 
 void BasicPattern::discard() {
-    if(sub->isActive())
-        sub->discard();
+    if(sub.isActive())
+        sub.discard();
 }
 
 FilterPattern::FilterPattern(Pattern *subpattern, Expression *condition) :
@@ -117,7 +116,7 @@ Pattern* FilterPattern::optimize() {
 void FilterPattern::init() {
     subpattern->init();
     if(BasicPattern *subpat = dynamic_cast<BasicPattern*>(subpattern))
-        condition->post(*subpat->sub);
+        condition->post(subpat->sub);
 }
 
 bool FilterPattern::next() {
@@ -125,8 +124,8 @@ bool FilterPattern::next() {
         return subpattern->next();
     } else {
         while(subpattern->next()) {
-            for(unsigned i = 0; i < condition->getVars().getSize(); i++)
-                condition->getVars()[i]->setValueFromCP();
+            for(Variable* x : condition->getVars())
+                x->setValueFromCP();
             if(condition->isTrue())
                 return true;
         }

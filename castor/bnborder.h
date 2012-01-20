@@ -23,10 +23,12 @@
 
 namespace castor {
 
+class Query;
+
 /**
  * Branch&Bound ORDER static constraint
  */
-class BnBOrderConstraint : public Constraint {
+class BnBOrderConstraint : public cp::Constraint {
 public:
     BnBOrderConstraint(Query *query);
     ~BnBOrderConstraint();

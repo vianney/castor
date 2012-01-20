@@ -24,7 +24,7 @@
 
 namespace castor {
 
-class DistinctConstraint : public Constraint {
+class DistinctConstraint : public cp::Constraint {
 public:
     DistinctConstraint(Query *query);
     ~DistinctConstraint();

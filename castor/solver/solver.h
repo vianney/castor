@@ -16,13 +16,14 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CASTOR_SOLVER_H
-#define CASTOR_SOLVER_H
+#ifndef CASTOR_CP_SOLVER_H
+#define CASTOR_CP_SOLVER_H
 
 #include <vector>
 #include "constraint.h"
 
 namespace castor {
+namespace cp {
 
 class Subtree;
 
@@ -162,7 +163,8 @@ private:
 };
 
 }
+}
 
 #include "subtree.h"
 
-#endif // CASTOR_SOLVER_H
+#endif // CASTOR_CP_SOLVER_H

@@ -26,10 +26,8 @@ BnBOrderConstraint::BnBOrderConstraint(Query *query) : query(query) {
     for(unsigned i = 0; i < query->getOrderCount(); i++)
         vars += query->getOrder(i)->getVars();
     assert(vars.getSize() > 0);
-    for(unsigned i = 0; i < vars.getSize(); i++) {
-        VarInt *x = vars[i]->getCPVariable();
-        x->registerBind(this);
-    }
+    for(Variable *x : vars)
+        x->getCPVariable()->registerBind(this);
     boundOrderVals = new Value[query->getOrderCount()];
     boundOrderError = new bool[query->getOrderCount()];
     bound = NULL;
@@ -70,7 +68,7 @@ bool BnBOrderConstraint::propagate() {
         bool desc = query->isOrderDescending(i);
         Value *bval = &boundOrderVals[i];
         if(VariableExpression *varexpr = dynamic_cast<VariableExpression*>(expr)) {
-            VarInt *x = varexpr->getVariable()->getCPVariable();
+            cp::RDFVar *x = varexpr->getVariable()->getCPVariable();
             assert(bval->id > 0);
             if(desc) {
                 if(!x->updateMin(bval->id))

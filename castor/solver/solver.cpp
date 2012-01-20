@@ -20,6 +20,7 @@
 #include "solver.h"
 
 namespace castor {
+namespace cp {
 
 Solver::Solver() {
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
@@ -176,4 +177,5 @@ void Solver::clearQueue() {
     }
 }
 
+}
 }

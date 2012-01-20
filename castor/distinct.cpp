@@ -82,7 +82,7 @@ bool DistinctConstraint::propagate() {
     Value::id_t sol[query->getRequestedCount()];
     int unbound = -1;
     for(unsigned i = 0; i < query->getRequestedCount(); i++) {
-        VarInt *x = query->getVariable(i)->getCPVariable();
+        cp::RDFVar *x = query->getVariable(i)->getCPVariable();
         if(x->isBound())
             sol[i] = x->getValue();
         else if(unbound != -1)
@@ -95,7 +95,7 @@ bool DistinctConstraint::propagate() {
         return solutions->find(sol) == solutions->end();
     } else {
         // all variables, except one, are bound -> forward checking
-        VarInt *x = query->getVariable(unbound)->getCPVariable();
+        cp::RDFVar *x = query->getVariable(unbound)->getCPVariable();
         std::pair<SolSet::iterator,SolSet::iterator> range
                 = indexes[unbound]->equal_range(sol);
         for(SolSet::iterator it = range.first; it != range.second; ++it) {

@@ -18,8 +18,8 @@ set(CASTOR_SRCS
     config.h
     solver/solver.h
     solver/solver.cpp
-    solver/varint.h
-    solver/varint.cpp
+    solver/variable.h
+    solver/discretevar.h
     solver/constraint.h
     solver/subtree.h
     solver/subtree.cpp
@@ -36,6 +36,8 @@ set(CASTOR_SRCS
     model.cpp
     store.h
     store.cpp
+    variable.h
+    variable.cpp
     expression.h
     expression.cpp
     pattern.h

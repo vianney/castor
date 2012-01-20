@@ -123,24 +123,21 @@ bool StatementConstraint::propagate() {
 FilterConstraint::FilterConstraint(Store *store, Expression *expr) :
         StatelessConstraint(CASTOR_CONSTRAINTS_FILTER_PRIORITY),
         store(store), expr(expr) {
-    VarInt** vars = expr->getVars().getCPVars();
-    for(unsigned i = 0; i < expr->getVars().getSize(); i++)
-        vars[i]->registerBind(this);
+    for(Variable* var : expr->getVars())
+        var->getCPVariable()->registerBind(this);
 }
 
 void FilterConstraint::restore() {
-    done = false;
-    VariableSet &vars = expr->getVars();
-    for(unsigned i = 0; i < vars.getSize(); i++) {
-        VarInt *x = vars[i]->getCPVariable();
+    done = true;
+    int unbound = 0;
+    for(Variable* var : expr->getVars()) {
+        cp::RDFVar *x = var->getCPVariable();
         if(!x->contains(0) && !x->isBound()) {
-            if(done) {
+            unbound++;
+            if(unbound > 1) {
                 // more than one unbound variable, we are not done
                 done = false;
                 return;
-            } else {
-                // first encountered unbound variable
-                done = true;
             }
         }
     }
@@ -148,10 +145,8 @@ void FilterConstraint::restore() {
 
 bool FilterConstraint::propagate() {
     StatelessConstraint::propagate();
-    VariableSet &vars = expr->getVars();
     Variable* unbound = NULL;
-    for(unsigned i = 0; i < vars.getSize(); i++) {
-        Variable *x = vars[i];
+    for(Variable *x : expr->getVars()) {
         if(x->getCPVariable()->contains(0))
             x->setValueId(0);
         else if(x->getCPVariable()->isBound())
@@ -167,10 +162,10 @@ bool FilterConstraint::propagate() {
         return expr->isTrue();
     } else {
         // all variables, except one, are bound -> forward checking
-        VarInt *x = unbound->getCPVariable();
+        cp::RDFVar *x = unbound->getCPVariable();
         x->clearMarks();
         unsigned n = x->getSize();
-        const int* dom = x->getDomain();
+        const Value::id_t* dom = x->getDomain();
         for(unsigned i = 0; i < n; i++) {
             unbound->setValueId(dom[i]);
             if(expr->isTrue())
@@ -182,7 +177,7 @@ bool FilterConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-SameClassConstraint::SameClassConstraint(Store *store, VarInt *x1, VarInt *x2)
+SameClassConstraint::SameClassConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2)
         : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
     x1->registerMin(this);
     x1->registerMax(this);
@@ -221,7 +216,7 @@ bool SameClassConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarDiffConstraint::VarDiffConstraint(Store *store, VarInt *x1, VarInt *x2)
+VarDiffConstraint::VarDiffConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2)
         : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
     x1->registerBind(this);
     x2->registerBind(this);
@@ -236,8 +231,8 @@ bool VarDiffConstraint::propagate() {
     // TODO we could start propagating once only equivalent values remain
     if(!x1->isBound() && !x2->isBound())
         return true;
-    VarInt *x1 = this->x1->isBound() ? this->x1 : this->x2;
-    VarInt *x2 = this->x1->isBound() ? this->x2 : this->x1;
+    cp::RDFVar *x1 = this->x1->isBound() ? this->x1 : this->x2;
+    cp::RDFVar *x2 = this->x1->isBound() ? this->x2 : this->x1;
     done = true;
     for(Value::id_t id : store->getValueEqClass(x1->getValue())) {
         if(!x2->remove(id))
@@ -255,7 +250,7 @@ bool VarDiffConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarEqConstraint::VarEqConstraint(Store *store, VarInt *x1, VarInt *x2) :
+VarEqConstraint::VarEqConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2) :
         Constraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
     x1->registerChange(this);
     x2->registerChange(this);
@@ -272,7 +267,7 @@ bool VarEqConstraint::post() {
 }
 
 bool VarEqConstraint::propagate() {
-    VarInt *x1 = this->x1, *x2 = this->x2;
+    cp::RDFVar *x1 = this->x1, *x2 = this->x2;
     int n1 = x1->getSize(), n2 = x2->getSize();
     int oldn1 = s1, oldn2 = s2;
     int removed = (oldn1 - n1) + (oldn2 - n2);
@@ -280,7 +275,7 @@ bool VarEqConstraint::propagate() {
      * union of both domains.
      */
     if(removed > 0 && removed < n1 && removed < n2) {
-        const int *dom = x1->getDomain();
+        const Value::id_t *dom = x1->getDomain();
         for(int i = n1; i < oldn1; i++) {
             ValueRange eqClass = store->getValueEqClass(dom[i]);
             bool prune = true;
@@ -321,7 +316,7 @@ bool VarEqConstraint::propagate() {
             n1 = n2;
         }
         x2->clearMarks();
-        const int *dom = x1->getDomain();
+        const Value::id_t *dom = x1->getDomain();
         for(int i = 0; i < n1; i++) {
             int v = dom[i];
             ValueRange eqClass = store->getValueEqClass(v);
@@ -352,7 +347,7 @@ bool VarEqConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarLessConstraint::VarLessConstraint(Store *store, VarInt *x1, VarInt *x2, bool equality)
+VarLessConstraint::VarLessConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2, bool equality)
         : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2), equality(equality) {
     x1->registerMin(this);
     x1->registerMax(this);
@@ -384,7 +379,7 @@ bool VarLessConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarDiffTermConstraint::VarDiffTermConstraint(VarInt *x1, VarInt *x2) :
+VarDiffTermConstraint::VarDiffTermConstraint(cp::RDFVar *x1, cp::RDFVar *x2) :
         StatelessConstraint(PRIOR_HIGH), x1(x1), x2(x2) {
     x1->registerBind(this);
     x2->registerBind(this);
@@ -409,7 +404,7 @@ bool VarDiffTermConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarSameTermConstraint::VarSameTermConstraint(VarInt *x1, VarInt *x2) :
+VarSameTermConstraint::VarSameTermConstraint(cp::RDFVar *x1, cp::RDFVar *x2) :
         Constraint(PRIOR_HIGH), x1(x1), x2(x2) {
     x1->registerChange(this);
     x2->registerChange(this);
@@ -426,7 +421,7 @@ bool VarSameTermConstraint::post() {
 }
 
 bool VarSameTermConstraint::propagate() {
-    VarInt *x1 = this->x1, *x2 = this->x2;
+    cp::RDFVar *x1 = this->x1, *x2 = this->x2;
     int n1 = x1->getSize(), n2 = x2->getSize();
     int oldn1 = s1, oldn2 = s2;
     int removed = (oldn1 - n1) + (oldn2 - n2);
@@ -434,7 +429,7 @@ bool VarSameTermConstraint::propagate() {
      * union of both domains.
      */
     if(removed > 0 && removed < n1 && removed < n2) {
-        const int *dom = x1->getDomain();
+        const Value::id_t *dom = x1->getDomain();
         for(int i = n1; i < oldn1; i++) {
             if(!x2->remove(dom[i]))
                 return false;
@@ -451,7 +446,7 @@ bool VarSameTermConstraint::propagate() {
             n1 = n2;
         }
         x2->clearMarks();
-        const int *dom = x1->getDomain();
+        const Value::id_t *dom = x1->getDomain();
         for(int i = 0; i < n1; i++) {
             int v = dom[i];
             if(x2->contains(v)) {

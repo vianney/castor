@@ -19,15 +19,12 @@
 #include <cassert>
 #include <sstream>
 #include "query.h"
+#include "pattern.h"
+#include "expression.h"
+#include "distinct.h"
+#include "bnborder.h"
 
 namespace castor {
-
-void Variable::setValueFromCP() {
-    if(var->contains(0))
-        setValueId(0);
-    else
-        setValueId(var->getValue());
-}
 
 Solution::Solution(Query *query) : query(query) {
     values = new Value::id_t[query->getVariablesCount()];
@@ -136,7 +133,7 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
             vars[i].query = this;
             vars[i].id = i;
             vars[i].name = (const char*) var->name;
-            vars[i].var = new VarInt(&solver, 0, store->getValueCount());
+            vars[i].var = new cp::RDFVar(&solver, 0, store->getValueCount());
         }
         for(int j = 0; j < nbReal; j++) {
             rasqal_variable *var = seqVars[j];
@@ -145,7 +142,7 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
                 vars[i].query = this;
                 vars[i].id = i;
                 vars[i].name = (const char*) var->name;
-                vars[i].var = new VarInt(&solver, 0, store->getValueCount());
+                vars[i].var = new cp::RDFVar(&solver, 0, store->getValueCount());
                 i++;
             }
         }
@@ -154,7 +151,7 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
             var->user_data = &vars[i];
             vars[i].query = this;
             vars[i].id = i;
-            vars[i].var = new VarInt(&solver, 0, store->getValueCount());
+            vars[i].var = new cp::RDFVar(&solver, 0, store->getValueCount());
             i++;
         }
 
@@ -228,9 +225,8 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
 
 Query::~Query() {
     if(solutions != NULL) {
-        for(SolutionSet::iterator it = solutions->begin(), end = solutions->end();
-            it != end; ++it)
-            delete *it;
+        for(Solution* sol : *solutions)
+            delete sol;
         delete solutions;
     }
     if(nbOrder > 0) {
@@ -589,9 +585,8 @@ void Query::reset() {
     if(distinctCstr != NULL)
         distinctCstr->reset();
     if(solutions != NULL) {
-        for(SolutionSet::iterator it = solutions->begin(), end = solutions->end();
-            it != end; ++it)
-            delete *it;
+        for(Solution* sol : *solutions)
+            delete sol;
         solutions->clear();
     }
 }

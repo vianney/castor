@@ -15,10 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef CASTOR_CONSTRAINT_H
-#define CASTOR_CONSTRAINT_H
+#ifndef CASTOR_CP_CONSTRAINT_H
+#define CASTOR_CP_CONSTRAINT_H
 
 namespace castor {
+namespace cp {
 
 class Solver;
 class Subtree;
@@ -149,7 +150,8 @@ public:
 };
 
 }
+}
 
 #include "solver.h"
 
-#endif // CASTOR_CONSTRAINT_H
+#endif // CASTOR_CP_CONSTRAINT_H
