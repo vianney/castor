@@ -107,11 +107,7 @@ public:
     /**
      * Clear marks of a variable.
      */
-    void clearMarks() {
-        marked = 0;
-        markedmin = maxVal + 1;
-        markedmax = minVal - 1;
-    }
+    void clearMarks();
 
     /**
      * Bind a value to a variable. This also clear the marks of the variable.
@@ -320,11 +316,16 @@ void DiscreteVariable<T>::mark(T v) {
         map[v2-minVal] = i;
         map[v-minVal] = marked;
     }
-    marked++;
-    if(v < markedmin)
+    if(marked == 0 || v < markedmin)
         markedmin = v;
-    if(v > markedmax)
+    if(marked == 0 || v > markedmax)
         markedmax = v;
+    ++marked;
+}
+
+template<class T>
+void DiscreteVariable<T>::clearMarks() {
+    marked = 0;
 }
 
 template<class T>
