@@ -294,12 +294,14 @@ void DiscreteVariable<T>::restore(const void *trail) {
 
 template<class T>
 void DiscreteVariable<T>::select() {
-    assert(bind(domain[0]));
+    bool ret = bind(domain[0]);
+    assert(ret);
 }
 
 template<class T>
 void DiscreteVariable<T>::unselect() {
-    assert(remove(domain[0]));
+    bool ret = remove(domain[0]);
+    assert(ret);
 }
 
 template<class T>
