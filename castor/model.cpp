@@ -27,29 +27,29 @@ namespace castor {
 ////////////////////////////////////////////////////////////////////////////////
 // Static definitions
 
-char *Value::TYPE_URIS[] = {
+const char *Value::TYPE_URIS[] = {
     NULL,
     NULL,
     NULL,
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#string"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#boolean"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#integer"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#positiveInteger"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#nonPositiveInteger"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#negativeInteger"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#nonNegativeInteger"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#byte"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#short"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#int"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#long"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#unsignedByte"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#unsignedShort"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#unsignedInt"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#unsignedLong"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#float"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#double"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#decimal"),
-    const_cast<char*>("http://www.w3.org/2001/XMLSchema#dateTime")
+    "http://www.w3.org/2001/XMLSchema#string",
+    "http://www.w3.org/2001/XMLSchema#boolean",
+    "http://www.w3.org/2001/XMLSchema#integer",
+    "http://www.w3.org/2001/XMLSchema#positiveInteger",
+    "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
+    "http://www.w3.org/2001/XMLSchema#negativeInteger",
+    "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
+    "http://www.w3.org/2001/XMLSchema#byte",
+    "http://www.w3.org/2001/XMLSchema#short",
+    "http://www.w3.org/2001/XMLSchema#int",
+    "http://www.w3.org/2001/XMLSchema#long",
+    "http://www.w3.org/2001/XMLSchema#unsignedByte",
+    "http://www.w3.org/2001/XMLSchema#unsignedShort",
+    "http://www.w3.org/2001/XMLSchema#unsignedInt",
+    "http://www.w3.org/2001/XMLSchema#unsignedLong",
+    "http://www.w3.org/2001/XMLSchema#float",
+    "http://www.w3.org/2001/XMLSchema#double",
+    "http://www.w3.org/2001/XMLSchema#decimal",
+    "http://www.w3.org/2001/XMLSchema#dateTime"
 };
 
 unsigned Value::TYPE_URIS_LEN[] = {
@@ -90,14 +90,16 @@ unsigned Value::TYPE_URIS_LEN[] = {
  * @param[out] str a new string containing a copy of the URI
  * @param[out] len the length of the URI
  */
-static void convertURI(raptor_uri *uri, char* &str, unsigned &len) {
-    char *s = reinterpret_cast<char*>(raptor_uri_as_string(uri));
-    len = strlen(s);
-    str = new char[len + 1];
-    memcpy(str, s, len + 1);
+static void convertURI(raptor_uri *uri, const char* &str, unsigned &len) {
+    char *uristr = reinterpret_cast<char*>(raptor_uri_as_string(uri));
+    len = strlen(uristr);
+    char *s = new char[len + 1];
+    memcpy(s, uristr, len + 1);
+    str = s;
 }
 
 Value::Value(const raptor_term *term) {
+    char *s;
     id = 0;
     cleanup = CLEAN_NOTHING;
     switch(term->type) {
@@ -106,9 +108,10 @@ Value::Value(const raptor_term *term) {
         typeUri = NULL;
         typeUriLen = 0;
         lexicalLen = term->value.blank.string_len;
-        lexical = new char[lexicalLen + 1];
-        memcpy(lexical, reinterpret_cast<char*>(term->value.blank.string),
+        s = new char[lexicalLen + 1];
+        memcpy(s, reinterpret_cast<char*>(term->value.blank.string),
                lexicalLen + 1);
+        lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
         break;
     case RAPTOR_TERM_TYPE_URI:
@@ -120,9 +123,10 @@ Value::Value(const raptor_term *term) {
         break;
     case RAPTOR_TERM_TYPE_LITERAL:
         lexicalLen = term->value.literal.string_len;
-        lexical = new char[lexicalLen + 1];
-        memcpy(lexical, reinterpret_cast<char*>(term->value.literal.string),
+        s = new char[lexicalLen + 1];
+        memcpy(s, reinterpret_cast<char*>(term->value.literal.string),
                lexicalLen + 1);
+        lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
         if(term->value.literal.datatype == NULL) {
             type = TYPE_PLAIN_STRING;
@@ -133,9 +137,10 @@ Value::Value(const raptor_term *term) {
                 languageLen = 0;
             } else {
                 languageLen = term->value.literal.language_len;
-                language = new char[languageLen + 1];
-                memcpy(language, reinterpret_cast<char*>(term->value.literal.language),
+                s = new char[languageLen + 1];
+                memcpy(s, reinterpret_cast<char*>(term->value.literal.language),
                        languageLen + 1);
+                language = s;
                 addCleanFlag(CLEAN_DATA);
             }
         } else {
@@ -151,15 +156,17 @@ Value::Value(const raptor_term *term) {
 }
 
 Value::Value(const rasqal_literal *literal) {
+    char *s;
     id = 0;
     cleanup = CLEAN_NOTHING;
     if(literal->type == RASQAL_LITERAL_URI) {
         convertURI(literal->value.uri, lexical, lexicalLen);
     } else {
         lexicalLen = literal->string_len;
-        lexical = new char[lexicalLen + 1];
-        memcpy(lexical, reinterpret_cast<const char*>(literal->string),
+        s = new char[lexicalLen + 1];
+        memcpy(s, reinterpret_cast<const char*>(literal->string),
                lexicalLen + 1);
+        lexical = s;
     }
     addCleanFlag(CLEAN_LEXICAL);
     switch(literal->type) {
@@ -173,8 +180,9 @@ Value::Value(const rasqal_literal *literal) {
         type = TYPE_PLAIN_STRING;
         if(literal->language != NULL && literal->language[0] != '\0') {
             languageLen = strlen(literal->language);
-            language = new char[languageLen + 1];
-            memcpy(language, literal->language, languageLen + 1);
+            s = new char[languageLen + 1];
+            memcpy(s, literal->language, languageLen + 1);
+            language = s;
             addCleanFlag(CLEAN_DATA);
         } else {
             language = NULL;
@@ -259,21 +267,24 @@ void Value::fillCopy(const Value &value, bool deep)  {
     cleanup = CLEAN_NOTHING;
     if(deep) {
         if(lexical && value.hasCleanFlag(CLEAN_LEXICAL)) {
-            lexical = new char[lexicalLen + 1];
-            memcpy(lexical, value.lexical, lexicalLen + 1);
-            lexical[lexicalLen] = '\0';
+            char *s = new char[lexicalLen + 1];
+            memcpy(s, value.lexical, lexicalLen + 1);
+            s[lexicalLen] = '\0';
+            lexical = s;
             addCleanFlag(CLEAN_LEXICAL);
         }
         if(type == TYPE_CUSTOM && value.hasCleanFlag(CLEAN_TYPE_URI)) {
-            typeUri = new char[typeUriLen + 1];
-            memcpy(typeUri, value.typeUri, typeUriLen + 1);
-            typeUri[typeUriLen] = '\0';
+            char *s = new char[typeUriLen + 1];
+            memcpy(s, value.typeUri, typeUriLen + 1);
+            s[typeUriLen] = '\0';
+            typeUri = s;
             addCleanFlag(CLEAN_TYPE_URI);
         }
         if(type == TYPE_PLAIN_STRING && language && value.hasCleanFlag(CLEAN_DATA)) {
-            language = new char[languageLen + 1];
-            memcpy(language, value.language, languageLen + 1);
-            language[languageLen] = '\0';
+            char *s = new char[languageLen + 1];
+            memcpy(s, value.language, languageLen + 1);
+            s[languageLen] = '\0';
+            language = s;
             addCleanFlag(CLEAN_DATA);
         }
         if(type == TYPE_DECIMAL && isInterpreted && value.hasCleanFlag(CLEAN_DATA)) {
@@ -338,7 +349,7 @@ void Value::fillDecimal(XSDDecimal *value) {
     cleanup = CLEAN_DATA;
 }
 
-void Value::fillSimpleLiteral(char *lexical, unsigned len, bool freeLexical) {
+void Value::fillSimpleLiteral(const char *lexical, unsigned len, bool freeLexical) {
     clean();
     id = 0;
     type = TYPE_PLAIN_STRING;
@@ -351,7 +362,7 @@ void Value::fillSimpleLiteral(char *lexical, unsigned len, bool freeLexical) {
     isInterpreted = true;
 }
 
-void Value::fillIRI(char *lexical, unsigned len, bool freeLexical) {
+void Value::fillIRI(const char *lexical, unsigned len, bool freeLexical) {
     clean();
     id = 0;
     type = TYPE_IRI;
@@ -364,7 +375,7 @@ void Value::fillIRI(char *lexical, unsigned len, bool freeLexical) {
     isInterpreted = true;
 }
 
-void Value::fillBlank(char *lexical, unsigned len, bool freeLexical) {
+void Value::fillBlank(const char *lexical, unsigned len, bool freeLexical) {
     clean();
     id = 0;
     type = TYPE_BLANK;
@@ -509,34 +520,39 @@ void Value::ensureLexical() {
 
     if(isBoolean()) {
         if(boolean) {
-            lexical = const_cast<char*>("true");
+            lexical = "true";
             lexicalLen = 4;
         } else {
-            lexical = const_cast<char*>("false");
+            lexical = "false";
             lexicalLen = 5;
         }
     } else if(isInteger()) {
         lexicalLen = snprintf(NULL, 0, "%ld", integer);
-        lexical = new char[lexicalLen + 1];
-        sprintf(lexical, "%ld", integer);
+        char *s = new char[lexicalLen + 1];
+        sprintf(s, "%ld", integer);
+        lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
     } else if(isFloating()) {
         lexicalLen = snprintf(NULL, 0, "%f", floating);
-        lexical = new char[lexicalLen + 1];
-        sprintf(lexical, "%f", floating);
+        char *s = new char[lexicalLen + 1];
+        sprintf(s, "%f", floating);
+        lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
     } else if(isDecimal()) {
         std::string str = decimal->getString();
         lexicalLen = str.size();
-        lexical = new char[lexicalLen + 1];
-        memcpy(lexical, str.c_str(), lexicalLen);
-        lexical[lexicalLen] = '\0';
+        char *s = new char[lexicalLen + 1];
+        memcpy(s, str.c_str(), lexicalLen);
+        s[lexicalLen] = '\0';
+        lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
     } else if(isDateTime()) {
         // TODO
-        lexical = const_cast<char*>("");
+        lexical = "";
+        lexicalLen = 0;
     } else {
-        lexical = const_cast<char*>("");
+        lexical = "";
+        lexicalLen = 0;
     }
 }
 
@@ -650,7 +666,7 @@ void Value::interpretDatatype() {
     if(memcmp(typeUri, XSD_PREFIX, XSD_PREFIX_LEN) != 0)
         return;
 
-    char *fragment = &typeUri[XSD_PREFIX_LEN];
+    const char *fragment = &typeUri[XSD_PREFIX_LEN];
     unsigned fragmentLen = typeUriLen - XSD_PREFIX_LEN;
     for(Type t = TYPE_FIRST_XSD; t <= TYPE_LAST_XSD;
         t = static_cast<Type>(t+1)) {

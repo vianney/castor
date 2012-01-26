@@ -99,7 +99,7 @@ struct Value {
     /**
      * URIs corresponding to the value types
      */
-    static char *TYPE_URIS[TYPE_CUSTOM];
+    static const char *TYPE_URIS[TYPE_CUSTOM];
     /**
      * length of predefined type URIs
      */
@@ -144,13 +144,13 @@ struct Value {
      * URI of the datatype. NULL if type <= TYPE_PLAIN_STRING.
      * @note always null-terminated
      */
-    char* typeUri;
+    const char* typeUri;
     unsigned typeUriLen; //!< length of typeUri (without terminal null)
     /**
      * Lexical form. May be NULL if there is a native representation.
      * @note always null-terminated
      */
-    char* lexical;
+    const char* lexical;
     unsigned lexicalLen; //!< length of lexical (without terminal null)
     /**
      * Cleanup flags
@@ -166,7 +166,7 @@ struct Value {
          * @note always null-terminated
          */
         struct {
-            char* language;
+            const char* language;
             unsigned languageLen;
         };
         /**
@@ -299,7 +299,7 @@ struct Value {
      * @param len length of the lexical form
      * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillSimpleLiteral(char *lexical, unsigned len, bool freeLexical);
+    void fillSimpleLiteral(const char *lexical, unsigned len, bool freeLexical);
     /**
      * Make an IRI
      *
@@ -307,7 +307,7 @@ struct Value {
      * @param len length of the lexical form
      * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillIRI(char *lexical, unsigned len, bool freeLexical);
+    void fillIRI(const char *lexical, unsigned len, bool freeLexical);
     /**
      * Make a blank node
      *
@@ -315,7 +315,7 @@ struct Value {
      * @param len length of the lexical form
      * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillBlank(char *lexical, unsigned len, bool freeLexical);
+    void fillBlank(const char *lexical, unsigned len, bool freeLexical);
 
 
 

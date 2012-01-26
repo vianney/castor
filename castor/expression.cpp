@@ -223,9 +223,9 @@ bool StrExpression::evaluate(Value &result) {
 bool LangExpression::evaluate(Value &result) {
     if(!arg->evaluate(result) || !result.isPlain())
         return false;
-    char *lang = result.language;
+    const char *lang = result.language;
     if(lang == NULL)
-        lang = const_cast<char*>("");
+        lang = "";
     bool freeLex = result.hasCleanFlag(Value::CLEAN_DATA);
     result.removeCleanFlag(Value::CLEAN_DATA);
     result.fillSimpleLiteral(lang, result.languageLen, freeLex);
