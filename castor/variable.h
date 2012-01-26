@@ -45,6 +45,11 @@ public:
     unsigned getId() const { return id; }
 
     /**
+     * @return the name of the variable (empty for an anonymous variable)
+     */
+    const std::string& getName() const { return name; }
+
+    /**
      * @return the value id bound to this variable or 0 if unbound
      */
     Value::id_t getValueId() const { return val; }
@@ -86,6 +91,8 @@ private:
     friend class Query;
 };
 
+std::ostream& operator<<(std::ostream &out, const Variable &v);
+
 /**
  * Small structure containing a value or variable id.
  */
@@ -123,6 +130,8 @@ public:
     bool operator==(const VarVal &o) const { return valid == o.valid && varid == o.varid; }
     bool operator!=(const VarVal &o) const { return valid != o.valid || varid != o.varid; }
 };
+
+std::ostream& operator<<(std::ostream &out, const VarVal &v);
 
 /**
  * Set of variables

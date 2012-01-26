@@ -28,6 +28,18 @@ void Variable::setValueFromCP() {
         setValueId(var->getValue());
 }
 
+std::ostream& operator<<(std::ostream &out, const Variable &v) {
+    out << "?" << v.getName() << "_" << v.getId();
+    return out;
+}
+
+std::ostream& operator<<(std::ostream &out, const VarVal &v) {
+    if(v.isVariable())
+        out << "?" << v.getVariableId();
+    else
+        out << ":" << v.getValueId();
+    return out;
+}
 
 void VariableSet::_init(unsigned capacity) {
     // TODO refactor this with C++11
