@@ -50,12 +50,10 @@ bool TripleConstraint::propagate() {
     for(int i = 0; i < pat.COMPONENTS; i++) {
         if(x[i] == nullptr) {
             min[i] = max[i] = pat[i].getValueId();
-        } else if(x[i]->isBound()) {
-            min[i] = max[i] = x[i]->getValue();
         } else {
-            min[i] = 0;
-            max[i] = store->getValueCount();
-            bound--;
+            min[i] = x[i]->getMin();
+            max[i] = x[i]->getMax();
+            bound -= x[i]->isBound() ? 0 : 1;
         }
     }
 
