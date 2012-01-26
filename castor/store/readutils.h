@@ -16,8 +16,8 @@
  * along with Castor; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CASTOR_STORE_MMAPFILE_H
-#define CASTOR_STORE_MMAPFILE_H
+#ifndef CASTOR_STORE_READUTILS_H
+#define CASTOR_STORE_READUTILS_H
 
 #include "../model.h"
 
@@ -37,20 +37,15 @@ public:
 
     bool operator==(const Cursor &o) const { return ptr == o.ptr; }
     bool operator!=(const Cursor &o) const { return ptr != o.ptr; }
-    bool operator<(const Cursor &o) const { return ptr < o.ptr; }
+    bool operator< (const Cursor &o) const { return ptr <  o.ptr; }
     bool operator<=(const Cursor &o) const { return ptr <= o.ptr; }
-    bool operator>(const Cursor &o) const { return ptr > o.ptr; }
+    bool operator> (const Cursor &o) const { return ptr >  o.ptr; }
     bool operator>=(const Cursor &o) const { return ptr >= o.ptr; }
 
     Cursor& operator=(const Cursor &o) { ptr = o.ptr; return *this;}
 
     //! Compute offset
     unsigned operator-(const Cursor &o) const { return ptr - o.ptr; }
-
-    //Cursor operator+(const Cursor &o) const { return Cursor(ptr + o.ptr); }
-    //Cursor operator-(const Cursor &o) const { return Cursor(ptr - o.ptr); }
-    //Cursor& operator+=(const Cursor &o) { ptr += o.ptr; return *this; }
-    //Cursor& operator-=(const Cursor &o) { ptr -= o.ptr; return *this; }
 
     Cursor operator+(unsigned offset) const { return Cursor(ptr + offset); }
     Cursor operator-(unsigned offset) const { return Cursor(ptr - offset); }
@@ -212,4 +207,4 @@ public:
 
 }
 
-#endif // CASTOR_STORE_MMAPFILE_H
+#endif // CASTOR_STORE_READUTILS_H
