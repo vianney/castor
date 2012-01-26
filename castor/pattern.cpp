@@ -29,19 +29,13 @@ std::ostream& operator<<(std::ostream &out, const Pattern &p) {
 BasicPattern::BasicPattern(Query *query) :
     Pattern(query), sub(query->getSolver()) {}
 
-void BasicPattern::add(const StatementPattern &triple) {
+void BasicPattern::add(const TriplePattern &triple) {
     triples.push_back(triple);
-    if(triple.subject.isVariable()) {
-        vars += query->getVariable(triple.subject.getVariableId());
-        cvars += query->getVariable(triple.subject.getVariableId());
-    }
-    if(triple.predicate.isVariable()) {
-        vars += query->getVariable(triple.predicate.getVariableId());
-        cvars += query->getVariable(triple.predicate.getVariableId());
-    }
-    if(triple.object.isVariable()) {
-        vars += query->getVariable(triple.object.getVariableId());
-        cvars += query->getVariable(triple.object.getVariableId());
+    for(int i = 0; i < triple.COMPONENTS; i++) {
+        if(triple[i].isVariable()) {
+            vars += query->getVariable(triple[i].getVariableId());
+            cvars += query->getVariable(triple[i].getVariableId());
+        }
     }
 }
 
@@ -50,8 +44,8 @@ void BasicPattern::init() {
         sub.add(x->getCPVariable(), true);
         sub.add(new BoundConstraint(x->getCPVariable()));
     }
-    for(StatementPattern& st : triples)
-        sub.add(new StatementConstraint(query, st));
+    for(TriplePattern &t : triples)
+        sub.add(new TripleConstraint(query, t));
 }
 
 bool BasicPattern::next() {

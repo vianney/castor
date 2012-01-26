@@ -23,7 +23,7 @@ def printc(*args):
 def read(component, length, offset=0, add=False):
     if length == 0 and add and offset == 0:
         return False
-    printc(" t.", component, (" += " if add else " = "))
+    printc(" t[", component, "]", (" += " if add else " = "))
     if length > 0:
         printc("cur.readDelta", length, "()")
         if offset != 0:
@@ -39,9 +39,9 @@ for h in range(128):
     if any(l > 4 for l in lengths):
         continue
     printc("case ", h, ":")
-    add = not read('a', lengths[0], add=True)
-    add = not read('b', lengths[1], add=add, offset=(0 if add else 1))
-    add = not read('c', lengths[2], add=add, offset=(128 if add else 1))
+    add = not read(0, lengths[0], add=True)
+    add = not read(1, lengths[1], add=add, offset=(0 if add else 1))
+    add = not read(2, lengths[2], add=add, offset=(128 if add else 1))
     print(" break;")
 print("default: assert(false); // should not happen")
 print("}")

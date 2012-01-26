@@ -29,16 +29,17 @@ namespace castor {
  * Helper to build a B+-tree. A B+-tree is encoded as follows:
  *
  * Leaves:
- * +-----------+---------------------------------------------+
- * | next page | data                                        |
- * +-----------+---------------------------------------------+
- * 0           4                                            end
+ * +-----------+-----------+---------------------------------+
+ * | prev page | next page | data                            |
+ * +-----------+-----------+---------------------------------+
+ * 0           4           8                                end
+ * (prev/next page is 0 for the first/last leaf)
  *
  * Inner nodes:
- * +--------+-----------+-------+---------+------------------+
- * | marker | next page | count | padding | nodes            |
- * +--------+-----------+-------+---------+------------------+
- * 0        4           8      12        16                 end
+ * +--------+-------+----------------------------------------+
+ * | marker | count | nodes                                  |
+ * +--------+-------+----------------------------------------+
+ * 0        4       8                                       end
  * (a node is a key followed by the page number of lower level containing up
  * to that key)
  *
@@ -62,10 +63,11 @@ class BTreeBuilder {
     PageWriter *writer; //!< output writer
     std::vector<std::pair<K, unsigned> > boundaries; //!< level boundaries
 
-    bool pendingLeaf; //!< there is a laef pending to write
+    bool pendingLeaf; //!< there is a leaf pending to write
+    unsigned previousLeaf; //!< page number of the previous leaf
 
-    static const unsigned LEAF_HEADER_SIZE = 4; //!< size of leaf header
-    static const unsigned NODE_HEADER_SIZE = 16; //!< size of inner node header
+    static const unsigned LEAF_HEADER_SIZE = 8; //!< size of leaf header
+    static const unsigned NODE_HEADER_SIZE = 8; //!< size of inner node header
 
 public:
     /**
@@ -88,6 +90,11 @@ public:
     void endLeaf(K last);
 
     /**
+     * @return the page number of the last ended leaf
+     */
+    unsigned getLastLeaf() { return previousLeaf; }
+
+    /**
      * Construct the inner nodes of the tree.
      *
      * @return the page number of the root of the tree
@@ -103,17 +110,20 @@ template<class K>
 BTreeBuilder<K>::BTreeBuilder(PageWriter *writer) : writer(writer) {
     assert(writer->getOffset() == 0);
     pendingLeaf = false;
+    previousLeaf = 0;
 }
 
 template<class K>
 void BTreeBuilder<K>::beginLeaf() {
     if(pendingLeaf) {
         // update header and flush previous leaf
-        writer->writeInt(writer->getPage() + 1, 0); // next page pointer
+        previousLeaf = writer->getPage();
+        writer->writeInt(writer->getPage() + 1, 4); // next page pointer
         writer->flushPage();
         pendingLeaf = false;
     }
-    writer->skip(LEAF_HEADER_SIZE);
+    writer->writeInt(previousLeaf);
+    writer->skip(4); // leave room for next page pointer
 }
 
 template<class K>
@@ -128,7 +138,7 @@ unsigned BTreeBuilder<K>::constructTree() {
     assert(!boundaries.empty());
 
     // flush last leaf
-    writer->writeInt(0, 0);
+    writer->writeInt(0, 4);
     writer->flushPage();
 
     // create inner nodes
@@ -138,34 +148,31 @@ unsigned BTreeBuilder<K>::constructTree() {
         writer->skip(NODE_HEADER_SIZE);
         std::vector<std::pair<K, unsigned> > newBoundaries;
         unsigned count = 0;
-        for(typename std::vector<std::pair<K, unsigned> >::const_iterator it=boundaries.begin(),
-            end = boundaries.end(); it != end; ++it) {
+        K last;
+        for(std::pair<K, unsigned> b : boundaries) {
             // check remaining space
             if(K::SIZE + 4 > writer->getRemaining()) {
                 // write header, flush page and start a new one
-                newBoundaries.push_back(std::pair<K,unsigned>((*(it-1)).first,
-                                                              writer->getPage()));
+                newBoundaries.push_back(
+                            std::pair<K,unsigned>(last, writer->getPage()));
                 writer->writeInt(0xffffffff, 0);
-                writer->writeInt(writer->getPage()+1, 4);
-                writer->writeInt(count, 8);
-                writer->writeInt(0, 12);
+                writer->writeInt(count, 4);
                 writer->flushPage();
                 count = 0;
                 writer->skip(NODE_HEADER_SIZE);
             }
 
             // write entry
-            (*it).first.write(*writer);
-            writer->writeInt((*it).second);
+            b.first.write(*writer);
+            writer->writeInt(b.second);
             count++;
+
+            last = b.first;
         }
         // flush last page
-        newBoundaries.push_back(std::pair<K,unsigned>(boundaries.back().first,
-                                                      writer->getPage()));
+        newBoundaries.push_back(std::pair<K,unsigned>(last, writer->getPage()));
         writer->writeInt(0xffffffff, 0);
-        writer->writeInt(0, 4);
-        writer->writeInt(count, 8);
-        writer->writeInt(0, 12);
+        writer->writeInt(count, 4);
         writer->flushPage();
 
         std::swap(boundaries, newBoundaries);

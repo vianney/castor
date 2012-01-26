@@ -22,99 +22,69 @@ namespace castor {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-StatementConstraint::StatementConstraint(Query *query, StatementPattern &stmt) :
+TripleConstraint::TripleConstraint(Query *query, TriplePattern pat) :
         StatelessConstraint(CASTOR_CONSTRAINTS_STATEMENT_PRIORITY),
-        store(query->getStore()), stmt(stmt) {
-    if(stmt.subject.isVariable()) {
-        subject = query->getVariable(stmt.subject.getVariableId())
-                            ->getCPVariable();
-        subject->registerBind(this);
-    } else {
-        subject = NULL;
-    }
-    if(stmt.predicate.isVariable()) {
-        predicate = query->getVariable(stmt.predicate.getVariableId())
-                            ->getCPVariable();
-        predicate->registerBind(this);
-    } else {
-        predicate = NULL;
-    }
-    if(stmt.object.isVariable()) {
-        object = query->getVariable(stmt.object.getVariableId())
-                            ->getCPVariable();
-        object->registerBind(this);
-    } else {
-        object = NULL;
+        store(query->getStore()), pat(pat) {
+    for(int i = 0; i < pat.COMPONENTS; i++) {
+        if(pat[i].isVariable()) {
+            x[i] = query->getVariable(pat[i].getVariableId())->getCPVariable();
+            x[i]->registerBind(this);
+        } else {
+            x[i] = NULL;
+        }
     }
 }
 
-void StatementConstraint::restore() {
-    int bound = (subject == NULL || subject->isBound())
-              + (predicate == NULL || predicate->isBound())
-              + (object == NULL || object->isBound());
-    done = (bound >= 2);
+void TripleConstraint::restore() {
+    int bound = 0;
+    for(int i = 0; i < pat.COMPONENTS; i++)
+        bound += (x[i] == NULL || x[i]->isBound());
+    done = (bound >= pat.COMPONENTS - 1);
 }
 
-bool StatementConstraint::propagate() {
+bool TripleConstraint::propagate() {
     StatelessConstraint::propagate();
 
-    Statement q;
-    int bound = 3;
-    if(subject == NULL) {
-        q.subject = stmt.subject.getValueId();
-    } else if(subject->isBound()) {
-        q.subject = subject->getValue();
-    } else {
-        q.subject = 0;
-        bound--;
-    }
-    if(predicate == NULL) {
-        q.predicate = stmt.predicate.getValueId();
-    } else if(predicate->isBound()) {
-        q.predicate = predicate->getValue();
-    } else {
-        q.predicate = 0;
-        bound--;
-    }
-    if(object == NULL) {
-        q.object = stmt.object.getValueId();
-    } else if(object->isBound()) {
-        q.object = object->getValue();
-    } else {
-        q.object = 0;
-        bound--;
+    Triple min, max;
+    int bound = pat.COMPONENTS;
+    for(int i = 0; i < pat.COMPONENTS; i++) {
+        if(x[i] == NULL) {
+            min[i] = max[i] = pat[i].getValueId();
+        } else if(x[i]->isBound()) {
+            min[i] = max[i] = x[i]->getValue();
+        } else {
+            min[i] = 0;
+            max[i] = store->getValueCount();
+            bound--;
+        }
     }
 
     if(bound == 0)
         // nothing bound, we do not want to check all triples
         return true;
 
-    if(bound >= 2)
+    if(bound >= pat.COMPONENTS - 1)
         done = true;
 
-    Store::StatementQuery query(*store, q);
+    Store::RangeQuery q(store, min, max);
 
-    if(bound == 3) {
+    if(bound == pat.COMPONENTS)
         // all variables are bound, just check
-        return query.next(NULL);
-    }
+        return q.next(NULL);
 
-    if(q.subject == 0) subject->clearMarks();
-    if(q.predicate == 0) predicate->clearMarks();
-    if(q.object == 0) object->clearMarks();
-    Statement st;
-    while(query.next(&st)) {
-        if((q.subject == 0 && !subject->contains(st.subject)) ||
-           (q.predicate == 0 && !predicate->contains(st.predicate)) ||
-           (q.object == 0 && !object->contains(st.object)))
-            continue;
-        if(q.subject == 0) subject->mark(st.subject);
-        if(q.predicate == 0) predicate->mark(st.predicate);
-        if(q.object == 0) object->mark(st.object);
+    for(int i = 0; i < pat.COMPONENTS; i++)
+        if(min[i] != max[i]) x[i]->clearMarks();
+    Triple t;
+    while(q.next(&t)) {
+        for(int i = 0; i < pat.COMPONENTS; i++)
+            if(min[i] != max[i] && !x[i]->contains(t[i])) goto nextTriple;
+        for(int i = 0; i < pat.COMPONENTS; i++)
+            if(min[i] != max[i]) x[i]->mark(t[i]);
+    nextTriple:
+        ;
     }
-    if(q.subject == 0 && !subject->restrictToMarks()) return false;
-    if(q.predicate == 0 && !predicate->restrictToMarks()) return false;
-    if(q.object == 0 && !object->restrictToMarks()) return false;
+    for(int i = 0; i < pat.COMPONENTS; i++)
+        if(min[i] != max[i] && !x[i]->restrictToMarks()) return false;
     return true;
 }
 

@@ -294,7 +294,7 @@ struct StoreBuilder {
 ////////////////////////////////////////////////////////////////////////////////
 // Storing triples
 
-struct Triple {
+struct WriteTriple {
     Value::id_t a, b, c;
 
     static const unsigned SIZE = 12;
@@ -312,17 +312,17 @@ template<int C1=1, int C2=2, int C3=3>
 static void storeTriplesOrder(StoreBuilder &b, TempFile &triples, int order) {
     b.triplesStart[order] = b.w.getPage();
 
-    BTreeBuilder<Triple> tb(&b.w);
+    BTreeBuilder<WriteTriple> tb(&b.w);
     // Construct leaves
     {
-        Triple last = {0, 0, 0};
+        WriteTriple last = {0, 0, 0};
         MMapFile in(triples.getFileName().c_str());
         for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
             // Read triple and reorder
             Value::id_t read[3] = {static_cast<Value::id_t>(cur.readBigInt()),
                                    static_cast<Value::id_t>(cur.readBigInt()),
                                    static_cast<Value::id_t>(cur.readBigInt())};
-            Triple t = {read[C1-1], read[C2-1], read[C3-1]};
+            WriteTriple t = {read[C1-1], read[C2-1], read[C3-1]};
 
             // Compute encoded length
             unsigned len;

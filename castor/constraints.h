@@ -143,16 +143,16 @@ public:
 /**
  * Statement constraint
  */
-class StatementConstraint : public cp::StatelessConstraint {
+class TripleConstraint : public cp::StatelessConstraint {
     Store *store; //!< The store containing the triples
-    StatementPattern stmt; //!< The statement pattern
+    TriplePattern pat; //!< The triple pattern
     /**
-     * CP variables corresponding to the parts of the statement pattern or
-     * NULL if the part is a fixed value.
+     * CP variables corresponding to the components of the triple pattern or
+     * NULL if the component is a fixed value.
      */
-    cp::RDFVar *subject, *predicate, *object;
+    cp::RDFVar *x[TriplePattern::COMPONENTS];
 public:
-    StatementConstraint(Query *query, StatementPattern &stmt);
+    TripleConstraint(Query *query, TriplePattern pat);
     void restore();
     bool propagate();
 };

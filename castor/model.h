@@ -501,13 +501,66 @@ struct ValueRange {
 };
 
 /**
- * Small statement structure containing ids.
+ * Small triple structure.
  */
-struct Statement {
-    Value::id_t subject;
-    Value::id_t predicate;
-    Value::id_t object;
+template<class T>
+struct BasicTriple {
+    static const int COMPONENTS = 3; //!< number of components
+    T c[COMPONENTS]; //!< statement components
+
+    // Constructors
+    BasicTriple() {}
+    BasicTriple(T s, T p, T o) : c{s, p, o} {}
+
+    // Reordering
+    template<int C1, int C2, int C3>
+    constexpr BasicTriple<T> reorder() { return {c[C1], c[C2], c[C3]}; }
+
+    constexpr BasicTriple<T> operator<<(unsigned s) const {
+        return {c[s % 3], c[(s+1) % 3], c[(s+2) % 3]};
+    }
+
+    constexpr BasicTriple<T> operator>>(unsigned s) const {
+        return *this << (3 - s % 3);
+    }
+
+    // Accessors
+    const T& subject()   const { return c[0]; }
+          T& subject()         { return c[0]; }
+    const T& predicate() const { return c[1]; }
+          T& predicate()       { return c[1]; }
+    const T& object()    const { return c[2]; }
+          T& object()          { return c[2]; }
+
+    const T& operator[](unsigned i) const { return c[i]; }
+          T& operator[](unsigned i)       { return c[i]; }
+
+    // Comparators
+    bool operator==(const BasicTriple<T> &o) const {
+        return c[0] == o.c[0] && c[1] == o.c[1] && c[2] == o.c[2];
+    }
+    bool operator!=(const BasicTriple<T> &o) const { return !(*this == o); }
+    bool operator<(const BasicTriple<T> &o) const {
+        return c[0] < o.c[0] ||
+                (c[0] == o.c[0] && (c[1] < o.c[1] ||
+                                    (c[1] == o.c[1] && c[2] < o.c[2])));
+    }
+    bool operator>(const BasicTriple<T> &o) const { return o < *this; }
+    bool operator<=(const BasicTriple<T> &o) const {
+        return c[0] <= o.c[0] ||
+                (c[0] == o.c[0] && (c[1] <= o.c[1] ||
+                                    (c[1] == o.c[1] && c[2] <= o.c[2])));
+    }
+    bool operator>=(const BasicTriple<T> &o) const { return o <= *this; }
 };
+
+template<class T>
+std::ostream& operator<<(std::ostream &out, const BasicTriple<T> &t) {
+    for(int i = 0; i < t.COMPONENTS; i++)
+        out << (i == 0 ? "(" : ", ") << t[i];
+    out << ")";
+    return out;
+}
 
 }
 

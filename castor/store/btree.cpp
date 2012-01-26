@@ -26,7 +26,8 @@ Cursor ValueHashTree::lookup(uint32_t hash) {
     if(page == 0)
         return Cursor(0);
     Cursor pageCur = db->getPage(page);
-    pageCur.skipInt(); // skip "next page" pointer
+    pageCur.skipInt(); // skip "previous page" pointers
+    pageCur.skipInt(); // skip "next page" pointers
     // binary search
     unsigned left = 0, right = pageCur.readInt();
     while(left != right) {

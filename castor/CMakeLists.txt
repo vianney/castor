@@ -27,6 +27,8 @@ set(CASTOR_SRCS
     store/readutils.cpp
     store/btree.h
     store/btree.cpp
+    store/triplecache.h
+    store/triplecache.cpp
     util.h
     util.cpp
     librdfwrapper.h

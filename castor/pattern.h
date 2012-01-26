@@ -31,18 +31,6 @@ namespace castor {
 class Query;
 
 /**
- * Statement pattern.
- */
-struct StatementPattern {
-    VarVal subject;
-    VarVal predicate;
-    VarVal object;
-
-    StatementPattern(VarVal subject, VarVal predicate, VarVal object) :
-            subject(subject), predicate(predicate), object(object) {}
-};
-
-/**
  * Base class for a SPARQL graph pattern
  */
 class Pattern {
@@ -148,11 +136,13 @@ public:
     }
 };
 
+typedef BasicTriple<VarVal> TriplePattern;
+
 /**
- * Basic graph pattern (set of statement patterns)
+ * Basic graph pattern (set of triple patterns)
  */
 class BasicPattern : public Pattern {
-    std::vector<StatementPattern> triples;
+    std::vector<TriplePattern> triples;
     cp::Subtree sub;
 public:
     BasicPattern(Query *query);
@@ -161,12 +151,12 @@ public:
      * Add a triple pattern
      * @param[in] triple the triple pattern
      */
-    void add(const StatementPattern &triple);
+    void add(const TriplePattern &triple);
 
     /**
      * @return triple patterns
      */
-    std::vector<StatementPattern>& getTriples() { return triples; }
+    std::vector<TriplePattern>& getTriples() { return triples; }
 
     void init();
     bool next();

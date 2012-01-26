@@ -248,17 +248,17 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
             rasqal_triple *triple;
             int i = 0;
             while((triple = rasqal_graph_pattern_get_triple(gp, i++))) {
-                StatementPattern stmt(getVarVal(triple->subject),
-                                      getVarVal(triple->predicate),
-                                      getVarVal(triple->object));
-                if(stmt.subject.isUnknown() ||
-                   stmt.predicate.isUnknown() ||
-                   stmt.object.isUnknown()) {
-                    // We have an unknown value, this BGP will never match
-                    delete pat;
-                    return new FalsePattern(this);
+                TriplePattern tpat(getVarVal(triple->subject),
+                                   getVarVal(triple->predicate),
+                                   getVarVal(triple->object));
+                for(int i = 0; i < tpat.COMPONENTS; i++) {
+                    if(tpat[i].isUnknown()) {
+                        // We have an unknown value, this BGP will never match
+                        delete pat;
+                        return new FalsePattern(this);
+                    }
                 }
-                pat->add(stmt);
+                pat->add(tpat);
             }
         } catch(QueryParseException) {
             delete pat;

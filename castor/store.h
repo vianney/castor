@@ -23,6 +23,7 @@
 #include "model.h"
 #include "store/readutils.h"
 #include "store/btree.h"
+#include "store/triplecache.h"
 
 // magic number of store
 #define CASTOR_STORE_MAGIC "\xd0\xd4\xc5\xd8" "Castor"
@@ -37,7 +38,7 @@ namespace castor {
  */
 class Store {
 public:
-    static const unsigned VERSION = 5; //!< format version
+    static const unsigned VERSION = 6; //!< format version
 
     /**
      * Open a store.
@@ -118,14 +119,14 @@ public:
      */
     Value::Class getValueClass(Value::id_t id);
 
-    unsigned getStatTripleCacheHit() { return statTripleCacheHit; }
-    unsigned getStatTripleCacheMiss() { return statTripleCacheMiss; }
+    unsigned getStatTripleCacheHit()  { return cache.getStatHits(); }
+    unsigned getStatTripleCacheMiss() { return cache.getStatMisses(); }
 
 private:
     PageReader db;
 
     unsigned triplesStart[3]; //!< start of triples tables in all orderings
-    BTree<TripleKey>* triplesIndex[3]; //!< triples index in all orderings
+    BTree<Triple>* triplesIndex[3]; //!< triples index in all orderings
     unsigned nbValues; //!< number of values
     unsigned valuesStart; //!< start of values table
     unsigned valuesMapping; //!< start of values mapping
@@ -133,77 +134,50 @@ private:
     unsigned valuesEqClasses; //!< start of value equivalence classes boundaries
     Value::id_t valuesClassStart[Value::CLASSES_COUNT + 1]; //!< first id of each class
 
-    static const unsigned TRIPLE_CACHE_SIZE = 100;
-    static const unsigned TRIPLE_UNCACHED = 0xffffffff; //!< triple not in cache marker
-    static const unsigned TRIPLE_CACHE_PAGESIZE = PageReader::PAGE_SIZE; //!< max triples in a page
-
-    TripleKey *triples[TRIPLE_CACHE_SIZE]; //!< triples cache
-    unsigned triplesCount[TRIPLE_CACHE_SIZE]; //!< number of triples in cache line
-    unsigned triplesPage[TRIPLE_CACHE_SIZE]; //!< page number of the cache line
-    unsigned triplesNextPage[TRIPLE_CACHE_SIZE]; //!< next page pointer cache
-
-    unsigned *triplesMap; //!< map from page number to cach line
-    unsigned triplesCached; //!< number of triple pages in cache
-    unsigned triplesNext[TRIPLE_CACHE_SIZE];
-    unsigned triplesPrev[TRIPLE_CACHE_SIZE];
-    unsigned triplesHead, triplesTail;
-
-    unsigned statTripleCacheHit;
-    unsigned statTripleCacheMiss;
+    TripleCache cache; //!< triples cache
 
 public:
     /**
-     * Query the triples store.
+     * Query a range of triples.
      *
-     * @note this class should be allocated on the stack instead of the heap
-     *       as it contains a heavy triples cache
+     * @note concurrent queries result in undefined behaviour
      */
-    class StatementQuery {
+    class RangeQuery {
+    public:
+        /**
+         * Construct a new query.
+         * @param store the store
+         * @param from lower bound
+         * @param to upper bound
+         */
+        RangeQuery(Store *store, Triple from, Triple to);
 
+        /**
+         * Fetch the next result statement
+         *
+         * @param[out] t structure in which to write the result or
+         *               NULL to ignore
+         * @return true if the next result has been found, false if there are
+         *         no more results (further calls to next() are undefined)
+         */
+        bool next(Triple *t);
+
+    private:
         enum TripleOrder {
             SPO = 0, POS = 1, OSP = 2
         };
 
         Store *store;
-        TripleKey key; //!< the key we are looking for
+        Triple limit; //!< the upper bound
         TripleOrder order; //!< order of components in the key
 
         unsigned nextPage; //!< next page to read or 0 if no more
 
-        TripleKey *it; //!< current triple
-        TripleKey *end; //!< last triple in cache
-
-    public:
-        /**
-         * Construct a new query
-         *
-         * @param store the store
-         * @param stmt the triple to query, 0 for a component is a wildcard
-         */
-        StatementQuery(Store &store, Statement &stmt);
-
-        /**
-         * Fetch the next result statement
-         *
-         * @param[out] stmt structure in which to write the result or
-         *                  NULL to ignore
-         * @return true if stmt contains the next result, false if there are no
-         *         more results (further calls to next() are undefined)
-         */
-        bool next(Statement *stmt);
-
-    private:
-        /**
-         * Load the next page of triples. Updates nextPage and end.
-         * Resets it to the beginning of the cache.
-         *
-         * While reading the page, skip any triple not matching key.
-         *
-         * @return false if there are no more pages, true otherwise
-         */
-        bool readNextPage();
+        const Triple *it; //!< current triple
+        const Triple *end; //!< last triple in current cache line
     };
-    friend class StatementQuery;
+
+    friend class RangeQuery;
 };
 
 }

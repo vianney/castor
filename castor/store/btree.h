@@ -19,6 +19,7 @@
 #define CASTOR_STORE_BTREE_H
 
 #include "readutils.h"
+#include "../model.h"
 
 namespace castor {
 
@@ -83,38 +84,6 @@ public:
     Cursor lookup(uint32_t hash);
 };
 
-/**
- * Key structure for triples index. A component with id 0 is a wildcard.
- * Wildcard components must be last.
- */
-struct TripleKey {
-    Value::id_t a, b, c;
-
-    static const unsigned SIZE = 12;
-
-    static TripleKey read(Cursor cur) {
-        TripleKey k = {cur.readInt(),
-                       cur.readInt(),
-                       cur.readInt()};
-        return k;
-    }
-
-    bool operator <(const TripleKey &o) const {
-        return a < o.a ||
-               (a == o.a && (b < o.b ||
-                             (b == o.b && c < o.c)));
-    }
-
-    /**
-     * @return whether o matches this key, ignoring wildcards in this key
-     */
-    bool matches(const TripleKey &o) const {
-        return a == 0 ||
-               (a == o.a && (b == 0 ||
-                             (b == o.b && (c == 0 || c == o.c))));
-    }
-};
-
 
 // Template implementation
 
@@ -125,9 +94,7 @@ unsigned BTree<K>::lookupLeaf(K key) {
         Cursor pageCur = db->getPage(page);
         if(pageCur.readInt() == 0xffffffff) {
             // inner node: perform binary search
-            pageCur.skipInt(); // skip "next page" pointer
             unsigned left = 0, right = pageCur.readInt();
-            pageCur.skipInt(); // skip padding
             while(left != right) {
                 unsigned middle = (left + right) / 2;
                 Cursor middleCur = pageCur + middle * (K::SIZE + 4);
