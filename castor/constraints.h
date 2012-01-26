@@ -148,7 +148,7 @@ class TripleConstraint : public cp::StatelessConstraint {
     TriplePattern pat; //!< The triple pattern
     /**
      * CP variables corresponding to the components of the triple pattern or
-     * NULL if the component is a fixed value.
+     * nullptr if the component is a fixed value.
      */
     cp::RDFVar *x[TriplePattern::COMPONENTS];
 public:

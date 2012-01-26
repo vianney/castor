@@ -225,7 +225,7 @@ private:
      */
     bool distinct;
     /**
-     * Static distinct constraint or NULL if not needed.
+     * Static distinct constraint or nullptr if not needed.
      */
     DistinctConstraint *distinctCstr;
     /**
@@ -256,7 +256,7 @@ private:
     typedef std::multiset<Solution*,DereferenceLess> SolutionSet;
     /**
      * The solution set if we need to compute it a priori. Otherwise, it is
-     * NULL.
+     * nullptr.
      */
     SolutionSet *solutions;
     /**
@@ -265,7 +265,7 @@ private:
     SolutionSet::iterator it;
 
     /**
-     * Static constraint for Branch-and-Bound or NULL if not needed.
+     * Static constraint for Branch-and-Bound or nullptr if not needed.
      */
     BnBOrderConstraint *bnbOrderCstr;
 };

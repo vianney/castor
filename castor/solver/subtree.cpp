@@ -46,7 +46,7 @@ struct Checkpoint {
 
 Subtree::Subtree(Solver *solver) : solver(solver) {
     nbDecision = 0;
-    trail = NULL;
+    trail = nullptr;
     active = false;
 }
 
@@ -77,7 +77,7 @@ void Subtree::add(Constraint *c) {
 void Subtree::activate() {
     if(isActive())
         throw "Cannot activate active subtree.";
-    if(trail == NULL) {
+    if(trail == nullptr) {
         // First activiation, allocate trail
         std::size_t size = 0;
         for(Variable *x : vars)
@@ -92,8 +92,8 @@ void Subtree::activate() {
     previous = solver->current;
     solver->statSubtrees++;
     trailIndex = -1;
-    checkpoint(NULL);
-    solver->current = NULL;
+    checkpoint(nullptr);
+    solver->current = nullptr;
     if(solver->tsCurrent < solver->tsLastConstraint)
         inconsistent = !solver->postStatic();
     else
@@ -124,7 +124,7 @@ bool Subtree::search() {
         return false;
     }
 
-    Variable *x = NULL;
+    Variable *x = nullptr;
     if(started) { // the search has started, try to backtrack
         x = backtrack();
         if(!x) {
@@ -138,7 +138,7 @@ bool Subtree::search() {
         // search for a variable to bind if needed
         if(!x || x->isBound()) {
             // find unbound variable with smallest domain
-            x = NULL;
+            x = nullptr;
             unsigned sx;
             for(int i = 0; i < nbDecision; i++) {
                 Variable *y = vars[i];
@@ -190,7 +190,7 @@ inline void fireRestore(std::vector<Constraint*> &constraints) {
 Variable* Subtree::backtrack() {
     solver->statBacktracks++;
     if(trailIndex < 0)
-        return NULL;
+        return nullptr;
     // restore domains
     Checkpoint *chkp = &trail[trailIndex--];
     char *varsData = chkp->varsData;

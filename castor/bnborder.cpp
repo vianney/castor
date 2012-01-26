@@ -30,7 +30,7 @@ BnBOrderConstraint::BnBOrderConstraint(Query *query) : query(query) {
         x->getCPVariable()->registerBind(this);
     boundOrderVals = new Value[query->getOrderCount()];
     boundOrderError = new bool[query->getOrderCount()];
-    bound = NULL;
+    bound = nullptr;
 }
 
 BnBOrderConstraint::~BnBOrderConstraint() {
@@ -55,11 +55,11 @@ void BnBOrderConstraint::updateBound(Solution *sol) {
 }
 
 void BnBOrderConstraint::reset() {
-    bound = NULL;
+    bound = nullptr;
 }
 
 bool BnBOrderConstraint::propagate() {
-    if(bound == NULL)
+    if(bound == nullptr)
         return true;
     for(unsigned i = 0; i < query->getOrderCount(); i++) {
         if(boundOrderError[i])

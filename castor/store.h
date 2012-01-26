@@ -156,7 +156,7 @@ public:
          * Fetch the next result statement
          *
          * @param[out] t structure in which to write the result or
-         *               NULL to ignore
+         *               nullptr to ignore
          * @return true if the next result has been found, false if there are
          *         no more results (further calls to next() are undefined)
          */

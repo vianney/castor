@@ -48,7 +48,7 @@ void VariableSet::_init(unsigned capacity) {
     varMap = new bool[capacity];
     memset(varMap, 0, capacity * sizeof(bool));
     size = 0;
-    cpvars = NULL;
+    cpvars = nullptr;
 }
 
 VariableSet::VariableSet(Query *query) {
@@ -62,7 +62,7 @@ VariableSet::VariableSet(const VariableSet &o) {
     varMap = new bool[capacity];
     memcpy(varMap, o.varMap, capacity * sizeof(bool));
     size = o.size;
-    cpvars = NULL;
+    cpvars = nullptr;
 }
 
 VariableSet::~VariableSet() {
@@ -78,7 +78,7 @@ VariableSet& VariableSet::operator =(const VariableSet &o) {
     size = o.size;
     if(cpvars) {
         delete [] cpvars;
-        cpvars = NULL;
+        cpvars = nullptr;
     }
     return *this;
 }
@@ -89,7 +89,7 @@ VariableSet& VariableSet::operator+=(Variable *v) {
         varMap[v->getId()] = true;
         if(cpvars) {
             delete [] cpvars;
-            cpvars = NULL;
+            cpvars = nullptr;
         }
     }
     return *this;

@@ -114,7 +114,7 @@ void TempFile::writeValue(const Value &val) {
     unsigned typelen;
     if(val.type == Value::TYPE_CUSTOM)
         typelen = val.typeUriLen + 1;
-    else if(val.isPlain() && val.language != NULL)
+    else if(val.isPlain() && val.language != nullptr)
         typelen = val.languageLen + 1;
     else
         typelen = 0;
@@ -130,7 +130,7 @@ void TempFile::writeValue(const Value &val) {
     PageWriter::writeInt(it, val.type << 16 | typelen);
     if(val.type == Value::TYPE_CUSTOM)
         memcpy(it, val.typeUri, typelen);
-    else if(val.isPlain() && val.language != NULL)
+    else if(val.isPlain() && val.language != nullptr)
         memcpy(it, val.language, typelen);
     it += typelen;
     memcpy(it, val.lexical, val.lexicalLen + 1);

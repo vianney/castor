@@ -28,11 +28,11 @@ UnaryExpression::UnaryExpression(Expression *arg) :
     vars = arg->getVars();
 }
 UnaryExpression::~UnaryExpression() {
-    if(arg != NULL)
+    if(arg != nullptr)
         delete arg;
 }
 void UnaryExpression::deleteThisOnly() {
-    arg = NULL;
+    arg = nullptr;
     delete this;
 }
 
@@ -42,14 +42,14 @@ BinaryExpression::BinaryExpression(Expression *arg1, Expression *arg2) :
     vars += arg2->getVars();
 }
 BinaryExpression::~BinaryExpression() {
-    if(arg1 != NULL)
+    if(arg1 != nullptr)
         delete arg1;
-    if(arg2 != NULL)
+    if(arg2 != nullptr)
         delete arg2;
 }
 void BinaryExpression::deleteThisOnly() {
-    arg1 = NULL;
-    arg2 = NULL;
+    arg1 = nullptr;
+    arg2 = nullptr;
     delete this;
 }
 
@@ -78,17 +78,17 @@ RegExExpression::RegExExpression(Expression *arg1, Expression *arg2,
     vars += arg3->getVars();
 }
 RegExExpression::~RegExExpression() {
-    if(arg1 != NULL)
+    if(arg1 != nullptr)
         delete arg1;
-    if(arg2 != NULL)
+    if(arg2 != nullptr)
         delete arg2;
-    if(arg3 != NULL)
+    if(arg3 != nullptr)
         delete arg3;
 }
 void RegExExpression::deleteThisOnly() {
-    arg1 = NULL;
-    arg2 = NULL;
-    arg3 = NULL;
+    arg1 = nullptr;
+    arg2 = nullptr;
+    arg3 = nullptr;
     delete this;
 }
 
@@ -97,11 +97,11 @@ CastExpression::CastExpression(Value::Type destination, Expression *arg) :
     vars = arg->getVars();
 }
 CastExpression::~CastExpression() {
-    if(arg != NULL)
+    if(arg != nullptr)
         delete arg;
 }
 void CastExpression::deleteThisOnly() {
-    arg = NULL;
+    arg = nullptr;
     delete this;
 }
 
@@ -113,7 +113,7 @@ Expression* BangExpression::optimize() {
     if(SameTermExpression *e = dynamic_cast<SameTermExpression*>(arg)) {
         Expression *result = new DiffTermExpression(e->getLeft(), e->getRight());
         arg->deleteThisOnly();
-        arg = NULL;
+        arg = nullptr;
         delete this;
         return result;
     }
@@ -224,7 +224,7 @@ bool LangExpression::evaluate(Value &result) {
     if(!arg->evaluate(result) || !result.isPlain())
         return false;
     const char *lang = result.language;
-    if(lang == NULL)
+    if(lang == nullptr)
         lang = "";
     bool freeLex = result.hasCleanFlag(Value::CLEAN_DATA);
     result.removeCleanFlag(Value::CLEAN_DATA);

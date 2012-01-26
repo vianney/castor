@@ -46,7 +46,7 @@ int main(int argc, char *argv[]) {
     }
     char *dbpath = argv[1];
     char *rqpath = argv[2];
-    char *solpath = argc > 3 ? argv[3] : NULL;
+    char *solpath = argc > 3 ? argv[3] : nullptr;
 
     ifstream f(rqpath, ios::ate);
     int queryLen = (int) f.tellg();
@@ -60,7 +60,7 @@ int main(int argc, char *argv[]) {
     queryString[queryLen] = '\0';
     f.close();
 
-    ostream *fsol = (solpath == NULL ? &cout : new ofstream(solpath));
+    ostream *fsol = (solpath == nullptr ? &cout : new ofstream(solpath));
 
     rusage ru[4];
     getrusage(RUSAGE_SELF, &ru[0]);
@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
     if(query.getRequestedCount() == 0 && query.getSolutionCount() == 0)
         *fsol << "NO" << endl;
 
-    if(solpath != NULL) {
+    if(solpath != nullptr) {
         ((ofstream*) fsol)->close();
         delete (ofstream*) fsol;
     }

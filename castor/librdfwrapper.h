@@ -59,7 +59,7 @@ template <class T>
 class Sequence {
     raptor_sequence *seq;
 public:
-    Sequence(raptor_sequence *seq = NULL) : seq(seq) {}
+    Sequence(raptor_sequence *seq = nullptr) : seq(seq) {}
     Sequence& operator=(raptor_sequence *s) { seq = s; return *this; }
     int size() { return seq ? raptor_sequence_size(seq) : 0; }
     T* operator[](int i) {
@@ -92,7 +92,7 @@ class RDFParser {
 public:
     RDFParser(const char *syntax, const char *path) {
         parser = raptor_new_parser(World::instance().raptor, syntax);
-        if(parser == NULL)
+        if(parser == nullptr)
             throw "Unable to create parser";
         fileURIstr = raptor_uri_filename_to_uri_string(path);
         fileURI = raptor_new_uri(World::instance().raptor, fileURIstr);
@@ -104,7 +104,7 @@ public:
     }
     void parse(RDFParseHandler *handler) {
         raptor_parser_set_statement_handler(parser, handler, stmt_handler);
-        raptor_parser_parse_file(parser, fileURI, NULL);
+        raptor_parser_parse_file(parser, fileURI, nullptr);
     }
 };
 

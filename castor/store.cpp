@@ -231,7 +231,7 @@ Store::RangeQuery::RangeQuery(Store *store, Triple from, Triple to) :
     // look for the first leaf
     nextPage = store->triplesIndex[order]->lookupLeaf(key);
     if(nextPage == 0) {
-        it = end = NULL;
+        it = end = nullptr;
         return;
     }
 
@@ -272,7 +272,7 @@ bool Store::RangeQuery::next(Triple *t) {
     }
     if(*it > limit)
         return false;
-    if(t != NULL) {
+    if(t != nullptr) {
         switch(order) {
         case SPO:
             *t = *it;

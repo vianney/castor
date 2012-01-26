@@ -54,7 +54,7 @@ public:
 
     const unsigned char* get() const { return ptr; }
 
-    //! @return whether this pointer is valid (i.e., it is != NULL)
+    //! @return whether this pointer is valid (i.e., it is != nullptr)
     bool valid() { return ptr != 0; }
 
 

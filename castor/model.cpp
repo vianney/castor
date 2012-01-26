@@ -28,9 +28,9 @@ namespace castor {
 // Static definitions
 
 const char *Value::TYPE_URIS[] = {
-    NULL,
-    NULL,
-    NULL,
+    nullptr,
+    nullptr,
+    nullptr,
     "http://www.w3.org/2001/XMLSchema#string",
     "http://www.w3.org/2001/XMLSchema#boolean",
     "http://www.w3.org/2001/XMLSchema#integer",
@@ -105,7 +105,7 @@ Value::Value(const raptor_term *term) {
     switch(term->type) {
     case RAPTOR_TERM_TYPE_BLANK:
         type = TYPE_BLANK;
-        typeUri = NULL;
+        typeUri = nullptr;
         typeUriLen = 0;
         lexicalLen = term->value.blank.string_len;
         s = new char[lexicalLen + 1];
@@ -116,7 +116,7 @@ Value::Value(const raptor_term *term) {
         break;
     case RAPTOR_TERM_TYPE_URI:
         type = TYPE_IRI;
-        typeUri = NULL;
+        typeUri = nullptr;
         typeUriLen = 0;
         convertURI(term->value.uri, lexical, lexicalLen);
         addCleanFlag(CLEAN_LEXICAL);
@@ -128,12 +128,12 @@ Value::Value(const raptor_term *term) {
                lexicalLen + 1);
         lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
-        if(term->value.literal.datatype == NULL) {
+        if(term->value.literal.datatype == nullptr) {
             type = TYPE_PLAIN_STRING;
-            typeUri = NULL;
-            if(term->value.literal.language == NULL ||
+            typeUri = nullptr;
+            if(term->value.literal.language == nullptr ||
                term->value.literal.language_len == 0) {
-                language = NULL;
+                language = nullptr;
                 languageLen = 0;
             } else {
                 languageLen = term->value.literal.language_len;
@@ -178,14 +178,14 @@ Value::Value(const rasqal_literal *literal) {
         break;
     case RASQAL_LITERAL_STRING:
         type = TYPE_PLAIN_STRING;
-        if(literal->language != NULL && literal->language[0] != '\0') {
+        if(literal->language != nullptr && literal->language[0] != '\0') {
             languageLen = strlen(literal->language);
             s = new char[languageLen + 1];
             memcpy(s, literal->language, languageLen + 1);
             language = s;
             addCleanFlag(CLEAN_DATA);
         } else {
-            language = NULL;
+            language = nullptr;
         }
         break;
     case RASQAL_LITERAL_XSD_STRING:
@@ -226,24 +226,24 @@ Value::Value(const rasqal_literal *literal) {
 void Value::clean() {
     if(hasCleanFlag(CLEAN_TYPE_URI)) {
         delete [] typeUri;
-        typeUri = NULL;
+        typeUri = nullptr;
         typeUriLen = 0;
     }
     if(hasCleanFlag(CLEAN_LEXICAL)) {
         delete [] lexical;
-        lexical = NULL;
+        lexical = nullptr;
         lexicalLen = 0;
     }
     if(hasCleanFlag(CLEAN_DATA)) {
         switch(type) {
         case TYPE_PLAIN_STRING:
             delete [] language;
-            language = NULL;
+            language = nullptr;
             languageLen = 0;
             break;
         case TYPE_DECIMAL:
             delete decimal;
-            decimal = NULL;
+            decimal = nullptr;
             break;
         case TYPE_DATETIME:
             // TODO  delete datetime;
@@ -306,7 +306,7 @@ void Value::fillBoolean(bool value) {
     type = TYPE_BOOLEAN;
     typeUri = TYPE_URIS[TYPE_BOOLEAN];
     typeUriLen = TYPE_URIS_LEN[TYPE_BOOLEAN];
-    lexical = NULL;
+    lexical = nullptr;
     lexicalLen = 0;
     isInterpreted = true;
     boolean = value;
@@ -318,7 +318,7 @@ void Value::fillInteger(long value) {
     type = TYPE_INTEGER;
     typeUri = TYPE_URIS[TYPE_INTEGER];
     typeUriLen = TYPE_URIS_LEN[TYPE_INTEGER];
-    lexical = NULL;
+    lexical = nullptr;
     lexicalLen = 0;
     isInterpreted = true;
     integer = value;
@@ -330,7 +330,7 @@ void Value::fillFloating(double value) {
     type = TYPE_DOUBLE;
     typeUri = TYPE_URIS[TYPE_DOUBLE];
     typeUriLen = TYPE_URIS_LEN[TYPE_DOUBLE];
-    lexical = NULL;
+    lexical = nullptr;
     lexicalLen = 0;
     isInterpreted = true;
     floating = value;
@@ -342,7 +342,7 @@ void Value::fillDecimal(XSDDecimal *value) {
     type = TYPE_DECIMAL;
     typeUri = TYPE_URIS[TYPE_DECIMAL];
     typeUriLen = TYPE_URIS_LEN[TYPE_DECIMAL];
-    lexical = NULL;
+    lexical = nullptr;
     lexicalLen = 0;
     isInterpreted = true;
     decimal = value;
@@ -353,7 +353,7 @@ void Value::fillSimpleLiteral(const char *lexical, unsigned len, bool freeLexica
     clean();
     id = 0;
     type = TYPE_PLAIN_STRING;
-    typeUri = NULL;
+    typeUri = nullptr;
     typeUriLen = 0;
     this->lexical = lexical;
     lexicalLen = len;
@@ -366,7 +366,7 @@ void Value::fillIRI(const char *lexical, unsigned len, bool freeLexical) {
     clean();
     id = 0;
     type = TYPE_IRI;
-    typeUri = NULL;
+    typeUri = nullptr;
     typeUriLen = 0;
     this->lexical = lexical;
     lexicalLen = len;
@@ -379,7 +379,7 @@ void Value::fillBlank(const char *lexical, unsigned len, bool freeLexical) {
     clean();
     id = 0;
     type = TYPE_BLANK;
-    typeUri = NULL;
+    typeUri = nullptr;
     typeUriLen = 0;
     this->lexical = lexical;
     lexicalLen = len;
@@ -470,8 +470,8 @@ bool Value::operator<(const Value &o) const {
                 else
                     return cmp < 0;
             } else {
-                const char *uri1 = typeUri == NULL ? "" : typeUri;
-                const char *uri2 = o.typeUri == NULL ? "" : o.typeUri;
+                const char *uri1 = typeUri == nullptr ? "" : typeUri;
+                const char *uri2 = o.typeUri == nullptr ? "" : o.typeUri;
                 cmp = cmpstr(uri1, typeUriLen, uri2, o.typeUriLen);
                 if(cmp == 0)
                     return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
@@ -497,10 +497,10 @@ int Value::rdfequals(const Value &o) const {
         return falseret;
     }
     if(isPlain()) {
-        if(language != NULL && o.language != NULL) {
+        if(language != nullptr && o.language != nullptr) {
             if(!eqstr(language, languageLen, o.language, o.languageLen))
                 return falseret;
-        } else if(language != NULL || o.language != NULL) {
+        } else if(language != nullptr || o.language != nullptr) {
             return falseret;
         }
     }
@@ -527,13 +527,13 @@ void Value::ensureLexical() {
             lexicalLen = 5;
         }
     } else if(isInteger()) {
-        lexicalLen = snprintf(NULL, 0, "%ld", integer);
+        lexicalLen = snprintf(nullptr, 0, "%ld", integer);
         char *s = new char[lexicalLen + 1];
         sprintf(s, "%ld", integer);
         lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
     } else if(isFloating()) {
-        lexicalLen = snprintf(NULL, 0, "%f", floating);
+        lexicalLen = snprintf(nullptr, 0, "%f", floating);
         char *s = new char[lexicalLen + 1];
         sprintf(s, "%f", floating);
         lexical = s;
@@ -598,7 +598,7 @@ std::ostream& operator<<(std::ostream &out, const Value &val) {
         out << '"';
         out.write(val.lexical, val.lexicalLen);
         out << '"';
-        if(val.language != NULL) {
+        if(val.language != nullptr) {
             out << '@';
             out.write(val.language, val.languageLen);
         }

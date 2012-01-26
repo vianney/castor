@@ -94,7 +94,7 @@ protected:
     Solver *solver;
 
     /**
-     * Parent subtree in which this constraint is posted or NULL if posted
+     * Parent subtree in which this constraint is posted or nullptr if posted
      * globally.
      * This variable is initialized by Subtree or Solver.
      */

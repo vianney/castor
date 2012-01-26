@@ -82,9 +82,9 @@ private:
     cp::RDFVar *var;   //!< CP variable
     Value::id_t val;    //!< value (0 means unbound)
 
-    Variable() : var(NULL), val(0) {}
+    Variable() : var(nullptr), val(0) {}
     ~Variable() {
-        if(var != NULL)
+        if(var != nullptr)
             delete var;
     }
 
@@ -200,7 +200,7 @@ private:
     unsigned capacity; //!< maximum number of variables
     Variable **vars; //!< array of variables
     bool *varMap; //!< map of ids
-    cp::RDFVar **cpvars; //!< List of CP variables. NULL if not yet created.
+    cp::RDFVar **cpvars; //!< List of CP variables. nullptr if not yet created.
 };
 
 }

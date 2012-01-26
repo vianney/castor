@@ -38,8 +38,8 @@ void TripleCache::initialize(PageReader *db, unsigned maxPage) {
     this->db = db;
     map = new Line*[maxPage + 1];
     memset(map, 0, (maxPage + 1) * sizeof(Line*));
-    head = NULL;
-    tail = NULL;
+    head = nullptr;
+    tail = nullptr;
 }
 
 const TripleCache::Line* TripleCache::fetch(unsigned page) {
@@ -47,7 +47,7 @@ const TripleCache::Line* TripleCache::fetch(unsigned page) {
 
     // lookup page in cache
     Line *line = map[page];
-    if(line != NULL) {
+    if(line != nullptr) {
         ++statHits;
         // move cache line to head of list
         if(head != line) {
@@ -58,7 +58,7 @@ const TripleCache::Line* TripleCache::fetch(unsigned page) {
                 line->next->prev = line->prev;
             head->prev = line;
             line->next = head;
-            line->prev = NULL;
+            line->prev = nullptr;
             head = line;
         }
         return line;
@@ -70,26 +70,26 @@ const TripleCache::Line* TripleCache::fetch(unsigned page) {
         // intialize new line
         line = &lines[size++];
         line->triples = new Triple[Line::MAX_COUNT];
-        if(head == NULL) {
+        if(head == nullptr) {
             head = tail = line;
-            line->prev = NULL;
-            line->next = NULL;
+            line->prev = nullptr;
+            line->next = nullptr;
         } else {
             head->prev = line;
             line->next = head;
-            line->prev = NULL;
+            line->prev = nullptr;
             head = line;
         }
     } else {
         // evict least recently used line
         line = tail;
         tail = line->prev;
-        tail->next = NULL;
+        tail->next = nullptr;
         head->prev = line;
         line->next = head;
-        line->prev = NULL;
+        line->prev = nullptr;
         head = line;
-        map[line->page] = NULL;
+        map[line->page] = nullptr;
     }
 
     map[page] = line;

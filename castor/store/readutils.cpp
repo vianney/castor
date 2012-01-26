@@ -48,7 +48,7 @@ void Cursor::readValue(Value &val) {
                 val.language = reinterpret_cast<const char*>(ptr);
                 val.languageLen = typelen - 1;
             } else {
-                val.language = NULL;
+                val.language = nullptr;
                 val.languageLen = 0;
             }
             val.isInterpreted = true;
@@ -68,7 +68,7 @@ MMapFile::MMapFile(const char *fileName) {
     if(size < 0)
         throw "Unable to seek file";
     pBegin = Cursor(static_cast<const unsigned char*>
-                        (mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0)));
+                        (mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0)));
     if(pBegin.get() == MAP_FAILED)
         throw "Unable to map file";
     pEnd = pBegin + size;

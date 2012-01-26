@@ -100,7 +100,7 @@ Pattern* FilterPattern::optimize() {
         DiffPattern *pat = new DiffPattern(subpat->getLeft(),
                                            subpat->getRight());
         subpat->deleteThisOnly();
-        subpattern = NULL;
+        subpattern = nullptr;
         delete this;
         return pat;
     }

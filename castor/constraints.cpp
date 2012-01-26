@@ -30,7 +30,7 @@ TripleConstraint::TripleConstraint(Query *query, TriplePattern pat) :
             x[i] = query->getVariable(pat[i].getVariableId())->getCPVariable();
             x[i]->registerBind(this);
         } else {
-            x[i] = NULL;
+            x[i] = nullptr;
         }
     }
 }
@@ -38,7 +38,7 @@ TripleConstraint::TripleConstraint(Query *query, TriplePattern pat) :
 void TripleConstraint::restore() {
     int bound = 0;
     for(int i = 0; i < pat.COMPONENTS; i++)
-        bound += (x[i] == NULL || x[i]->isBound());
+        bound += (x[i] == nullptr || x[i]->isBound());
     done = (bound >= pat.COMPONENTS - 1);
 }
 
@@ -48,7 +48,7 @@ bool TripleConstraint::propagate() {
     Triple min, max;
     int bound = pat.COMPONENTS;
     for(int i = 0; i < pat.COMPONENTS; i++) {
-        if(x[i] == NULL) {
+        if(x[i] == nullptr) {
             min[i] = max[i] = pat[i].getValueId();
         } else if(x[i]->isBound()) {
             min[i] = max[i] = x[i]->getValue();
@@ -70,7 +70,7 @@ bool TripleConstraint::propagate() {
 
     if(bound == pat.COMPONENTS)
         // all variables are bound, just check
-        return q.next(NULL);
+        return q.next(nullptr);
 
     for(int i = 0; i < pat.COMPONENTS; i++)
         if(min[i] != max[i]) x[i]->clearMarks();
@@ -115,7 +115,7 @@ void FilterConstraint::restore() {
 
 bool FilterConstraint::propagate() {
     StatelessConstraint::propagate();
-    Variable* unbound = NULL;
+    Variable* unbound = nullptr;
     for(Variable *x : expr->getVars()) {
         if(x->getCPVariable()->contains(0))
             x->setValueId(0);

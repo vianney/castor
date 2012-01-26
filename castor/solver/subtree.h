@@ -113,7 +113,7 @@ private:
      * backtrack to an older checkpoint.
      *
      * @return the chosen variable of the last restored checkpoint
-     *         or NULL if the whole search tree has been explored
+     *         or nullptr if the whole search tree has been explored
      */
     Variable* backtrack();
 

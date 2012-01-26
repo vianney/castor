@@ -73,14 +73,14 @@ using librdf::Sequence;
 Query::Query(Store *store, const char *queryString) throw(QueryParseException)
         : store(store) {
     rasqal_query *query = rasqal_new_query(librdf::World::instance().rasqal,
-                                           "sparql", NULL);
-    vars = NULL;
-    pattern = NULL;
-    solutions = NULL;
+                                           "sparql", nullptr);
+    vars = nullptr;
+    pattern = nullptr;
+    solutions = nullptr;
     try {
         if(rasqal_query_prepare(query,
                                 reinterpret_cast<const unsigned char*>(queryString),
-                                NULL))
+                                nullptr))
             throw QueryParseException("unable to parse query");
 
         // DISTINCT, LIMIT and OFFSET (+ check for unsupported verbs)
@@ -137,7 +137,7 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
         }
         for(int j = 0; j < nbReal; j++) {
             rasqal_variable *var = seqVars[j];
-            if(var->user_data == NULL) {
+            if(var->user_data == nullptr) {
                 var->user_data = &vars[i];
                 vars[i].query = this;
                 vars[i].id = i;
@@ -156,7 +156,7 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
         }
 
         // ORDERY BY expressions
-        bnbOrderCstr = NULL;
+        bnbOrderCstr = nullptr;
         if(verb == RASQAL_QUERY_VERB_SELECT) {
             Sequence<rasqal_expression> seqOrder =
                     rasqal_query_get_order_conditions_sequence(query);
@@ -186,13 +186,13 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
                     solver.add(bnbOrderCstr);
                 }
             } else {
-                order = NULL;
-                orderDescending = NULL;
+                order = nullptr;
+                orderDescending = nullptr;
             }
         } else {
             nbOrder = 0;
-            order = NULL;
-            orderDescending = NULL;
+            order = nullptr;
+            orderDescending = nullptr;
         }
 
         // graph pattern
@@ -205,7 +205,7 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
             distinctCstr = new DistinctConstraint(this);
             solver.add(distinctCstr);
         } else {
-            distinctCstr = NULL;
+            distinctCstr = nullptr;
         }
 
         // cleanup
@@ -224,7 +224,7 @@ Query::Query(Store *store, const char *queryString) throw(QueryParseException)
 }
 
 Query::~Query() {
-    if(solutions != NULL) {
+    if(solutions != nullptr) {
         for(Solution* sol : *solutions)
             delete sol;
         delete solutions;
@@ -268,7 +268,7 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
     }
     case RASQAL_GRAPH_PATTERN_OPERATOR_UNION:
     {
-        Pattern *pat = NULL;
+        Pattern *pat = nullptr;
         Sequence<rasqal_graph_pattern> seq =
                 rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp);
         int n = seq.size();
@@ -286,7 +286,7 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
                     pat = new UnionPattern(pat, subpat);
             }
         } catch(QueryParseException) {
-            if(pat != NULL)
+            if(pat != nullptr)
                 delete pat;
             throw;
         }
@@ -296,8 +296,8 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
     }
     case RASQAL_GRAPH_PATTERN_OPERATOR_GROUP:
     {
-        Expression *expr = NULL;
-        Pattern *pat = NULL;
+        Expression *expr = nullptr;
+        Pattern *pat = nullptr;
         Sequence<rasqal_graph_pattern> seq =
                 rasqal_graph_pattern_get_sub_graph_pattern_sequence(gp);
         int n = seq.size();
@@ -310,7 +310,7 @@ Pattern* Query::convertPattern(rasqal_graph_pattern *gp) throw(QueryParseExcepti
                     Expression *subexpr = convertExpression(
                             rasqal_graph_pattern_get_filter_expression(subgp))
                             ->optimize();
-                    if(expr == NULL)
+                    if(expr == nullptr)
                         expr = subexpr;
                     else
                         expr = new AndExpression(expr, subexpr);
@@ -524,7 +524,7 @@ std::ostream& operator<<(std::ostream &out, const Query &q) {
 // Search
 
 bool Query::next() {
-    if(solutions == NULL) {
+    if(solutions == nullptr) {
         if(limit >= 0 && nbSols >= static_cast<unsigned>(limit))
             return false;
         if(nbSols == 0) {
@@ -574,7 +574,7 @@ bool Query::nextPatternSolution() {
         return false;
     for(unsigned i = 0; i < nbVars; i++)
         vars[i].setValueFromCP();
-    if(distinctCstr != NULL)
+    if(distinctCstr != nullptr)
         distinctCstr->addSolution();
     return true;
 }
@@ -582,9 +582,9 @@ bool Query::nextPatternSolution() {
 void Query::reset() {
     pattern->discard();
     nbSols = 0;
-    if(distinctCstr != NULL)
+    if(distinctCstr != nullptr)
         distinctCstr->reset();
-    if(solutions != NULL) {
+    if(solutions != nullptr) {
         for(Solution* sol : *solutions)
             delete sol;
         solutions->clear();

@@ -189,7 +189,7 @@ public:
      */
     Expression* getCondition() { return condition; }
 
-    void deleteThisOnly() { subpattern = NULL; condition = NULL; delete this; }
+    void deleteThisOnly() { subpattern = nullptr; condition = nullptr; delete this; }
 
     Pattern* optimize();
     void init();
@@ -224,7 +224,7 @@ public:
      */
     Pattern* getRight() { return right; }
 
-    void deleteThisOnly() { left = NULL; right = NULL; delete this; }
+    void deleteThisOnly() { left = nullptr; right = nullptr; delete this; }
 
     Pattern* optimize();
     void init();

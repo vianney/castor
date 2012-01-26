@@ -141,13 +141,13 @@ struct Value {
      */
     Type type;
     /**
-     * URI of the datatype. NULL if type <= TYPE_PLAIN_STRING.
+     * URI of the datatype. nullptr if type <= TYPE_PLAIN_STRING.
      * @note always null-terminated
      */
     const char* typeUri;
     unsigned typeUriLen; //!< length of typeUri (without terminal null)
     /**
-     * Lexical form. May be NULL if there is a native representation.
+     * Lexical form. May be nullptr if there is a native representation.
      * @note always null-terminated
      */
     const char* lexical;
@@ -341,7 +341,7 @@ struct Value {
     /**
      * @return whether this value is a simple literal
      */
-    bool isSimple() const { return isPlain() && language == NULL; }
+    bool isSimple() const { return isPlain() && language == nullptr; }
     /**
      * @return whether this value is a typed string
      */
@@ -430,13 +430,13 @@ struct Value {
      * Ensure this value has a non-null lexical. A new lexical will be created
      * if necessary.
      *
-     * @pre lexical != NULL || isInterpreted == true
+     * @pre lexical != nullptr || isInterpreted == true
      */
     void ensureLexical();
 
     /**
      * Ensure this value is interpreted if it is a typed literal.
-     * @pre lexical != NULL
+     * @pre lexical != nullptr
      */
     void ensureInterpreted();
 
