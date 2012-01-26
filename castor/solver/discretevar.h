@@ -265,7 +265,7 @@ DiscreteVariable<T>::DiscreteVariable(Solver *solver, T minVal, T maxVal) :
     map = new unsigned[size];
     for(T v = minVal, i = 0; v <= maxVal; ++v, ++i) {
         domain[i] = v;
-        map[v] = i;
+        map[v-minVal] = i;
     }
     min = minVal;
     max = maxVal;
@@ -294,12 +294,14 @@ void DiscreteVariable<T>::restore(const void *trail) {
 
 template<class T>
 void DiscreteVariable<T>::select() {
+    assert(size > 1);
     bool ret = bind(domain[0]);
     assert(ret);
 }
 
 template<class T>
 void DiscreteVariable<T>::unselect() {
+    assert(size > 1);
     bool ret = remove(domain[0]);
     assert(ret);
 }
@@ -358,6 +360,7 @@ bool DiscreteVariable<T>::bind(T v) {
     }
     solver->enqueue(evChange);
     solver->enqueue(evBind);
+    assert(min == max && min == getValue());
     return true;
 }
 
@@ -383,15 +386,17 @@ bool DiscreteVariable<T>::remove(T v) {
         if(domain[0] < min || domain[0] > max)  // check representations consistency
             return false;
         solver->enqueue(evBind);
-        if(v != min) {
-            min = v;
+        if(domain[0] != min) {
+            min = domain[0];
             solver->enqueue(evMin);
         }
-        if(v != max) {
-            max = v;
+        if(domain[0] != max) {
+            max = domain[0];
             solver->enqueue(evMax);
         }
-    } else {
+    } /*else {
+        // FIXME this may break the invariants
+        // e.g.: domain = [10 11 12], min=10, max=11; remove(10)
         if(v == min) {
             // TODO is this usefull?
             min++; // not perfect bound
@@ -402,8 +407,10 @@ bool DiscreteVariable<T>::remove(T v) {
             max--; // not perfect bound
             solver->enqueue(evMax);
         }
-    }
+    }*/
     solver->enqueue(evChange);
+    assert(size > 1 || (min == max && min == getValue()));
+    assert(min < max || (size == 1 && min == getValue()));
     return true;
 }
 
@@ -428,6 +435,8 @@ bool DiscreteVariable<T>::restrictToMarks() {
         if(m == 1)
             solver->enqueue(evBind);
     }
+    assert(size > 1 || (min == max && min == getValue()));
+    assert(min < max || (size == 1 && min == getValue()));
     return true;
 }
 
@@ -443,6 +452,8 @@ bool DiscreteVariable<T>::updateMin(T v) {
     min = v;
     solver->enqueue(evChange);
     solver->enqueue(evMin);
+    assert(size > 1 || (min == max && min == getValue()));
+    assert(min < max || (size == 1 && min == getValue()));
     return true;
 }
 
@@ -458,6 +469,8 @@ bool DiscreteVariable<T>::updateMax(T v) {
     max = v;
     solver->enqueue(evChange);
     solver->enqueue(evMax);
+    assert(size > 1 || (min == max && min == getValue()));
+    assert(min < max || (size == 1 && min == getValue()));
     return true;
 }
 
