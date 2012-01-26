@@ -20,6 +20,7 @@
 
 #include <vector>
 #include <cassert>
+#include <iostream>
 
 #include "solver.h"
 #include "variable.h"
@@ -68,7 +69,7 @@ public:
      * @pre isBound() == true
      * @return the value bound to this variable
      */
-    T getValue() { return domain[0]; }
+    T getValue() const { return domain[0]; }
 
     /**
      * Get the domain array. Beware that this is a pointer directly to the
@@ -78,23 +79,25 @@ public:
      *
      * @return pointer to the domain array
      */
-    const T* getDomain() { return domain; }
+    const T* getDomain() const { return domain; }
 
     /**
      * @param v a value
      * @return whether value v is in the domain (intersection of both
      *         representations)
      */
-    bool contains(T v) { return v >= min && v <= max && map[v-minVal] < size; }
+    bool contains(T v) const {
+        return v >= min && v <= max && map[v-minVal] < size;
+    }
 
     /**
      * @return the lower bound (may not be consistent)
      */
-    T getMin() { return min; }
+    T getMin() const { return min; }
     /**
      * @return the upper bound (may not be consistent)
      */
-    T getMax() { return max; }
+    T getMax() const { return max; }
 
     /**
      * Mark a value in the domain. Do nothing if the value is not in
@@ -250,6 +253,9 @@ private:
      */
     std::vector<Constraint*> evMax;
 };
+
+template<class T>
+std::ostream& operator<<(std::ostream &out, const DiscreteVariable<T> &x);
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -472,6 +478,13 @@ bool DiscreteVariable<T>::updateMax(T v) {
     assert(size > 1 || (min == max && min == getValue()));
     assert(min < max || (size == 1 && min == getValue()));
     return true;
+}
+
+template<class T>
+std::ostream& operator<<(std::ostream &out, const DiscreteVariable<T> &x) {
+    out << "(" << x.getSize() << ")[" << x.getMin() << ".." << x.getMax()
+        << "]";
+    return out;
 }
 
 }
