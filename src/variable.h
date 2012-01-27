@@ -66,7 +66,7 @@ public:
 
     /**
      * Set the value of this variable using an id from the store
-     * @param the id of the new value or 0 for unbound
+     * @param id the id of the new value or 0 for unbound
      */
     void setValueId(Value::id_t id) { val = id; }
 

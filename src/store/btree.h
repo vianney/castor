@@ -42,7 +42,7 @@ public:
     BTree(PageReader *db, unsigned rootPage) : db(db), rootPage(rootPage) {}
 
     /**
-     * @param a key
+     * @param key a key
      * @return the page of the first leaf that contains keys >= key
      *         or 0 if not found
      */

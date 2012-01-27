@@ -92,6 +92,7 @@ public:
 
     /**
      * For debugging purpose
+     * @param out output stream
      * @param indent indent level to add in front of the string representation
      */
     virtual void print(std::ostream &out, int indent) const = 0;

@@ -1,0 +1,27 @@
+PROJECT_NAME           = Castor
+PROJECT_BRIEF          = "Constraint-based Search Techniques for RDF"
+
+INPUT                  = @PROJECT_SOURCE_DIR@/src
+FILE_PATTERNS          = *.h
+EXTENSION_MAPPING      = h=C++
+RECURSIVE              = YES
+
+JAVADOC_AUTOBRIEF      = YES
+QT_AUTOBRIEF           = YES
+MULTILINE_CPP_IS_BRIEF = YES
+
+BUILTIN_STL_SUPPORT    = YES
+
+EXTRACT_ALL            = YES
+HIDE_FRIEND_COMPOUNDS  = YES
+HIDE_SCOPE_NAMES       = YES
+FORCE_LOCAL_INCLUDES   = YES
+SORT_MEMBER_DOCS       = NO
+
+QUIET                  = YES
+WARN_NO_PARAMDOC       = YES
+
+VERBATIM_HEADERS       = NO
+
+GENERATE_TREEVIEW      = YES
+GENERATE_LATEX         = NO
