@@ -14,8 +14,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-include_directories(../../castor)
-
 set(CASTORLD_SRCS
     castorld.cpp
     tempfile.h

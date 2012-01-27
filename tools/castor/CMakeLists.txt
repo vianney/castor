@@ -14,24 +14,5 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-cmake_minimum_required(VERSION 2.6)
-project(Castor)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
-
-find_package(Raptor2 REQUIRED)
-find_package(Rasqal REQUIRED)
-
-include_directories(SYSTEM
-    ${RAPTOR2_INCLUDE_DIRS}
-    ${RASQAL_INCLUDE_DIRS}
-)
-
-set(LIBS
-    ${RAPTOR2_LIBRARIES}
-    ${RASQAL_LIBRARIES}
-)
-
-set(CMAKE_CXX_FLAGS "-std=c++0x -Wall")
-
-add_subdirectory(src)
-add_subdirectory(tools)
+add_executable(castor castor.cpp)
+target_link_libraries(castor libcastor)
