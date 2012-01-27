@@ -20,6 +20,7 @@ set(CASTOR_SRCS
     solver/solver.cpp
     solver/variable.h
     solver/discretevar.h
+    solver/boundsvar.h
     solver/constraint.h
     solver/subtree.h
     solver/subtree.cpp
