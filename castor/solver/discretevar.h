@@ -380,6 +380,8 @@ bool DiscreteVariable<T>::remove(T v) {
         return true;
     if(size <= 1)
         return false;
+    if(size == 2)
+        return bind(domain[1-i]);
     size--;
     if(i != size) {
         T v2 = domain[size];
@@ -388,31 +390,17 @@ bool DiscreteVariable<T>::remove(T v) {
         map[v2-minVal] = i;
         map[v-minVal] = size;
     }
-    if(size == 1) {
-        if(domain[0] < min || domain[0] > max)  // check representations consistency
-            return false;
-        solver->enqueue(evBind);
-        if(domain[0] != min) {
-            min = domain[0];
-            solver->enqueue(evMin);
-        }
-        if(domain[0] != max) {
-            max = domain[0];
-            solver->enqueue(evMax);
-        }
-    } /*else {
-        // FIXME this may break the invariants
-        // e.g.: domain = [10 11 12], min=10, max=11; remove(10)
-        if(v == min) {
-            // TODO is this usefull?
-            min++; // not perfect bound
-            solver->enqueue(evMin);
-        }
-        if(v == max) {
-            // TODO is this usefull?
-            max--; // not perfect bound
-            solver->enqueue(evMax);
-        }
+    // FIXME this may break the invariants
+    // e.g.: domain = [10 11 12], min=10, max=11; remove(10)
+    /*if(v == min) {
+        // TODO is this usefull?
+        min++; // not perfect bound
+        solver->enqueue(evMin);
+    }
+    if(v == max) {
+        // TODO is this usefull?
+        max--; // not perfect bound
+        solver->enqueue(evMax);
     }*/
     solver->enqueue(evChange);
     assert(size > 1 || (min == max && min == getValue()));
