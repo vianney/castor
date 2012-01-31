@@ -15,17 +15,26 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef CONFIG_H
-#define CONFIG_H
+#include "solver/constraint.h"
+#include "gmock/gmock.h"
 
-/**
- * Priority of castor::StatementConstraint
- */
-#define CASTOR_CONSTRAINTS_STATEMENT_PRIORITY  PRIOR_LOW
+using ::testing::Return;
 
-/**
- * Priority of castor::FilterConstraint
- */
-#define CASTOR_CONSTRAINTS_FILTER_PRIORITY  PRIOR_MEDIUM
+namespace castor {
+namespace cp {
 
-#endif // CONFIG_H
+class MockConstraint : public Constraint {
+public:
+    MockConstraint(Priority priority = PRIOR_MEDIUM) : Constraint(priority) {
+        ON_CALL(*this, post())     .WillByDefault(Return(true));
+        ON_CALL(*this, propagate()).WillByDefault(Return(true));
+    }
+
+    MOCK_METHOD0(init, void());
+    MOCK_METHOD0(post, bool());
+    MOCK_METHOD0(propagate, bool());
+    MOCK_METHOD0(restore, void());
+};
+
+}
+}

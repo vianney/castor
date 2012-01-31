@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 set(CASTOR_SRCS
-    config.h
+    config.h.in
     solver/solver.h
     solver/solver.cpp
     solver/variable.h
@@ -54,6 +54,10 @@ set(CASTOR_SRCS
     bnborder.h
     bnborder.cpp
 )
+
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
+               "${CMAKE_CURRENT_BINARY_DIR}/config.h")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 add_library(libcastor ${CASTOR_SRCS})
 set_target_properties(libcastor PROPERTIES OUTPUT_NAME castor)

@@ -19,6 +19,7 @@
 #define CASTOR_CP_SOLVER_H
 
 #include <vector>
+#include "config.h"
 #include "constraint.h"
 
 namespace castor {
@@ -36,7 +37,7 @@ public:
      */
     Solver();
 
-    ~Solver();
+    MOCKABLE ~Solver();
 
     /**
      * Adds a static constraint.
@@ -44,7 +45,7 @@ public:
      *
      * @param c the constraint
      */
-    void add(Constraint *c);
+    MOCKABLE void add(Constraint *c);
 
     /**
      * Indicates a static constraint has been updated and should be
@@ -52,7 +53,7 @@ public:
      *
      * @param c the constraint
      */
-    void refresh(Constraint *c);
+    MOCKABLE void refresh(Constraint *c);
 
     /**
      * Enqueue constraints for propagation. Only variable should call this
@@ -60,7 +61,7 @@ public:
      *
      * @param constraints the list of constraints
      */
-    void enqueue(std::vector<Constraint*> &constraints);
+    MOCKABLE void enqueue(std::vector<Constraint*> &constraints);
 
     /**
      * @return the current subtree
@@ -90,7 +91,7 @@ private: // for subtree
      *
      * @return false if there is a failure, true otherwise
      */
-    bool postStatic();
+    MOCKABLE bool postStatic();
 
     /**
      * Post a list of constraints. Perform initial propagation on all the
@@ -99,7 +100,7 @@ private: // for subtree
      * @param array of constraint lists by priority
      * @return false if there is a failure, true otherwise
      */
-    bool post(std::vector<Constraint*> *constraints);
+    MOCKABLE bool post(std::vector<Constraint*> *constraints);
 
     /**
      * Perform propagation of the constraints in the queue. After this call,
@@ -108,12 +109,12 @@ private: // for subtree
      *
      * @return false if there is a failure, true otherwise
      */
-    bool propagate();
+    MOCKABLE bool propagate();
 
     /**
      * Clear the propagation queue.
      */
-    void clearQueue();
+    MOCKABLE void clearQueue();
 
 private:
     /**

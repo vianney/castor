@@ -14,33 +14,21 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-cmake_minimum_required(VERSION 2.6)
-project(Castor)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
-
-option(CASTOR_UNITTESTS
-       "Add check target to run unit tests (may affect performances)"
-       OFF)
-
-find_package(Raptor2 REQUIRED)
-find_package(Rasqal REQUIRED)
-
-include_directories(SYSTEM
-    ${RAPTOR2_INCLUDE_DIRS}
-    ${RASQAL_INCLUDE_DIRS}
+set(TEST_SRCS
+    solver/solver_mock.h
+    solver/constraint_mock.h
+    solver/discretevar.cpp
 )
 
-set(LIBS
-    ${RAPTOR2_LIBRARIES}
-    ${RASQAL_LIBRARIES}
-)
+include_directories("${PROJECT_SOURCE_DIR}/src"
+                    "${PROJECT_BINARY_DIR}/src")
+include_directories("${PROJECT_SOURCE_DIR}/thirdparty/googlemock/include")
+include_directories("${PROJECT_SOURCE_DIR}/thirdparty/googlemock/gtest/include")
 
-set(CMAKE_CXX_FLAGS "-std=c++0x -Wall")
+add_executable(unittests ${TEST_SRCS})
+target_link_libraries(unittests libcastor gmock_main)
 
-add_subdirectory(thirdparty)
-add_subdirectory(src)
-if(CASTOR_UNITTESTS)
-    add_subdirectory(test EXCLUDE_FROM_ALL)
-endif(CASTOR_UNITTESTS)
-add_subdirectory(tools)
-add_subdirectory(doc)
+add_custom_target(check unittests >&2
+    DEPENDS unittests
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMENT "Running unit tests")
