@@ -18,6 +18,7 @@ set(TEST_SRCS
     solver/solver_mock.h
     solver/constraint_mock.h
     solver/discretevar.cpp
+    solver/boundsvar.cpp
 )
 
 include_directories("${PROJECT_SOURCE_DIR}/src"
