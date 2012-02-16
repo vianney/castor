@@ -378,34 +378,37 @@ bool DiscreteVariable<T>::remove(T v) {
     unsigned i = map[v-minVal];
     if(i >= size)
         return true;
-    if(size <= 1)
+    switch(size) {
+    case 0: case 1:
         return false;
-    if(size == 2)
+    case 2:
         return bind(domain[1-i]);
-    size--;
-    if(i != size) {
-        T v2 = domain[size];
-        domain[i] = v2;
-        domain[size] = v;
-        map[v2-minVal] = i;
-        map[v-minVal] = size;
+    default:
+        size--;
+        if(i != size) {
+            T v2 = domain[size];
+            domain[i] = v2;
+            domain[size] = v;
+            map[v2-minVal] = i;
+            map[v-minVal] = size;
+        }
+        // FIXME this may break the invariants
+        // e.g.: domain = [10 11 12], min=10, max=11; remove(10)
+        /*if(v == min) {
+            // TODO is this usefull?
+            min++; // not perfect bound
+            solver->enqueue(evMin);
+        }
+        if(v == max) {
+            // TODO is this usefull?
+            max--; // not perfect bound
+            solver->enqueue(evMax);
+        }*/
+        solver->enqueue(evChange);
+        assert(size > 1 || (min == max && min == getValue()));
+        assert(min < max || (size == 1 && min == getValue()));
+        return true;
     }
-    // FIXME this may break the invariants
-    // e.g.: domain = [10 11 12], min=10, max=11; remove(10)
-    /*if(v == min) {
-        // TODO is this usefull?
-        min++; // not perfect bound
-        solver->enqueue(evMin);
-    }
-    if(v == max) {
-        // TODO is this usefull?
-        max--; // not perfect bound
-        solver->enqueue(evMax);
-    }*/
-    solver->enqueue(evChange);
-    assert(size > 1 || (min == max && min == getValue()));
-    assert(min < max || (size == 1 && min == getValue()));
-    return true;
 }
 
 template<class T>
@@ -437,35 +440,39 @@ bool DiscreteVariable<T>::restrictToMarks() {
 template<class T>
 bool DiscreteVariable<T>::updateMin(T v) {
     clearMarks();
-    if(v <= min)
-        return true;
-    if(v > max)
+    if(v > max) {
         return false;
-    if(v == max)
+    } else if(v == max) {
         return bind(v);
-    min = v;
-    solver->enqueue(evChange);
-    solver->enqueue(evMin);
-    assert(size > 1 || (min == max && min == getValue()));
-    assert(min < max || (size == 1 && min == getValue()));
-    return true;
+    } else if(v > min) {
+        min = v;
+        solver->enqueue(evChange);
+        solver->enqueue(evMin);
+        assert(size > 1 || (min == max && min == getValue()));
+        assert(min < max || (size == 1 && min == getValue()));
+        return true;
+    } else {
+        return true;
+    }
 }
 
 template<class T>
 bool DiscreteVariable<T>::updateMax(T v) {
     clearMarks();
-    if(v >= max)
-        return true;
-    if(v < min)
+    if(v < min) {
         return false;
-    if(v == min)
+    } else if(v == min) {
         return bind(v);
-    max = v;
-    solver->enqueue(evChange);
-    solver->enqueue(evMax);
-    assert(size > 1 || (min == max && min == getValue()));
-    assert(min < max || (size == 1 && min == getValue()));
-    return true;
+    } else if(v < max) {
+        max = v;
+        solver->enqueue(evChange);
+        solver->enqueue(evMax);
+        assert(size > 1 || (min == max && min == getValue()));
+        assert(min < max || (size == 1 && min == getValue()));
+        return true;
+    } else {
+        return true;
+    }
 }
 
 template<class T>

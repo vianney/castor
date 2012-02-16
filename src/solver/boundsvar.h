@@ -210,30 +210,34 @@ bool BoundsVariable<T>::bind(T v) {
 
 template<class T>
 bool BoundsVariable<T>::updateMin(T v) {
-    if(v <= min)
-        return true;
-    if(v > max)
+    if(v > max) {
         return false;
-    if(v == max)
+    } else if(v == max) {
         return bind(v);
-    min = v;
-    size = max - min + 1;
-    solver->enqueue(evMin);
-    return true;
+    } else if(v > min) {
+        min = v;
+        size = max - min + 1;
+        solver->enqueue(evMin);
+        return true;
+    } else {
+        return true;
+    }
 }
 
 template<class T>
 bool BoundsVariable<T>::updateMax(T v) {
-    if(v >= max)
-        return true;
-    if(v < min)
+    if(v < min) {
         return false;
-    if(v == min)
+    } else if(v == min) {
         return bind(v);
-    max = v;
-    size = max - min + 1;
-    solver->enqueue(evMax);
-    return true;
+    } else if(v < max) {
+        max = v;
+        size = max - min + 1;
+        solver->enqueue(evMax);
+        return true;
+    } else {
+        return true;
+    }
 }
 
 }
