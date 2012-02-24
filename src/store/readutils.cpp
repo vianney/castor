@@ -23,9 +23,11 @@
 #include <unistd.h>
 #include <cassert>
 
+#include "../util.h"
+
 namespace castor {
 
-void Cursor::readValue(Value &val) {
+void Cursor::readValue(Value& val) {
     val.clean();
     val.id = readInt();
     skipInt(); // skip hash
@@ -34,9 +36,9 @@ void Cursor::readValue(Value &val) {
     val.type = static_cast<Value::Type>(typelen >> 16);
     typelen = typelen & 0xffff;
     val.lexicalLen = len - typelen - 1;
-    val.lexical = reinterpret_cast<const char*>(ptr + typelen);
+    val.lexical = reinterpret_cast<const char*>(ptr_ + typelen);
     if(val.type == Value::TYPE_CUSTOM) {
-        val.typeUri = reinterpret_cast<const char*>(ptr);
+        val.typeUri = reinterpret_cast<const char*>(ptr_);
         val.typeUriLen = typelen - 1;
         val.isInterpreted = true;
     } else {
@@ -45,7 +47,7 @@ void Cursor::readValue(Value &val) {
         val.typeUriLen = Value::TYPE_URIS_LEN[val.type];
         if(val.isPlain()) {
             if(typelen > 0) {
-                val.language = reinterpret_cast<const char*>(ptr);
+                val.language = reinterpret_cast<const char*>(ptr_);
                 val.languageLen = typelen - 1;
             } else {
                 val.language = nullptr;
@@ -56,27 +58,27 @@ void Cursor::readValue(Value &val) {
             val.isInterpreted = false;
         }
     }
-    ptr += len;
+    ptr_ += len;
 }
 
 
-MMapFile::MMapFile(const char *fileName) {
-    fd = open(fileName, O_RDONLY);
-    if(fd == -1)
-        throw "Unable to open file";
-    size_t size = lseek(fd, 0, SEEK_END);
+MMapFile::MMapFile(const char* fileName) {
+    fd_ = open(fileName, O_RDONLY);
+    if(fd_ == -1)
+        throw CastorException() << "Unable to open file " << fileName;
+    size_t size = lseek(fd_, 0, SEEK_END);
     if(size < 0)
-        throw "Unable to seek file";
-    pBegin = Cursor(static_cast<const unsigned char*>
-                        (mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0)));
-    if(pBegin.get() == MAP_FAILED)
-        throw "Unable to map file";
-    pEnd = pBegin + size;
+        throw CastorException() << "Unable to seek file " << fileName;
+    begin_ = Cursor(static_cast<const unsigned char*>
+                        (mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd_, 0)));
+    if(begin_.get() == MAP_FAILED)
+        throw CastorException() << "Unable to map file " << fileName;
+    end_ = begin_ + size;
 }
 
 MMapFile::~MMapFile() {
-    munmap(const_cast<unsigned char*>(pBegin.get()), pEnd - pBegin);
-    close(fd);
+    munmap(const_cast<unsigned char*>(begin_.get()), end_ - begin_);
+    close(fd_);
 }
 
 }

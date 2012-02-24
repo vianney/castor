@@ -29,17 +29,13 @@ namespace castor {
  *
  * The key class K must provide these members
  * - static const unsigned SIZE: the size in bytes of the key
- * - bool operator<(const K &o) const: comparator
+ * - bool operator<(const K& o) const: comparator
  * - static K read(Cursor cur): read a key
  */
 template <class K>
 class BTree {
-protected:
-    PageReader *db; //!< the database
-    unsigned rootPage; //!< the page containing the root of the tree
-
 public:
-    BTree(PageReader *db, unsigned rootPage) : db(db), rootPage(rootPage) {}
+    BTree(PageReader* db, unsigned rootPage) : db_(db), rootPage_(rootPage) {}
 
     /**
      * @param key a key
@@ -47,19 +43,24 @@ public:
      *         or 0 if not found
      */
     unsigned lookupLeaf(K key);
+
+protected:
+    PageReader* db_; //!< the database
+    unsigned rootPage_; //!< the page containing the root of the tree
 };
 
 /**
  * Key structure for hashed values
  */
 struct ValueHashKey {
-    uint32_t hash;
+    Hash::hash_t hash;
 
-    static const unsigned SIZE = 4;
+    static constexpr unsigned SIZE = 4;
 
-    ValueHashKey(uint32_t hash) : hash(hash) {}
+    ValueHashKey() = default;
+    ValueHashKey(Hash::hash_t hash) : hash(hash) {}
 
-    bool operator <(const ValueHashKey &o) const {
+    bool operator<(const ValueHashKey& o) const {
         return hash < o.hash;
     }
 
@@ -73,7 +74,7 @@ struct ValueHashKey {
  */
 class ValueHashTree : private BTree<ValueHashKey> {
 public:
-    ValueHashTree(PageReader *db, unsigned rootPage) : BTree(db, rootPage) {}
+    ValueHashTree(PageReader* db, unsigned rootPage) : BTree(db, rootPage) {}
 
     /**
      * Lookup a hash key
@@ -81,7 +82,7 @@ public:
      * @return pointer to the first (hash, page) entry with this hash
      *         (invalid pointer if not found)
      */
-    Cursor lookup(uint32_t hash);
+    Cursor lookup(Hash::hash_t hash);
 };
 
 
@@ -89,9 +90,9 @@ public:
 
 template<class K>
 unsigned BTree<K>::lookupLeaf(K key) {
-    unsigned page = rootPage;
+    unsigned page = rootPage_;
     while(true) {
-        Cursor pageCur = db->getPage(page);
+        Cursor pageCur = db_->page(page);
         if(pageCur.readInt() == 0xffffffff) {
             // inner node: perform binary search
             unsigned left = 0, right = pageCur.readInt();

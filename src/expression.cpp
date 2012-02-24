@@ -15,93 +15,84 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <cmath>
 #include "expression.h"
+
+#include <cmath>
+
+#include "util.h"
 #include "query.h"
 #include "constraints.h"
 
 namespace castor {
 
-UnaryExpression::UnaryExpression(Expression *arg) :
-        Expression(arg->getQuery()), arg(arg) {
-    vars = arg->getVars();
+UnaryExpression::UnaryExpression(Expression* arg) :
+        Expression(arg->query()), arg_(arg) {
+    vars_ = arg->variables();
+}
+UnaryExpression::UnaryExpression(UnaryExpression&& o) :
+        Expression(o.query()) {
+    arg_   = o.arg_;
+    o.arg_ = nullptr;
+    vars_  = o.vars_;
 }
 UnaryExpression::~UnaryExpression() {
-    if(arg != nullptr)
-        delete arg;
-}
-void UnaryExpression::deleteThisOnly() {
-    arg = nullptr;
-    delete this;
+    delete arg_;
 }
 
-BinaryExpression::BinaryExpression(Expression *arg1, Expression *arg2) :
-        Expression(arg1->getQuery()), arg1(arg1), arg2(arg2) {
-    vars = arg1->getVars();
-    vars += arg2->getVars();
+BinaryExpression::BinaryExpression(Expression* arg1, Expression* arg2) :
+        Expression(arg1->query()), arg1_(arg1), arg2_(arg2) {
+    vars_ = arg1->variables();
+    vars_ += arg2->variables();
+}
+BinaryExpression::BinaryExpression(BinaryExpression&& o) :
+        Expression(o.query()) {
+    arg1_   = o.arg1_;
+    arg2_   = o.arg2_;
+    o.arg1_ = nullptr;
+    o.arg2_ = nullptr;
+    vars_   = o.vars_;
 }
 BinaryExpression::~BinaryExpression() {
-    if(arg1 != nullptr)
-        delete arg1;
-    if(arg2 != nullptr)
-        delete arg2;
-}
-void BinaryExpression::deleteThisOnly() {
-    arg1 = nullptr;
-    arg2 = nullptr;
-    delete this;
+    delete arg1_;
+    delete arg2_;
 }
 
-ValueExpression::ValueExpression(Query *query, Value *value) :
-        Expression(query), value(value) {
+ValueExpression::ValueExpression(Query* query, Value* value) :
+        Expression(query), value_(value) {
     value->ensureInterpreted();
 }
 ValueExpression::~ValueExpression() {
-    delete value;
+    delete value_;
 }
 
-VariableExpression::VariableExpression(Variable *variable) :
-        Expression(variable->getQuery()), variable(variable) {
-    vars += variable;
+VariableExpression::VariableExpression(Variable* variable) :
+        Expression(variable->query()), variable_(variable) {
+    vars_ += variable;
 }
-BoundExpression::BoundExpression(Variable *variable) :
-        Expression(variable->getQuery()), variable(variable) {
-    vars += variable;
+BoundExpression::BoundExpression(Variable* variable) :
+        Expression(variable->query()), variable_(variable) {
+    vars_ += variable;
 }
 
-RegExExpression::RegExExpression(Expression *arg1, Expression *arg2,
-                                 Expression *arg3) :
-        Expression(arg1->getQuery()), arg1(arg1), arg2(arg2), arg3(arg3) {
-    vars = arg1->getVars();
-    vars += arg2->getVars();
-    vars += arg3->getVars();
+RegExExpression::RegExExpression(Expression* arg1, Expression* arg2,
+                                 Expression* arg3) :
+        Expression(arg1->query()), arg1_(arg1), arg2_(arg2), arg3_(arg3) {
+    vars_ = arg1->variables();
+    vars_ += arg2->variables();
+    vars_ += arg3->variables();
 }
 RegExExpression::~RegExExpression() {
-    if(arg1 != nullptr)
-        delete arg1;
-    if(arg2 != nullptr)
-        delete arg2;
-    if(arg3 != nullptr)
-        delete arg3;
-}
-void RegExExpression::deleteThisOnly() {
-    arg1 = nullptr;
-    arg2 = nullptr;
-    arg3 = nullptr;
-    delete this;
+    delete arg1_;
+    delete arg2_;
+    delete arg3_;
 }
 
-CastExpression::CastExpression(Value::Type destination, Expression *arg) :
-        Expression(arg->getQuery()), destination(destination), arg(arg) {
-    vars = arg->getVars();
+CastExpression::CastExpression(Value::Type target, Expression* arg) :
+        Expression(arg->query()), target_(target), arg_(arg) {
+    vars_ = arg->variables();
 }
 CastExpression::~CastExpression() {
-    if(arg != nullptr)
-        delete arg;
-}
-void CastExpression::deleteThisOnly() {
-    arg = nullptr;
-    delete this;
+    delete arg_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -109,10 +100,13 @@ void CastExpression::deleteThisOnly() {
 
 Expression* BangExpression::optimize() {
     UnaryExpression::optimize();
-    if(SameTermExpression *e = dynamic_cast<SameTermExpression*>(arg)) {
-        Expression *result = new DiffTermExpression(e->getLeft(), e->getRight());
-        arg->deleteThisOnly();
-        arg = nullptr;
+    if(SameTermExpression* e = dynamic_cast<SameTermExpression*>(arg_)) {
+        Expression* result = new DiffTermExpression(std::move(*e));
+        delete this;
+        return result;
+    }
+    if(DiffTermExpression* e = dynamic_cast<DiffTermExpression*>(arg_)) {
+        Expression* result = new SameTermExpression(std::move(*e));
         delete this;
         return result;
     }
@@ -123,7 +117,7 @@ Expression* BangExpression::optimize() {
 ////////////////////////////////////////////////////////////////////////////////
 // Evaluation functions
 
-int Expression::evaluateEBV(Value &buffer) {
+int Expression::evaluateEBV(Value& buffer) {
     if(!evaluate(buffer))
         return -1;
     buffer.ensureInterpreted();
@@ -132,7 +126,7 @@ int Expression::evaluateEBV(Value &buffer) {
     else if(buffer.isInteger())
         return buffer.integer ? 1 : 0;
     else if(buffer.isFloating())
-        return isnan(buffer.floating) || buffer.floating == .0 ? 0 : 1;
+        return std::isnan(buffer.floating) || buffer.floating == .0 ? 0 : 1;
     else if(buffer.isDecimal())
         return buffer.decimal->isZero() ? 0 : 1;
     else if(buffer.isPlain() || buffer.isXSDString())
@@ -141,35 +135,35 @@ int Expression::evaluateEBV(Value &buffer) {
         return -1;
 }
 
-bool ValueExpression::evaluate(Value &result) {
-    result.fillCopy(*value);
+bool ValueExpression::evaluate(Value& result) {
+    result.fillCopy(*value_, false); // shallow copy
     return true;
 }
 
-bool VariableExpression::evaluate(Value &result) {
-    Value::id_t valid = variable->getValueId();
+bool VariableExpression::evaluate(Value& result) {
+    Value::id_t valid = variable_->valueId();
     if(valid == 0)
         return false;
-    query->getStore()->fetchValue(valid, result);
+    query_->store()->fetch(valid, result);
     return true;
 }
 
-bool BangExpression::evaluate(Value &result) {
-    int ebv = arg->evaluateEBV(result);
+bool BangExpression::evaluate(Value& result) {
+    int ebv = arg_->evaluateEBV(result);
     if(ebv == -1)
         return false;
     result.fillBoolean(!ebv);
     return true;
 }
 
-bool UPlusExpression::evaluate(Value &result) {
-    if(!arg->evaluate(result) || !result.isNumeric())
+bool UPlusExpression::evaluate(Value& result) {
+    if(!arg_->evaluate(result) || !result.isNumeric())
         return false;
     return true;
 }
 
-bool UMinusExpression::evaluate(Value &result) {
-    if(!arg->evaluate(result))
+bool UMinusExpression::evaluate(Value& result) {
+    if(!arg_->evaluate(result))
         return false;
     result.ensureInterpreted();
     if(result.isInteger())
@@ -183,34 +177,34 @@ bool UMinusExpression::evaluate(Value &result) {
     return true;
 }
 
-bool BoundExpression::evaluate(Value &result) {
-    result.fillBoolean(variable->isBound());
+bool BoundExpression::evaluate(Value& result) {
+    result.fillBoolean(variable_->isBound());
     return true;
 }
 
-bool IsIRIExpression::evaluate(Value &result) {
-    if(!arg->evaluate(result))
+bool IsIriExpression::evaluate(Value& result) {
+    if(!arg_->evaluate(result))
         return false;
     result.fillBoolean(result.isIRI());
     return true;
 }
 
-bool IsBlankExpression::evaluate(Value &result) {
-    if(!arg->evaluate(result))
+bool IsBlankExpression::evaluate(Value& result) {
+    if(!arg_->evaluate(result))
         return false;
     result.fillBoolean(result.isBlank());
     return true;
 }
 
-bool IsLiteralExpression::evaluate(Value &result) {
-    if(!arg->evaluate(result))
+bool IsLiteralExpression::evaluate(Value& result) {
+    if(!arg_->evaluate(result))
         return false;
     result.fillBoolean(result.isLiteral());
     return true;
 }
 
-bool StrExpression::evaluate(Value &result) {
-    if(!arg->evaluate(result) || result.isBlank())
+bool StrExpression::evaluate(Value& result) {
+    if(!arg_->evaluate(result) || result.isBlank())
         return false;
     result.ensureLexical();
     bool freeLex = result.hasCleanFlag(Value::CLEAN_LEXICAL);
@@ -219,10 +213,10 @@ bool StrExpression::evaluate(Value &result) {
     return true;
 }
 
-bool LangExpression::evaluate(Value &result) {
-    if(!arg->evaluate(result) || !result.isPlain())
+bool LangExpression::evaluate(Value& result) {
+    if(!arg_->evaluate(result) || !result.isPlain())
         return false;
-    const char *lang = result.language;
+    const char* lang = result.language;
     if(lang == nullptr)
         lang = "";
     bool freeLex = result.hasCleanFlag(Value::CLEAN_DATA);
@@ -231,8 +225,8 @@ bool LangExpression::evaluate(Value &result) {
     return true;
 }
 
-bool DatatypeExpression::evaluate(Value &result) {
-    if(!arg->evaluate(result) || !result.isLiteral())
+bool DatatypeExpression::evaluate(Value& result) {
+    if(!arg_->evaluate(result) || !result.isLiteral())
         return false;
     if(result.isPlain()) {
         if(result.language != 0)
@@ -249,9 +243,9 @@ bool DatatypeExpression::evaluate(Value &result) {
     }
 }
 
-bool OrExpression::evaluate(Value &result) {
-    int left = arg1->evaluateEBV(result);
-    int right = arg2->evaluateEBV(result);
+bool OrExpression::evaluate(Value& result) {
+    int left = arg1_->evaluateEBV(result);
+    int right = arg2_->evaluateEBV(result);
     if(left == 1 || right == 1)
         result.fillBoolean(true);
     else if(left == 0 && right == 0)
@@ -261,9 +255,9 @@ bool OrExpression::evaluate(Value &result) {
     return true;
 }
 
-bool AndExpression::evaluate(Value &result) {
-    int left = arg1->evaluateEBV(result);
-    int right = arg2->evaluateEBV(result);
+bool AndExpression::evaluate(Value& result) {
+    int left = arg1_->evaluateEBV(result);
+    int right = arg2_->evaluateEBV(result);
     if(left == 0 || right == 0)
         result.fillBoolean(false);
     else if(left == 1 && right == 1)
@@ -273,9 +267,9 @@ bool AndExpression::evaluate(Value &result) {
     return true;
 }
 
-bool EqExpression::evaluate(Value &result) {
+bool EqExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
     result.ensureInterpreted();
     right.ensureInterpreted();
@@ -292,9 +286,9 @@ bool EqExpression::evaluate(Value &result) {
     return true;
 }
 
-bool NEqExpression::evaluate(Value &result) {
+bool NEqExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
     result.ensureInterpreted();
     right.ensureInterpreted();
@@ -311,9 +305,9 @@ bool NEqExpression::evaluate(Value &result) {
     return true;
 }
 
-bool LTExpression::evaluate(Value &result) {
+bool LTExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
     result.ensureInterpreted();
     right.ensureInterpreted();
@@ -327,9 +321,9 @@ bool LTExpression::evaluate(Value &result) {
     return true;
 }
 
-bool GTExpression::evaluate(Value &result) {
+bool GTExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
     result.ensureInterpreted();
     right.ensureInterpreted();
@@ -343,9 +337,9 @@ bool GTExpression::evaluate(Value &result) {
     return true;
 }
 
-bool LEExpression::evaluate(Value &result) {
+bool LEExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
     result.ensureInterpreted();
     right.ensureInterpreted();
@@ -359,9 +353,9 @@ bool LEExpression::evaluate(Value &result) {
     return true;
 }
 
-bool GEExpression::evaluate(Value &result) {
+bool GEExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
     result.ensureInterpreted();
     right.ensureInterpreted();
@@ -375,10 +369,10 @@ bool GEExpression::evaluate(Value &result) {
     return true;
 }
 
-bool StarExpression::evaluate(Value &result) {
+bool StarExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !result.isNumeric() ||
-       !arg2->evaluate(right) || !right.isNumeric())
+    if(!arg1_->evaluate(result) || !result.isNumeric() ||
+       !arg2_->evaluate(right) || !right.isNumeric())
         return false;
     Value::promoteNumericType(result, right);
     if(right.isInteger())
@@ -390,10 +384,10 @@ bool StarExpression::evaluate(Value &result) {
     return true;
 }
 
-bool SlashExpression::evaluate(Value &result) {
+bool SlashExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !result.isNumeric() ||
-       !arg2->evaluate(right) || !right.isNumeric())
+    if(!arg1_->evaluate(result) || !result.isNumeric() ||
+       !arg2_->evaluate(right) || !right.isNumeric())
         return false;
     Value::promoteNumericType(result, right);
     if(right.isInteger()) {
@@ -407,10 +401,10 @@ bool SlashExpression::evaluate(Value &result) {
     return true;
 }
 
-bool PlusExpression::evaluate(Value &result) {
+bool PlusExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !result.isNumeric() ||
-       !arg2->evaluate(right) || !right.isNumeric())
+    if(!arg1_->evaluate(result) || !result.isNumeric() ||
+       !arg2_->evaluate(right) || !right.isNumeric())
         return false;
     Value::promoteNumericType(result, right);
     if(right.isInteger())
@@ -422,10 +416,10 @@ bool PlusExpression::evaluate(Value &result) {
     return true;
 }
 
-bool MinusExpression::evaluate(Value &result) {
+bool MinusExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !result.isNumeric() ||
-       !arg2->evaluate(right) || !right.isNumeric())
+    if(!arg1_->evaluate(result) || !result.isNumeric() ||
+       !arg2_->evaluate(right) || !right.isNumeric())
         return false;
     Value::promoteNumericType(result, right);
     if(right.isInteger())
@@ -437,9 +431,9 @@ bool MinusExpression::evaluate(Value &result) {
     return true;
 }
 
-bool SameTermExpression::evaluate(Value &result) {
+bool SameTermExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
     result.ensureLexical();
     right.ensureLexical();
@@ -447,9 +441,9 @@ bool SameTermExpression::evaluate(Value &result) {
     return true;
 }
 
-bool DiffTermExpression::evaluate(Value &result) {
+bool DiffTermExpression::evaluate(Value& result) {
     Value right;
-    if(!arg1->evaluate(result) || !arg2->evaluate(right))
+    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
     result.ensureLexical();
     right.ensureLexical();
@@ -457,54 +451,54 @@ bool DiffTermExpression::evaluate(Value &result) {
     return true;
 }
 
-bool LangMatchesExpression::evaluate(Value &result) {
+bool LangMatchesExpression::evaluate(Value& result) {
     result.clean();
-    throw "unsupported";
+    throw CastorException() << "Unsupported operator: LANGMATCHES";
 }
 
-bool RegExExpression::evaluate(Value &result) {
+bool RegExExpression::evaluate(Value& result) {
     result.clean();
-    throw "unsupported";
+    throw CastorException() << "Unsupported operator: REGEX";
 }
 
-bool CastExpression::evaluate(Value &result) {
+bool CastExpression::evaluate(Value& result) {
     result.clean();
-    throw "unsupported";
+    throw CastorException() << "Unsupported operator: casting";
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Posting constraints
 
-void Expression::post(cp::Subtree &sub) {
-    sub.add(new FilterConstraint(query->getStore(), this));
+void Expression::post(cp::Subtree& sub) {
+    sub.add(new FilterConstraint(query_->store(), this));
 }
 
-void AndExpression::post(cp::Subtree &sub) {
-    arg1->post(sub);
-    arg2->post(sub);
+void AndExpression::post(cp::Subtree& sub) {
+    arg1_->post(sub);
+    arg2_->post(sub);
 }
 
-void EqualityExpression::post(cp::Subtree &sub) {
-    VariableExpression *var1 = dynamic_cast<VariableExpression*>(arg1);
-    VariableExpression *var2 = dynamic_cast<VariableExpression*>(arg2);
+void EqualityExpression::post(cp::Subtree& sub) {
+    VariableExpression* var1 = dynamic_cast<VariableExpression*>(arg1_);
+    VariableExpression* var2 = dynamic_cast<VariableExpression*>(arg2_);
     if(var1 && var2) {
-        cp::RDFVar *x1 = var1->getVariable()->getCPVariable();
-        cp::RDFVar *x2 = var2->getVariable()->getCPVariable();
+        cp::RDFVar* x1 = var1->variable()->cp();
+        cp::RDFVar* x2 = var2->variable()->cp();
         postVars(sub, x1, x2);
-    } else if(var1 && arg2->isConstant()) {
+    } else if(var1 && arg2_->isConstant()) {
         Value val;
-        if(arg2->evaluate(val)) {
-            cp::RDFVar *x = var1->getVariable()->getCPVariable();
-            query->getStore()->lookupId(val);
+        if(arg2_->evaluate(val)) {
+            cp::RDFVar* x = var1->variable()->cp();
+            query_->store()->lookup(val);
             postConst(sub, x, val);
         } else {
             sub.add(new FalseConstraint());
         }
-    } else if(var2 && arg1->isConstant()) {
+    } else if(var2 && arg1_->isConstant()) {
         Value val;
-        if(arg1->evaluate(val)) {
-            cp::RDFVar *x = var2->getVariable()->getCPVariable();
-            query->getStore()->lookupId(val);
+        if(arg1_->evaluate(val)) {
+            cp::RDFVar* x = var2->variable()->cp();
+            query_->store()->lookup(val);
             postConst(sub, x, val);
         } else {
             sub.add(new FalseConstraint());
@@ -513,40 +507,38 @@ void EqualityExpression::post(cp::Subtree &sub) {
         Expression::post(sub);
     }
 }
-void EqExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) {
-    sub.add(new VarEqConstraint(query->getStore(), x1, x2));
+void EqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
+    sub.add(new VarEqConstraint(query_->store(), x1, x2));
 }
-void EqExpression::postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v) {
-    sub.add(new InRangeConstraint(x, query->getStore()->getValueEqClass(v)));
+void EqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
+    sub.add(new InRangeConstraint(x, query_->store()->eqClass(v)));
 }
-void NEqExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) {
+void NEqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
     /* In class CUSTOM, either two values are equal (and thus return false) or
      * the comparison produces a type error (making the constraint false).
      */
     sub.add(new NotInRangeConstraint(x1,
-                    query->getStore()->getClassValues(Value::CLASS_OTHER)));
+                    query_->store()->range(Value::CAT_OTHER)));
     sub.add(new NotInRangeConstraint(x2,
-                    query->getStore()->getClassValues(Value::CLASS_OTHER)));
-    sub.add(new VarDiffConstraint(query->getStore(), x1, x2));
+                    query_->store()->range(Value::CAT_OTHER)));
+    sub.add(new VarDiffConstraint(query_->store(), x1, x2));
 }
-void NEqExpression::postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v) {
+void NEqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
     if(v.isLiteral() && v.type != Value::TYPE_CUSTOM) {
-        ValueRange ranges[2] =
-            { query->getStore()->getClassValues(Value::CLASS_BLANK,
-                                                Value::CLASS_IRI),
-              query->getStore()->getClassValues(v.getClass()) };
-        sub.add(new InRangesConstraint(x, ranges, 2));
+        sub.add(new InRangesConstraint(x,
+            { query_->store()->range(Value::CAT_BLANK, Value::CAT_IRI),
+              query_->store()->range(v.category()) }));
     } else {
         sub.add(new InRangeConstraint(x,
-                        query->getStore()->getClassValues(Value::CLASS_BLANK,
-                                                          Value::CLASS_IRI)));
+                        query_->store()->range(Value::CAT_BLANK,
+                                                          Value::CAT_IRI)));
     }
-    sub.add(new NotInRangeConstraint(x, query->getStore()->getValueEqClass(v)));
+    sub.add(new NotInRangeConstraint(x, query_->store()->eqClass(v)));
 }
-void SameTermExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) {
+void SameTermExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
     sub.add(new VarSameTermConstraint(x1, x2));
 }
-void SameTermExpression::postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v) {
+void SameTermExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
     if(v.id == 0) {
         sub.add(new FalseConstraint());
     } else {
@@ -554,44 +546,44 @@ void SameTermExpression::postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v) {
         sub.add(new InRangeConstraint(x, rng));
     }
 }
-void DiffTermExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) {
+void DiffTermExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
     sub.add(new VarDiffTermConstraint(x1, x2));
 }
-void DiffTermExpression::postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v) {
+void DiffTermExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
     if(v.id != 0) {
         ValueRange rng = {v.id, v.id};
         sub.add(new NotInRangeConstraint(x, rng));
     }
 }
 
-void InequalityExpression::post(cp::Subtree &sub) {
-    VariableExpression *var1 = dynamic_cast<VariableExpression*>(arg1);
-    VariableExpression *var2 = dynamic_cast<VariableExpression*>(arg2);
+void InequalityExpression::post(cp::Subtree& sub) {
+    VariableExpression* var1 = dynamic_cast<VariableExpression*>(arg1_);
+    VariableExpression* var2 = dynamic_cast<VariableExpression*>(arg2_);
     if(var1 && var2) {
-        cp::RDFVar *x1 = var1->getVariable()->getCPVariable();
-        cp::RDFVar *x2 = var2->getVariable()->getCPVariable();
-        sub.add(new ComparableConstraint(query->getStore(), x1));
-        sub.add(new ComparableConstraint(query->getStore(), x2));
-        sub.add(new SameClassConstraint(query->getStore(), x1, x2));
+        cp::RDFVar* x1 = var1->variable()->cp();
+        cp::RDFVar* x2 = var2->variable()->cp();
+        sub.add(new ComparableConstraint(query_->store(), x1));
+        sub.add(new ComparableConstraint(query_->store(), x2));
+        sub.add(new SameClassConstraint(query_->store(), x1, x2));
         postVars(sub, x1, x2);
-    } else if(var1 && arg2->isConstant()) {
+    } else if(var1 && arg2_->isConstant()) {
         Value val;
-        if(arg2->evaluate(val) && val.isComparable()) {
-            cp::RDFVar *x = var1->getVariable()->getCPVariable();
-            query->getStore()->lookupId(val);
+        if(arg2_->evaluate(val) && val.isComparable()) {
+            cp::RDFVar* x = var1->variable()->cp();
+            query_->store()->lookup(val);
             sub.add(new InRangeConstraint(x,
-                        query->getStore()->getClassValues(val.getClass())));
+                        query_->store()->range(val.category())));
             postConst(sub, x, val);
         } else {
             sub.add(new FalseConstraint());
         }
-    } else if(var2 && arg1->isConstant()) {
+    } else if(var2 && arg1_->isConstant()) {
         Value val;
-        if(arg1->evaluate(val) && val.isComparable()) {
-            cp::RDFVar *x = var2->getVariable()->getCPVariable();
-            query->getStore()->lookupId(val);
+        if(arg1_->evaluate(val) && val.isComparable()) {
+            cp::RDFVar* x = var2->variable()->cp();
+            query_->store()->lookup(val);
             sub.add(new InRangeConstraint(x,
-                        query->getStore()->getClassValues(val.getClass())));
+                        query_->store()->range(val.category())));
             postConst(sub, val, x);
         } else {
             sub.add(new FalseConstraint());
@@ -600,55 +592,55 @@ void InequalityExpression::post(cp::Subtree &sub) {
         Expression::post(sub);
     }
 }
-void LTExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) {
-    sub.add(new VarLessConstraint(query->getStore(), x1, x2, false));
+void LTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
+    sub.add(new VarLessConstraint(query_->store(), x1, x2, false));
 }
-void LTExpression::postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2) {
+void LTExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
     sub.add(new ConstLEConstraint(x1,
-                        query->getStore()->getValueEqClass(v2).from - 1));
+                        query_->store()->eqClass(v2).from - 1));
 }
-void LTExpression::postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2) {
+void LTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
     sub.add(new ConstGEConstraint(x2,
-                        query->getStore()->getValueEqClass(v1).to + 1));
+                        query_->store()->eqClass(v1).to + 1));
 }
 
 
-void GTExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) {
-    sub.add(new VarLessConstraint(query->getStore(), x2, x1, false));
+void GTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
+    sub.add(new VarLessConstraint(query_->store(), x2, x1, false));
 }
-void GTExpression::postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2) {
+void GTExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
     sub.add(new ConstGEConstraint(x1,
-                        query->getStore()->getValueEqClass(v2).to + 1));
+                        query_->store()->eqClass(v2).to + 1));
 }
-void GTExpression::postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2) {
+void GTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
     sub.add(new ConstLEConstraint(x2,
-                        query->getStore()->getValueEqClass(v1).from - 1));
+                        query_->store()->eqClass(v1).from - 1));
 }
 
 
-void LEExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) {
-    sub.add(new VarLessConstraint(query->getStore(), x1, x2, true));
+void LEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
+    sub.add(new VarLessConstraint(query_->store(), x1, x2, true));
 }
-void LEExpression::postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2) {
+void LEExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
     sub.add(new ConstLEConstraint(x1,
-                        query->getStore()->getValueEqClass(v2).to));
+                        query_->store()->eqClass(v2).to));
 }
-void LEExpression::postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2) {
+void LEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
     sub.add(new ConstGEConstraint(x2,
-                        query->getStore()->getValueEqClass(v1).from));
+                        query_->store()->eqClass(v1).from));
 }
 
 
-void GEExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2) {
-    sub.add(new VarLessConstraint(query->getStore(), x2, x1, true));
+void GEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
+    sub.add(new VarLessConstraint(query_->store(), x2, x1, true));
 }
-void GEExpression::postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2) {
+void GEExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
     sub.add(new ConstGEConstraint(x1,
-                        query->getStore()->getValueEqClass(v2).from));
+                        query_->store()->eqClass(v2).from));
 }
-void GEExpression::postConst(cp::Subtree &sub, Value &v1, cp::RDFVar *x2) {
+void GEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
     sub.add(new ConstLEConstraint(x2,
-                        query->getStore()->getValueEqClass(v1).to));
+                        query_->store()->eqClass(v1).to));
 }
 
 }

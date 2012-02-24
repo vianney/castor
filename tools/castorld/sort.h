@@ -28,7 +28,7 @@ public:
     /**
      * Sort a file
      */
-    static void sort(TempFile &in, TempFile &out,
+    static void sort(TempFile& in, TempFile& out,
                      void (*skip)(Cursor&),
                      int (*compare)(Cursor, Cursor),
                      bool eliminateDuplicates = false);

@@ -15,8 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <cstdlib>
 #include "subtree.h"
+
+#include <cstdlib>
+
+#include "../util.h"
 
 namespace castor {
 namespace cp {
@@ -28,110 +31,112 @@ struct Checkpoint {
     /**
      * Checkpoint data of all the variables stored sequentially.
      */
-    char *varsData;
+    char* data;
     /**
      * Timestamp of static constraints
      */
-    int timestamp;
+    Constraint::timestamp_t timestamp;
     /**
      * Variable that is being labeled.
      */
-    Variable *x;
+    Variable* x;
 
     ~Checkpoint() {
-        delete [] varsData;
+        delete [] data;
     }
 };
 
-Subtree::Subtree(Solver *solver) : solver(solver) {
-    nbDecision = 0;
-    trail = nullptr;
-    active = false;
+Subtree::Subtree(Solver* solver) : solver_(solver) {
+    nbDecision_ = 0;
+    trail_ = nullptr;
+    active_ = false;
 }
 
 Subtree::~Subtree() {
     // delete constraints
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
-        p <= Constraint::PRIOR_LAST; ++p)
-        for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
-            end = constraints[p].end(); it != end; ++it)
-            delete *it;
+        p <= Constraint::PRIOR_LAST; ++p) {
+        for(Constraint* c : constraints_[p])
+            delete c;
+    }
     // delete trail
-    delete [] trail;
+    delete [] trail_;
 }
 
-void Subtree::add(Variable *x, bool label) {
+void Subtree::add(Variable* x, bool label) {
     if(label)
-        vars.insert(vars.begin() + nbDecision++, x);
+        vars_.insert(vars_.begin() + nbDecision_++, x);
     else
-        vars.push_back(x);
+        vars_.push_back(x);
 }
 
-void Subtree::add(Constraint *c) {
-    c->solver = solver;
-    c->parent = this;
-    constraints[c->getPriority()].push_back(c);
+void Subtree::add(Constraint* c) {
+    c->solver_ = solver_;
+    c->parent_ = this;
+    constraints_[c->priority()].push_back(c);
 }
 
 void Subtree::activate() {
     if(isActive())
-        throw "Cannot activate active subtree.";
-    if(trail == nullptr) {
+        throw CastorException() << "Cannot activate active subtree.";
+    if(trail_ == nullptr) {
         // First activiation, allocate trail
         std::size_t size = 0;
-        for(Variable *x : vars)
-            size += x->getTrailSize();
+        for(Variable* x : vars_)
+            size += x->trailSize();
         // The depth of the subtree is at most vars.size(), +1 for the root
         // checkpoint.
-        trail = new Checkpoint[vars.size() + 1];
-        for(unsigned i = 0; i <= vars.size(); i++)
-            trail[i].varsData = new char[size];
+        trail_ = new Checkpoint[vars_.size() + 1];
+        for(unsigned i = 0; i <= vars_.size(); i++)
+            trail_[i].data = new char[size];
     }
-    active = true;
-    previous = solver->current;
-    solver->statSubtrees++;
-    trailIndex = -1;
+    active_ = true;
+    previous_ = solver_->current_;
+    solver_->statSubtrees_++;
+    trailIndex_ = -1;
     checkpoint(nullptr);
-    solver->current = nullptr;
-    if(solver->tsCurrent < solver->tsLastConstraint)
-        inconsistent = !solver->postStatic();
+    solver_->current_ = nullptr;
+    if(solver_->tsCurrent_ < solver_->tsLastConstraint_)
+        inconsistent_ = !solver_->postStatic();
     else
-        inconsistent = false;
-    solver->current = this;
-    inconsistent = inconsistent || !solver->post(constraints);
-    started = false;
+        inconsistent_ = false;
+    solver_->current_ = this;
+    inconsistent_ = inconsistent_ || !solver_->post(constraints_);
+    started_ = false;
 }
 
 void Subtree::discard() {
     if(!isCurrent())
-        throw "Only current active subtree can be discarded.";
-    if(trailIndex >= 0) {
+        throw CastorException()
+            << "Only current active subtree can be discarded.";
+    if(trailIndex_ >= 0) {
         // backtrack root checkpoint
-        trailIndex = 0;
+        trailIndex_ = 0;
         backtrack();
     }
-    solver->current = previous;
-    active = false;
+    solver_->current_ = previous_;
+    active_ = false;
 }
 
 bool Subtree::search() {
     if(!isCurrent())
-        throw "Only current active subtree can be searched.";
+        throw CastorException()
+            << "Only current active subtree can be searched.";
 
-    if(inconsistent) {
+    if(inconsistent_) {
         discard();
         return false;
     }
 
-    Variable *x = nullptr;
-    if(started) { // the search has started, try to backtrack
+    Variable* x = nullptr;
+    if(started_) { // the search has started, try to backtrack
         x = backtrack();
         if(!x) {
             discard();
             return false;
         }
     } else {
-        started = true;
+        started_ = true;
     }
     while(true) {
         // search for a variable to bind if needed
@@ -139,9 +144,9 @@ bool Subtree::search() {
             // find unbound variable with smallest domain
             x = nullptr;
             unsigned sx;
-            for(int i = 0; i < nbDecision; i++) {
-                Variable *y = vars[i];
-                unsigned sy = y->getSize();
+            for(int i = 0; i < nbDecision_; i++) {
+                Variable* y = vars_[i];
+                unsigned sy = y->size();
                 if(sy > 1 && (!x || sy < sx)) {
                     x = y;
                     sx = sy;
@@ -154,7 +159,7 @@ bool Subtree::search() {
         // Make a checkpoint and assign a value to the selected variable
         checkpoint(x);
         x->select();
-        if(!solver->propagate()) {
+        if(!solver_->propagate()) {
             x = backtrack();
             if(!x) {
                 discard();
@@ -164,52 +169,44 @@ bool Subtree::search() {
     }
 }
 
-void Subtree::checkpoint(Variable *x) {
-    Checkpoint *chkp = &trail[++trailIndex];
-    char *varsData = chkp->varsData;
-    for(Variable *y : vars) {
-        y->checkpoint(varsData);
-        varsData += y->getTrailSize();
+void Subtree::checkpoint(Variable* x) {
+    Checkpoint* chkp = &trail_[++trailIndex_];
+    char* data = chkp->data;
+    for(Variable* y : vars_) {
+        y->checkpoint(data);
+        data += y->trailSize();
     }
-    chkp->timestamp = solver->tsCurrent;
+    chkp->timestamp = solver_->tsCurrent_;
     chkp->x = x;
 }
 
-/**
- * Call the restore for every constraint.
- *
- * @param constraints the list of constraints to restore
- */
-inline void fireRestore(std::vector<Constraint*> &constraints) {
-    for(std::vector<Constraint*>::iterator it = constraints.begin(),
-        end = constraints.end(); it != end; ++it)
-        (*it)->restore();
-}
-
 Variable* Subtree::backtrack() {
-    solver->statBacktracks++;
-    if(trailIndex < 0)
+    solver_->statBacktracks_++;
+    if(trailIndex_ < 0)
         return nullptr;
     // restore domains
-    Checkpoint *chkp = &trail[trailIndex--];
-    char *varsData = chkp->varsData;
-    for(Variable *x : vars) {
-        x->restore(varsData);
-        varsData += x->getTrailSize();
+    Checkpoint* chkp = &trail_[trailIndex_--];
+    char* data = chkp->data;
+    for(Variable* x : vars_) {
+        x->restore(data);
+        data += x->trailSize();
     }
-    solver->tsCurrent = chkp->timestamp;
+    solver_->tsCurrent_ = chkp->timestamp;
     // clear propagation queue
-    solver->clearQueue();
+    solver_->clearQueue();
     if(chkp->x) {
+        // restore constraints
         for(Constraint::Priority p = Constraint::PRIOR_FIRST;
-            p <= Constraint::PRIOR_LAST; ++p)
-            fireRestore(constraints[p]);
+            p <= Constraint::PRIOR_LAST; ++p) {
+            for(Constraint* c : constraints_[p])
+                c->restore();
+        }
         // remove old (failed) choice
         chkp->x->unselect();
-        if(solver->tsCurrent < solver->tsLastConstraint &&
-           !solver->postStatic())
+        if(solver_->tsCurrent_ < solver_->tsLastConstraint_ &&
+           !solver_->postStatic())
             return backtrack();
-        if(!solver->propagate())
+        if(!solver_->propagate())
             return backtrack();
     }
     return chkp->x;

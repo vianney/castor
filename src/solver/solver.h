@@ -19,6 +19,7 @@
 #define CASTOR_CP_SOLVER_H
 
 #include <vector>
+
 #include "config.h"
 #include "constraint.h"
 
@@ -39,13 +40,17 @@ public:
 
     MOCKABLE ~Solver();
 
+    //! Non-copyable
+    Solver(const Solver&) = delete;
+    Solver& operator=(const Solver&) = delete;
+
     /**
      * Adds a static constraint.
      * The solver takes ownership of the constraint.
      *
      * @param c the constraint
      */
-    MOCKABLE void add(Constraint *c);
+    MOCKABLE void add(Constraint* c);
 
     /**
      * Indicates a static constraint has been updated and should be
@@ -53,7 +58,7 @@ public:
      *
      * @param c the constraint
      */
-    MOCKABLE void refresh(Constraint *c);
+    MOCKABLE void refresh(Constraint* c);
 
     /**
      * Enqueue constraints for propagation. Only variable should call this
@@ -61,29 +66,24 @@ public:
      *
      * @param constraints the list of constraints
      */
-    MOCKABLE void enqueue(std::vector<Constraint*> &constraints);
-
-    /**
-     * @return the current subtree
-     */
-    Subtree* getCurrent() { return current; }
+    MOCKABLE void enqueue(std::vector<Constraint*>& constraints_);
 
     /**
      * @return the number of backtracks so far
      */
-    int getStatBacktracks() { return statBacktracks; }
+    int statBacktracks() const { return statBacktracks_; }
     /**
      * @return the number of subtree activations so far
      */
-    int getStatSubtrees() { return statSubtrees; }
+    int statSubtrees()   const { return statSubtrees_;   }
     /**
      * @return number of times a constraint's post method has been called
      */
-    int getStatPost() { return statPost; }
+    int statPost()       const { return statPost_;       }
     /**
      * @return number of times a constraint's propagate method has been called
      */
-    int getStatPropagate() { return statPropagate; }
+    int statPropagate()  const { return statPropagate_;  }
 
 private: // for subtree
     /**
@@ -100,7 +100,7 @@ private: // for subtree
      * @param array of constraint lists by priority
      * @return false if there is a failure, true otherwise
      */
-    MOCKABLE bool post(std::vector<Constraint*> *constraints);
+    MOCKABLE bool post(std::vector<Constraint*>* constraints);
 
     /**
      * Perform propagation of the constraints in the queue. After this call,
@@ -118,53 +118,67 @@ private: // for subtree
 
 private:
     /**
+     * Dummy non-null pointer to indicate a constraint is not currently queued
+     * for propagation.
+     * This value is used in the nextPropag field of Constraint. We use the
+     * address of the solver object, so we are sure no Constraint object will
+     * have this address.
+     *
+     * @return a dummy non-null pointer to a non-existing Constraint
+     */
+    Constraint* unqueued() {
+        return reinterpret_cast<Constraint*>(this);
+    }
+
+    /**
      * Propagation stack (linked list using nextPropag field)
      */
-    Constraint *propagQueue[Constraint::PRIOR_COUNT];
+    Constraint* propagQueue_[Constraint::PRIOR_COUNT];
 
     /**
      * Current active subtree.
      */
-    Subtree *current;
+    Subtree* current_;
 
     /**
      * Static constraints.
      */
-    std::vector<Constraint*> constraints;
+    std::vector<Constraint*> constraints_;
 
     /**
-     * Timestamps for static constraints.
-     * tsLastConstraint is the timestamp of the latest added/refreshed
-     * constraint. tsCurrent represents the current state of the domains.
+     * Timestamp of the current state of the domains (used for static
+     * constraints).
      */
-    int tsCurrent, tsLastConstraint;
+    Constraint::timestamp_t tsCurrent_;
+    /**
+     * Timestamp of the latest added/refreshed static constraint.
+     */
+    Constraint::timestamp_t tsLastConstraint_;
 
     /**
      * Number of backtracks so far
      */
-    int statBacktracks;
+    int statBacktracks_;
 
     /**
      * Number of subtree activiations so far
      */
-    int statSubtrees;
+    int statSubtrees_;
 
     /**
      * Number of times a constraint's post method has been called
      */
-    int statPost;
+    int statPost_;
 
     /**
      * Number of times a constraint's propagate method has been called
      */
-    int statPropagate;
+    int statPropagate_;
 
     friend class Subtree;
 };
 
 }
 }
-
-#include "subtree.h"
 
 #endif // CASTOR_CP_SOLVER_H

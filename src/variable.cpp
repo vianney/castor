@@ -16,106 +16,91 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "variable.h"
+
 #include "query.h"
 
 namespace castor {
 
-void Variable::setValueFromCP() {
-    if(var->contains(0))
-        setValueId(0);
-    else
-        setValueId(var->getValue());
+Variable::Variable(Query* query, unsigned id, const char* name) :
+    query_(query), id_(id), name_(name),
+    var_(query->solver(), 0, query->store()->valuesCount()), val_(0) {
 }
 
-std::ostream& operator<<(std::ostream &out, const Variable &v) {
-    out << "?" << v.getName() << "_" << v.getId();
+void Variable::setFromCP() {
+    if(var_.contains(0))
+        valueId(0);
+    else
+        valueId(var_.value());
+}
+
+std::ostream& operator<<(std::ostream& out, const Variable& v) {
+    out << "?" << v.name() << "_" << v.id();
     return out;
 }
 
-std::ostream& operator<<(std::ostream &out, const VarVal &v) {
+std::ostream& operator<<(std::ostream& out, const VarVal& v) {
     if(v.isVariable())
-        out << "?" << v.getVariableId();
+        out << "?" << v.variableId();
     else
-        out << ":" << v.getValueId();
+        out << ":" << v.valueId();
     return out;
 }
 
-void VariableSet::_init(unsigned capacity) {
+void VariableSet::initialize(unsigned capacity) {
     // TODO refactor this with C++11
-    this->capacity = capacity;
-    vars = new Variable*[capacity];
-    varMap = new bool[capacity];
-    memset(varMap, 0, capacity * sizeof(bool));
-    size = 0;
-    cpvars = nullptr;
+    capacity_ = capacity;
+    vars_ = new Variable*[capacity];
+    map_ = new bool[capacity];
+    memset(map_, 0, capacity * sizeof(bool));
+    size_ = 0;
 }
 
-VariableSet::VariableSet(Query *query) {
-    _init(query->getVariablesCount());
+VariableSet::VariableSet(Query* query) {
+    initialize(query->variables().size());
 }
 
-VariableSet::VariableSet(const VariableSet &o) {
-    capacity = o.capacity;
-    vars = new Variable*[capacity];
-    memcpy(vars, o.vars, capacity * sizeof(Variable*));
-    varMap = new bool[capacity];
-    memcpy(varMap, o.varMap, capacity * sizeof(bool));
-    size = o.size;
-    cpvars = nullptr;
+VariableSet::VariableSet(const VariableSet& o) {
+    capacity_ = o.capacity_;
+    size_ = o.size_;
+    vars_ = new Variable*[capacity_];
+    memcpy(vars_, o.vars_, size_ * sizeof(Variable*));
+    map_ = new bool[capacity_];
+    memcpy(map_, o.map_, capacity_ * sizeof(bool));
 }
 
 VariableSet::~VariableSet() {
-    delete [] vars;
-    delete [] varMap;
-    if(cpvars)
-        delete [] cpvars;
+    delete [] vars_;
+    delete [] map_;
 }
 
-VariableSet& VariableSet::operator =(const VariableSet &o) {
-    memcpy(vars, o.vars, capacity * sizeof(Variable*));
-    memcpy(varMap, o.varMap, capacity * sizeof(bool));
-    size = o.size;
-    if(cpvars) {
-        delete [] cpvars;
-        cpvars = nullptr;
+VariableSet& VariableSet::operator=(const VariableSet& o) {
+    memcpy(vars_, o.vars_, capacity_ * sizeof(Variable*));
+    memcpy(map_, o.map_, capacity_ * sizeof(bool));
+    size_ = o.size_;
+    return *this;
+}
+
+VariableSet& VariableSet::operator+=(Variable* v) {
+    if(!map_[v->id()]) {
+        vars_[size_++] = v;
+        map_[v->id()] = true;
     }
     return *this;
 }
 
-VariableSet& VariableSet::operator+=(Variable *v) {
-    if(!varMap[v->getId()]) {
-        vars[size++] = v;
-        varMap[v->getId()] = true;
-        if(cpvars) {
-            delete [] cpvars;
-            cpvars = nullptr;
-        }
-    }
+VariableSet& VariableSet::operator+=(const VariableSet& o) {
+    for(unsigned i = 0; i < o.size_; i++)
+        *this += o.vars_[i];
     return *this;
 }
 
-VariableSet& VariableSet::operator+=(const VariableSet &o) {
-    for(unsigned i = 0; i < o.size; i++)
-        *this += o.vars[i];
-    return *this;
-}
-
-VariableSet VariableSet::operator*(const VariableSet &o) const {
-    VariableSet result(capacity);
-    for(unsigned i = 0; i < size; i++) {
-        if(o.contains(vars[i]))
-            result += vars[i];
+VariableSet VariableSet::operator*(const VariableSet& o) const {
+    VariableSet result(capacity_);
+    for(unsigned i = 0; i < size_; i++) {
+        if(o.contains(vars_[i]))
+            result += vars_[i];
     }
     return result;
-}
-
-cp::RDFVar** VariableSet::getCPVars() {
-    if(!cpvars) {
-        cpvars = new cp::RDFVar*[size];
-        for(unsigned i = 0; i < size; i++)
-            cpvars[i] = vars[i]->getCPVariable();
-    }
-    return cpvars;
 }
 
 }

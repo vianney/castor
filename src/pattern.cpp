@@ -16,63 +16,63 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "pattern.h"
+
 #include "query.h"
 #include "constraints.h"
 
 namespace castor {
 
-std::ostream& operator<<(std::ostream &out, const Pattern &p) {
+std::ostream& operator<<(std::ostream& out, const Pattern& p) {
     p.print(out);
     return out;
 }
 
-BasicPattern::BasicPattern(Query *query) :
-    Pattern(query), sub(query->getSolver()) {}
+BasicPattern::BasicPattern(Query* query) :
+    Pattern(query), sub_(query->solver()) {}
 
-void BasicPattern::add(const TriplePattern &triple) {
-    triples.push_back(triple);
-    for(int i = 0; i < triple.COMPONENTS; i++) {
-        if(triple[i].isVariable()) {
-            vars += query->getVariable(triple[i].getVariableId());
-            cvars += query->getVariable(triple[i].getVariableId());
+void BasicPattern::add(const TriplePattern& triple) {
+    triples_.push_back(triple);
+    for(VarVal v : triple) {
+        if(v.isVariable()) {
+            Variable* x = query_->variable(v);
+            vars_ += x;
+            cvars_ += x;
         }
     }
 }
 
 void BasicPattern::init() {
-    for(Variable* x : vars) {
-        sub.add(x->getCPVariable(), true);
-        sub.add(new BoundConstraint(x->getCPVariable()));
+    for(Variable* x : vars_) {
+        sub_.add(x->cp(), true);
+        sub_.add(new BoundConstraint(x->cp()));
     }
-    for(TriplePattern &t : triples)
-        sub.add(new TripleConstraint(query, t));
+    for(TriplePattern& t : triples_)
+        sub_.add(new TripleConstraint(query_, t));
 }
 
 bool BasicPattern::next() {
-    if(!sub.isActive())
-        sub.activate();
-    else if(!sub.isCurrent())
+    if(!sub_.isActive())
+        sub_.activate();
+    else if(!sub_.isCurrent())
         return true; // another BGP is posted further down
-    return sub.search();
+    return sub_.search();
 }
 
 void BasicPattern::discard() {
-    if(sub.isActive())
-        sub.discard();
+    if(sub_.isActive())
+        sub_.discard();
 }
 
-FilterPattern::FilterPattern(Pattern *subpattern, Expression *condition) :
-        Pattern(subpattern->getQuery()),
-        subpattern(subpattern), condition(condition) {
-    vars = subpattern->getVars();
-    cvars = subpattern->getCVars();
+FilterPattern::FilterPattern(Pattern* subpattern, Expression* condition) :
+        Pattern(subpattern->query()),
+        subpattern_(subpattern), condition_(condition) {
+    vars_ = subpattern->variables();
+    cvars_ = subpattern->certainVars();
 }
 
 FilterPattern::~FilterPattern() {
-    if(subpattern)
-        delete subpattern;
-    if(condition)
-        delete condition;
+    delete subpattern_;
+    delete condition_;
 }
 
 /**
@@ -81,26 +81,23 @@ FilterPattern::~FilterPattern() {
  * @return true if expr is of the form !BOUND(?x) where ?x in right and
  *         not in left
  */
-bool isNotBound(Expression *expr, LeftJoinPattern *pat) {
+bool isNotBound(Expression* expr, LeftJoinPattern* pat) {
 // TODO recursive check + handle other parts of the condition
-    if(BangExpression *bang = dynamic_cast<BangExpression*>(expr)) {
-        if(BoundExpression *bound =
-                dynamic_cast<BoundExpression*>(bang->getArgument())) {
-            return pat->getRight()->getCVars().contains(bound->getVariable()) &&
-                    !pat->getLeft()->getVars().contains(bound->getVariable());
+    if(BangExpression* bang = dynamic_cast<BangExpression*>(expr)) {
+        if(BoundExpression* bound =
+                    dynamic_cast<BoundExpression*>(bang->argument())) {
+            return pat->right()->certainVars().contains(bound->variable()) &&
+                  !pat->left() ->variables()  .contains(bound->variable());
         }
     }
     return false;
 }
 
 Pattern* FilterPattern::optimize() {
-    subpattern = subpattern->optimize();
-    LeftJoinPattern *subpat = dynamic_cast<LeftJoinPattern*>(subpattern);
-    if(subpat && isNotBound(condition, subpat)) {
-        DiffPattern *pat = new DiffPattern(subpat->getLeft(),
-                                           subpat->getRight());
-        subpat->deleteThisOnly();
-        subpattern = nullptr;
+    subpattern_ = subpattern_->optimize();
+    LeftJoinPattern* subpat = dynamic_cast<LeftJoinPattern*>(subpattern_);
+    if(subpat && isNotBound(condition_, subpat)) {
+        DiffPattern* pat = new DiffPattern(std::move(*subpat));
         delete this;
         return pat;
     }
@@ -108,19 +105,19 @@ Pattern* FilterPattern::optimize() {
 }
 
 void FilterPattern::init() {
-    subpattern->init();
-    if(BasicPattern *subpat = dynamic_cast<BasicPattern*>(subpattern))
-        condition->post(subpat->sub);
+    subpattern_->init();
+    if(BasicPattern* subpat = dynamic_cast<BasicPattern*>(subpattern_))
+        condition_->post(subpat->sub_);
 }
 
 bool FilterPattern::next() {
-    if(dynamic_cast<BasicPattern*>(subpattern)) {
-        return subpattern->next();
+    if(dynamic_cast<BasicPattern*>(subpattern_)) {
+        return subpattern_->next();
     } else {
-        while(subpattern->next()) {
-            for(Variable* x : condition->getVars())
-                x->setValueFromCP();
-            if(condition->isTrue())
+        while(subpattern_->next()) {
+            for(Variable* x : condition_->variables())
+                x->setFromCP();
+            if(condition_->isTrue())
                 return true;
         }
         return false;
@@ -128,84 +125,93 @@ bool FilterPattern::next() {
 }
 
 void FilterPattern::discard() {
-    subpattern->discard();
+    subpattern_->discard();
+}
+
+CompoundPattern::CompoundPattern(Pattern* left, Pattern* right) :
+        Pattern(left->query()), left_(left), right_(right) {
+    initialize();
+}
+
+CompoundPattern::CompoundPattern(CompoundPattern&& o) : Pattern(o.query()) {
+    left_    = o.left_;
+    right_   = o.right_;
+    o.left_  = nullptr;
+    o.right_ = nullptr;
+    initialize();
 }
 
 CompoundPattern::~CompoundPattern() {
-    if(left)
-        delete left;
-    if(right)
-        delete right;
+    delete left_;
+    delete right_;
 }
 
 Pattern* CompoundPattern::optimize() {
-    left = left->optimize();
-    right = right->optimize();
+    left_ = left_->optimize();
+    right_ = right_->optimize();
     return this;
 }
 
 void CompoundPattern::init() {
-    left->init();
-    right->init();
+    left_->init();
+    right_->init();
 }
 
-JoinPattern::JoinPattern(Pattern *left, Pattern *right)
-        : CompoundPattern(left, right) {
-    vars = left->getVars();
-    vars += right->getVars();
-    cvars = left->getCVars();
-    cvars += right->getCVars();
+void JoinPattern::initialize() {
+    vars_ = left_->variables();
+    vars_ += right_->variables();
+    cvars_ = left_->certainVars();
+    cvars_ += right_->certainVars();
 }
 
 bool JoinPattern::next() {
-    while(left->next())
-        if(right->next())
+    while(left_->next())
+        if(right_->next())
             return true;
     return false;
 }
 
 void JoinPattern::discard() {
-    right->discard();
-    left->discard();
+    right_->discard();
+    left_->discard();
 }
 
-LeftJoinPattern::LeftJoinPattern(Pattern *left, Pattern *right)
-        : CompoundPattern(left, right), consistent(false) {
-    vars = left->getVars();
-    vars += right->getVars();
-    cvars = left->getCVars();
+void LeftJoinPattern::initialize() {
+    vars_ = left_->variables();
+    vars_ += right_->variables();
+    cvars_ = left_->certainVars();
+    consistent_ = false;
 }
 
 bool LeftJoinPattern::next() {
-    while(left->next()) {
-        if(right->next()) {
-            consistent = true;
+    while(left_->next()) {
+        if(right_->next()) {
+            consistent_ = true;
             return true;
-        } else if(!consistent) {
+        } else if(!consistent_) {
             return true;
         } else {
-            consistent = false;
+            consistent_ = false;
         }
     }
     return false;
 }
 
 void LeftJoinPattern::discard() {
-    right->discard();
-    left->discard();
-    consistent = false;
+    right_->discard();
+    left_->discard();
+    consistent_ = false;
 }
 
-DiffPattern::DiffPattern(Pattern *left, Pattern *right)
-        : CompoundPattern(left, right) {
-    vars = left->getVars();
-    cvars = left->getCVars();
+void DiffPattern::initialize() {
+    vars_ = left_->variables();
+    cvars_ = left_->certainVars();
 }
 
 bool DiffPattern::next() {
-    while(left->next()) {
-        if(right->next())
-            right->discard();
+    while(left_->next()) {
+        if(right_->next())
+            right_->discard();
         else
             return true;
     }
@@ -213,33 +219,33 @@ bool DiffPattern::next() {
 }
 
 void DiffPattern::discard() {
-    right->discard();
-    left->discard();
+    right_->discard();
+    left_->discard();
 }
 
-UnionPattern::UnionPattern(Pattern *left, Pattern *right)
-        : CompoundPattern(left, right), onRightBranch(false) {
-    vars = left->getVars();
-    vars += right->getVars();
-    cvars = left->getCVars() * right->getCVars();
+void UnionPattern::initialize() {
+    vars_ = left_->variables();
+    vars_ += right_->variables();
+    cvars_ = left_->certainVars() * right_->certainVars();
+    onRightBranch_ = false;
 }
 
 bool UnionPattern::next() {
-    if(!onRightBranch && left->next())
+    if(!onRightBranch_ && left_->next())
         return true;
-    onRightBranch = true;
-    if(right->next())
+    onRightBranch_ = true;
+    if(right_->next())
         return true;
-    onRightBranch = false;
+    onRightBranch_ = false;
     return false;
 }
 
 void UnionPattern::discard() {
-    if(onRightBranch)
-        right->discard();
+    if(onRightBranch_)
+        right_->discard();
     else
-        left->discard();
-    onRightBranch = false;
+        left_->discard();
+    onRightBranch_ = false;
 }
 
 }

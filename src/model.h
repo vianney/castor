@@ -41,20 +41,20 @@ struct Value {
     typedef unsigned id_t;
 
     /**
-     * Value class ids
+     * Value category ids
      */
-    enum Class {
-        CLASS_BLANK,
-        CLASS_IRI,
-        CLASS_SIMPLE_LITERAL,
-        CLASS_TYPED_STRING,
-        CLASS_BOOLEAN,
-        CLASS_NUMERIC,
-        CLASS_DATETIME,
-        CLASS_OTHER,
-
-        CLASSES_COUNT //!< number of classes
+    enum Category {
+        CAT_BLANK,
+        CAT_IRI,
+        CAT_SIMPLE_LITERAL,
+        CAT_TYPED_STRING,
+        CAT_BOOLEAN,
+        CAT_NUMERIC,
+        CAT_DATETIME,
+        CAT_OTHER
     };
+    //! Number of categories in Category
+    static constexpr int CATEGORIES = CAT_OTHER + 1;
 
     /**
      * Standard value type ids. Higher ids means custom URI.
@@ -99,7 +99,7 @@ struct Value {
     /**
      * URIs corresponding to the value types
      */
-    static const char *TYPE_URIS[TYPE_CUSTOM];
+    static const char* TYPE_URIS[TYPE_CUSTOM];
     /**
      * length of predefined type URIs
      */
@@ -208,20 +208,32 @@ struct Value {
     /**
      * Copy constructor
      */
-    Value(const Value &val) : cleanup(CLEAN_NOTHING) { fillCopy(val, true); }
+    Value(const Value& val) : cleanup(CLEAN_NOTHING) { fillCopy(val, true); }
+    /**
+     * Move constructor
+     */
+    Value(Value&& val) : cleanup(CLEAN_NOTHING) { fillMove(val); }
     /**
      * Create a value from a raptor_term
      * @param term the term
      */
-    Value(const raptor_term *term);
+    Value(const raptor_term* term);
     /**
      * Create a value from a rasqal_literal
      * @param literal the literal
      * @pre literl->type != RASQAL_LITERAL_VARIABLE
      */
-    Value(const rasqal_literal *literal);
+    Value(const rasqal_literal* literal);
     ~Value() { clean(); }
 
+    /**
+     * Assignment operator (copy semantics)
+     */
+    Value& operator=(const Value& val) { fillCopy(val, true); return *this; }
+    /**
+     * Assignment operator (move semantics)
+     */
+    Value& operator=(Value&& val) { fillMove(val); return *this; }
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -261,13 +273,13 @@ struct Value {
      * @param deep should we perform a deep copy, i.e., recreate every owned
      *             pointers (unowned pointers will be left as is)?
      */
-    void fillCopy(const Value &value, bool deep=false);
+    void fillCopy(const Value& value, bool deep=true);
     /**
      * Make a copy of a value, taking over the ownership of the pointers.
      *
      * @param value the value
      */
-    void fillMove(Value &value);
+    void fillMove(Value& value);
     /**
      * Make a xsd:boolean
      *
@@ -291,7 +303,7 @@ struct Value {
      *
      * @param value the value (ownership taken)
      */
-    void fillDecimal(XSDDecimal *value);
+    void fillDecimal(XSDDecimal* value);
     /**
      * Make a simple literal
      *
@@ -299,7 +311,7 @@ struct Value {
      * @param len length of the lexical form
      * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillSimpleLiteral(const char *lexical, unsigned len, bool freeLexical);
+    void fillSimpleLiteral(const char* lexical, unsigned len, bool freeLexical);
     /**
      * Make an IRI
      *
@@ -307,7 +319,7 @@ struct Value {
      * @param len length of the lexical form
      * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillIRI(const char *lexical, unsigned len, bool freeLexical);
+    void fillIRI(const char* lexical, unsigned len, bool freeLexical);
     /**
      * Make a blank node
      *
@@ -315,7 +327,7 @@ struct Value {
      * @param len length of the lexical form
      * @param freeLexical should the lexical form be freed on clean?
      */
-    void fillBlank(const char *lexical, unsigned len, bool freeLexical);
+    void fillBlank(const char* lexical, unsigned len, bool freeLexical);
 
 
 
@@ -377,15 +389,15 @@ struct Value {
     /**
      * @return the class of this value
      */
-    Class getClass() const {
-        if(isBlank()) return CLASS_BLANK;
-        else if(isIRI()) return CLASS_IRI;
-        else if(isSimple()) return CLASS_SIMPLE_LITERAL;
-        else if(isXSDString()) return CLASS_TYPED_STRING;
-        else if(isBoolean()) return CLASS_BOOLEAN;
-        else if(isNumeric()) return CLASS_NUMERIC;
-        else if(isDateTime()) return CLASS_DATETIME;
-        else return CLASS_OTHER;
+    Category category() const {
+        if     (isBlank())     return CAT_BLANK;
+        else if(isIRI())       return CAT_IRI;
+        else if(isSimple())    return CAT_SIMPLE_LITERAL;
+        else if(isXSDString()) return CAT_TYPED_STRING;
+        else if(isBoolean())   return CAT_BOOLEAN;
+        else if(isNumeric())   return CAT_NUMERIC;
+        else if(isDateTime())  return CAT_DATETIME;
+        else                   return CAT_OTHER;
     }
 
     /**
@@ -404,7 +416,7 @@ struct Value {
      * @return 0 if this == o, -1 if this < o, 1 if this > o,
      *         -2 if a type error occured
      */
-    int compare(const Value &o) const;
+    int compare(const Value& o) const;
 
     /**
      * Test the RDFterm-equality as defined in SPARQL 1.0, section 11.4.10.
@@ -414,12 +426,12 @@ struct Value {
      * @return 0 if this RDF-equals o, 1 if !(this RDF-equals o),
      *         -1 if a type error occured
      */
-    int rdfequals(const Value &o) const;
+    int rdfequals(const Value& o) const;
 
-    bool operator<(const Value &o) const;
-    bool operator>(const Value &o) const { return o < *this; }
-    bool operator==(const Value &o) const { return rdfequals(o) == 0; }
-    bool operator!=(const Value &o) const { return rdfequals(o) != 0; }
+    bool operator<(const Value& o) const;
+    bool operator>(const Value& o) const { return o < *this; }
+    bool operator==(const Value& o) const { return rdfequals(o) == 0; }
+    bool operator!=(const Value& o) const { return rdfequals(o) != 0; }
 
 
 
@@ -444,7 +456,7 @@ struct Value {
      * Compute the hashcode of this value
      * @pre the value must have a lexical form
      */
-    uint32_t hash() const;
+    Hash::hash_t hash() const;
 
     /**
      * Apply numeric type promotion rules to make v1 and v2 the same type to
@@ -455,7 +467,7 @@ struct Value {
      * @param v1 first numeric value
      * @param v2 second numeric value
      */
-    static void promoteNumericType(Value &v1, Value &v2);
+    static void promoteNumericType(Value& v1, Value& v2);
 
 private:
     /**
@@ -465,23 +477,24 @@ private:
     void interpretDatatype();
 };
 
-std::ostream& operator<<(std::ostream &out, const Value &val);
-std::ostream& operator<<(std::ostream &out, const Value *val);
+std::ostream& operator<<(std::ostream& out, const Value& val);
+std::ostream& operator<<(std::ostream& out, const Value* val);
 
-static inline Value::Class& operator++(Value::Class &cls) {
-    cls = static_cast<Value::Class>(cls + 1);
-    return cls;
+static inline Value::Category& operator++(Value::Category& cat) {
+    cat = static_cast<Value::Category>(cat + 1);
+    return cat;
 }
-static inline Value::Class& operator--(Value::Class &cls) {
-    cls = static_cast<Value::Class>(cls - 1);
-    return cls;
+static inline Value::Category& operator--(Value::Category& cat) {
+    cat = static_cast<Value::Category>(cat - 1);
+    return cat;
 }
 
 /**
  * Range of value identifiers.
  */
 struct ValueRange {
-    Value::id_t from, to;
+    Value::id_t from;
+    Value::id_t to;
 
     bool empty() { return to < from; }
     bool contains(Value::id_t id) { return id >= from && id <= to; }
@@ -493,7 +506,7 @@ struct ValueRange {
         Iterator(Value::id_t id) : id(id) {}
         Iterator(const Iterator& o) : id(o.id) {}
         Value::id_t operator*() const { return id; }
-        bool operator!=(const Iterator &o) const { return id != o.id; }
+        bool operator!=(const Iterator& o) const { return id != o.id; }
         Iterator& operator++() { ++id; return *this; }
     };
     Iterator begin() { return from; }
@@ -505,12 +518,16 @@ struct ValueRange {
  */
 template<class T>
 struct BasicTriple {
-    static const int COMPONENTS = 3; //!< number of components
+    static constexpr int COMPONENTS = 3; //!< number of components
     T c[COMPONENTS]; //!< statement components
 
     // Constructors
-    BasicTriple() {}
+    BasicTriple() = default;
     BasicTriple(T s, T p, T o) : c{s, p, o} {}
+
+    // Copyable
+    BasicTriple(const BasicTriple<T>&) = default;
+    BasicTriple<T>& operator=(const BasicTriple<T>&) = default;
 
     // Reordering
     template<int C1, int C2, int C3>
@@ -525,37 +542,36 @@ struct BasicTriple {
     }
 
     // Accessors
-    const T& subject()   const { return c[0]; }
-          T& subject()         { return c[0]; }
-    const T& predicate() const { return c[1]; }
-          T& predicate()       { return c[1]; }
-    const T& object()    const { return c[2]; }
-          T& object()          { return c[2]; }
-
     const T& operator[](unsigned i) const { return c[i]; }
           T& operator[](unsigned i)       { return c[i]; }
 
+    // C++11 Iterator
+    const T* begin() const { return c; }
+          T* begin()       { return c; }
+    const T* end()   const { return c + COMPONENTS; }
+          T* end()         { return c + COMPONENTS; }
+
     // Comparators
-    bool operator==(const BasicTriple<T> &o) const {
+    bool operator==(const BasicTriple<T>& o) const {
         return c[0] == o.c[0] && c[1] == o.c[1] && c[2] == o.c[2];
     }
-    bool operator!=(const BasicTriple<T> &o) const { return !(*this == o); }
-    bool operator<(const BasicTriple<T> &o) const {
+    bool operator!=(const BasicTriple<T>& o) const { return !(*this == o); }
+    bool operator<(const BasicTriple<T>& o) const {
         return c[0] < o.c[0] ||
                 (c[0] == o.c[0] && (c[1] < o.c[1] ||
                                     (c[1] == o.c[1] && c[2] < o.c[2])));
     }
-    bool operator>(const BasicTriple<T> &o) const { return o < *this; }
-    bool operator<=(const BasicTriple<T> &o) const {
+    bool operator>(const BasicTriple<T>& o) const { return o < *this; }
+    bool operator<=(const BasicTriple<T>& o) const {
         return c[0] <= o.c[0] ||
                 (c[0] == o.c[0] && (c[1] <= o.c[1] ||
                                     (c[1] == o.c[1] && c[2] <= o.c[2])));
     }
-    bool operator>=(const BasicTriple<T> &o) const { return o <= *this; }
+    bool operator>=(const BasicTriple<T>& o) const { return o <= *this; }
 };
 
 template<class T>
-std::ostream& operator<<(std::ostream &out, const BasicTriple<T> &t) {
+std::ostream& operator<<(std::ostream& out, const BasicTriple<T>& t) {
     for(int i = 0; i < t.COMPONENTS; i++)
         out << (i == 0 ? "(" : ", ") << t[i];
     out << ")";

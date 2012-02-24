@@ -35,30 +35,27 @@ class Query;
  */
 class Pattern {
 public:
-    Pattern(Query *query) : query(query), vars(query), cvars(query) {}
+    Pattern(Query* query) : query_(query), vars_(query), cvars_(query) {}
     virtual ~Pattern() {}
+
+    //! Non-copyable
+    Pattern(const Pattern&) = delete;
+    Pattern& operator=(const Pattern&) = delete;
 
     /**
      * @return parent query
      */
-    Query* getQuery() { return query; }
+    Query* query() { return query_; }
 
     /**
      * @return variables occuring in this pattern
      */
-    VariableSet& getVars() { return vars; }
+    const VariableSet& variables() { return vars_; }
 
     /**
      * @return certain variables
      */
-    VariableSet& getCVars() { return cvars; }
-
-    /**
-     * Same effect as "delete this", but do not delete subpatterns.
-     * This is useful if the subpatterns were reused for building another
-     * pattern.
-     */
-    virtual void deleteThisOnly() { delete this; }
+    const VariableSet& certainVars() { return cvars_; }
 
     /**
      * Optimize this pattern and its subpatterns. Beware: the patterns may
@@ -88,29 +85,29 @@ public:
     /**
      * For debugging purpose
      */
-    void print(std::ostream &out) const { print(out, 0); }
+    void print(std::ostream& out) const { print(out, 0); }
 
     /**
      * For debugging purpose
      * @param out output stream
      * @param indent indent level to add in front of the string representation
      */
-    virtual void print(std::ostream &out, int indent) const = 0;
+    virtual void print(std::ostream& out, int indent) const = 0;
 
 protected:
     /**
      * Parent query
      */
-    Query *query;
+    Query* query_;
     /**
      * Variables occuring in this pattern.
      */
-    VariableSet vars;
+    VariableSet vars_;
     /**
      * Certain variables: variables we are sure will be assigned in this
      * pattern. Always a subset of vars.
      */
-    VariableSet cvars;
+    VariableSet cvars_;
 
     /**
      * For debugging purpose, return a string of whitespace corresponding to the
@@ -120,7 +117,7 @@ protected:
     std::string ws(int indent) const { return std::string(2*indent, ' '); }
 };
 
-std::ostream& operator<<(std::ostream &out, const Pattern &p);
+std::ostream& operator<<(std::ostream& out, const Pattern& p);
 
 /**
  * Dummy pattern always resulting in an empty set of solutions, i.e., it
@@ -128,11 +125,11 @@ std::ostream& operator<<(std::ostream &out, const Pattern &p);
  */
 class FalsePattern : public Pattern {
 public:
-    FalsePattern(Query *query) : Pattern(query) {}
+    FalsePattern(Query* query) : Pattern(query) {}
     void init() {}
     bool next() { return false; }
     void discard() {}
-    void print(std::ostream &out, int indent) const {
+    void print(std::ostream& out, int indent) const {
         out << ws(indent) << "FalsePattern";
     }
 };
@@ -143,29 +140,31 @@ typedef BasicTriple<VarVal> TriplePattern;
  * Basic graph pattern (set of triple patterns)
  */
 class BasicPattern : public Pattern {
-    std::vector<TriplePattern> triples;
-    cp::Subtree sub;
 public:
-    BasicPattern(Query *query);
+    BasicPattern(Query* query);
 
     /**
      * Add a triple pattern
      * @param[in] triple the triple pattern
      */
-    void add(const TriplePattern &triple);
+    void add(const TriplePattern& triple);
 
     /**
      * @return triple patterns
      */
-    std::vector<TriplePattern>& getTriples() { return triples; }
+    std::vector<TriplePattern>& triples() { return triples_; }
 
     void init();
     bool next();
     void discard();
 
-    void print(std::ostream &out, int indent) const {
-        out << ws(indent) << "BasicPattern(" << triples.size() << " triples)";
+    void print(std::ostream& out, int indent) const {
+        out << ws(indent) << "BasicPattern(" << triples_.size() << " triples)";
     }
+
+private:
+    std::vector<TriplePattern> triples_;
+    cp::Subtree                sub_;
 
     friend class FilterPattern;
 };
@@ -174,67 +173,75 @@ public:
  * Filter pattern
  */
 class FilterPattern : public Pattern {
-    Pattern *subpattern;
-    Expression *condition;
 public:
-    FilterPattern(Pattern *subpattern, Expression *condition);
+    FilterPattern(Pattern* subpattern, Expression* condition);
     ~FilterPattern();
 
     /**
      * @return the subpattern
      */
-    Pattern* getSubPattern() { return subpattern; }
+    Pattern* subPattern() { return subpattern_; }
 
     /**
      * @return the filter condition
      */
-    Expression* getCondition() { return condition; }
-
-    void deleteThisOnly() { subpattern = nullptr; condition = nullptr; delete this; }
+    Expression* condition() { return condition_; }
 
     Pattern* optimize();
     void init();
     bool next();
     void discard();
 
-    void print(std::ostream &out, int indent) const {
+    void print(std::ostream& out, int indent) const {
         out << ws(indent) << "FilterPattern("
-            << vars.getSize() << " variables)" << std::endl;
-        subpattern->print(out, indent+1);
+            << vars_.size() << " variables)" << std::endl;
+        subpattern_->print(out, indent+1);
     }
+
+private:
+    Pattern*    subpattern_;
+    Expression* condition_;
 };
 
 /**
  * Base class for a compound pattern
  */
 class CompoundPattern : public Pattern {
-protected:
-    Pattern *left, *right;
 public:
-    CompoundPattern(Pattern *left, Pattern *right)
-        : Pattern(left->getQuery()), left(left), right(right) {}
+    CompoundPattern(Pattern* left, Pattern* right);
+    //! Move constructor
+    CompoundPattern(CompoundPattern&& o);
     ~CompoundPattern();
 
     /**
      * @return the left subpattern
      */
-    Pattern* getLeft() { return left; }
+    Pattern* left() { return left_; }
 
     /**
      * @return the right subpattern
      */
-    Pattern* getRight() { return right; }
-
-    void deleteThisOnly() { left = nullptr; right = nullptr; delete this; }
+    Pattern* right() { return right_; }
 
     Pattern* optimize();
     void init();
 
-    void print(std::ostream &out, int indent) const {
+    void print(std::ostream& out, int indent) const {
         out << ws(indent) << typeid(*this).name() << std::endl;
-        left->print(out, indent+1); out << std::endl;
-        right->print(out, indent+1);
+        left_->print(out, indent+1); out << std::endl;
+        right_->print(out, indent+1);
     }
+
+protected:
+    /**
+     * Called by the constructors to perform member initialization. In
+     * particular, subclasses should compute the set of used variables here.
+     */
+    virtual void initialize() {}
+
+protected:
+    Pattern* left_;
+    Pattern* right_;
 };
 
 /**
@@ -242,20 +249,30 @@ public:
  */
 class JoinPattern : public CompoundPattern {
 public:
-    JoinPattern(Pattern *left, Pattern *right);
+    JoinPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {}
+    JoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {}
     bool next();
     void discard();
+
+protected:
+    void initialize();
 };
 
 /**
  * Optional pattern
  */
 class LeftJoinPattern : public CompoundPattern {
-    bool consistent; //!< is the right branch consistent?
 public:
-    LeftJoinPattern(Pattern *left, Pattern *right);
+    LeftJoinPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {}
+    LeftJoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {}
     bool next();
     void discard();
+
+protected:
+    void initialize();
+
+private:
+    bool consistent_; //!< is the right branch consistent?
 };
 
 /**
@@ -263,20 +280,30 @@ public:
  */
 class DiffPattern : public CompoundPattern {
 public:
-    DiffPattern(Pattern *left, Pattern *right);
+    DiffPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {}
+    DiffPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {}
     bool next();
     void discard();
+
+protected:
+    void initialize();
 };
 
 /**
  * Union pattern
  */
 class UnionPattern : public CompoundPattern {
-    bool onRightBranch; //!< exploring the left (false) or right (true) branch
 public:
-    UnionPattern(Pattern *left, Pattern *right);
+    UnionPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {}
+    UnionPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {}
     bool next();
     void discard();
+
+protected:
+    void initialize();
+
+private:
+    bool onRightBranch_; //!< exploring the left (false) or right (true) branch
 };
 
 }

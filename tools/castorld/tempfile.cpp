@@ -27,19 +27,18 @@
 
 namespace castor {
 
-unsigned TempFile::nextId = 0;
+unsigned TempFile::nextId_ = 0;
 
-TempFile::TempFile(const std::string &baseName)
-        : baseName(baseName) {
+TempFile::TempFile(const std::string& baseName) : baseName_(baseName) {
     struct stat stbuf;
-    while(fileName.empty() || lstat(fileName.c_str(), &stbuf) != -1) {
+    while(fileName_.empty() || lstat(fileName_.c_str(), &stbuf) != -1) {
         std::stringstream name;
-        name << baseName << '.' << nextId++;
-        fileName = name.str();
+        name << baseName << '.' << nextId_++;
+        fileName_ = name.str();
     }
-    out.open(fileName.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
-    iter = buffer;
-    bufEnd = buffer + BUFFER_SIZE;
+    out_.open(fileName_.c_str(), std::ios::out | std::ios::binary | std::ios::trunc);
+    iter_ = buffer_;
+    end_ = buffer_ + BUFFER_SIZE;
 }
 
 TempFile::~TempFile() {
@@ -47,61 +46,61 @@ TempFile::~TempFile() {
 }
 
 void TempFile::flush() {
-    if(iter > buffer) {
-        out.write(buffer, iter-buffer);
-        iter = buffer;
+    if(iter_ > buffer_) {
+        out_.write(buffer_, iter_-buffer_);
+        iter_ = buffer_;
     }
-    out.flush();
+    out_.flush();
 }
 
 void TempFile::close() {
     flush();
-    out.close();
+    out_.close();
 }
 
 void TempFile::discard() {
     close();
-    remove(fileName.c_str());
+    remove(fileName_.c_str());
 }
 
-void TempFile::write(unsigned len, const char *data) {
+void TempFile::write(unsigned len, const char* data) {
     // Fill the current buffer
-    if(iter + len > bufEnd) {
-        unsigned remaining = bufEnd - iter;
-        memcpy(iter, data, remaining);
-        out.write(buffer, BUFFER_SIZE);
-        iter = buffer;
+    if(iter_ + len > end_) {
+        unsigned remaining = end_ - iter_;
+        memcpy(iter_, data, remaining);
+        out_.write(buffer_, BUFFER_SIZE);
+        iter_ = buffer_;
         len -= remaining;
         data += remaining;
     }
     // write big chuncks if any
-    if(iter + len > bufEnd) {
-        assert(iter == buffer);
+    if(iter_ + len > end_) {
+        assert(iter_ == buffer_);
         unsigned chunks = len / BUFFER_SIZE;
-        out.write(data, chunks*BUFFER_SIZE);
+        out_.write(data, chunks*BUFFER_SIZE);
         len -= chunks*BUFFER_SIZE;
         data += chunks*BUFFER_SIZE;
     }
     // write the remaining
-    memcpy(iter, data, len);
-    iter += len;
+    memcpy(iter_, data, len);
+    iter_ += len;
 }
 
 void TempFile::writeBigInt(uint64_t val) {
     while(val >= 128) {
         unsigned char c = static_cast<unsigned char>(val | 128);
-        if(iter == bufEnd) {
-            out.write(buffer, BUFFER_SIZE);
-            iter = buffer;
+        if(iter_ == end_) {
+            out_.write(buffer_, BUFFER_SIZE);
+            iter_ = buffer_;
         }
-        *(iter++) = c;
+        *(iter_++) = c;
         val >>= 7;
     }
-    if(iter == bufEnd) {
-        out.write(buffer, BUFFER_SIZE);
-        iter = buffer;
+    if(iter_ == end_) {
+        out_.write(buffer_, BUFFER_SIZE);
+        iter_ = buffer_;
     }
-    *(iter++) = static_cast<unsigned char>(val);
+    *(iter_++) = static_cast<unsigned char>(val);
 }
 
 void TempFile::writeInt(unsigned val) {
@@ -110,7 +109,7 @@ void TempFile::writeInt(unsigned val) {
     write(4, reinterpret_cast<char*>(buf));
 }
 
-void TempFile::writeValue(const Value &val) {
+void TempFile::writeValue(const Value& val) {
     unsigned typelen;
     if(val.type == Value::TYPE_CUSTOM)
         typelen = val.typeUriLen + 1;
@@ -121,7 +120,7 @@ void TempFile::writeValue(const Value &val) {
     unsigned len = 16 + val.lexicalLen + 1 + typelen;
 
     unsigned char buffer[len];
-    unsigned char *it = buffer;
+    unsigned char* it = buffer;
     PageWriter::writeInt(it, val.id);
     PageWriter::writeInt(it, val.hash());
     PageWriter::writeInt(it, typelen + val.lexicalLen + 1);

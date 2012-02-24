@@ -39,30 +39,34 @@ public:
      * @param solver attached solver
      * @param trailSize size in bytes needed for the trail
      */
-    Variable(Solver *solver, std::size_t trailSize) :
-        solver(solver), trailSize(trailSize) {}
+    Variable(Solver* solver, std::size_t trailSize) :
+        solver_(solver), trailSize_(trailSize) {}
 
     virtual ~Variable() {}
+
+    //! Non-copyable
+    Variable(const Variable&) = delete;
+    Variable& operator=(const Variable&) = delete;
 
     /**
      * @return the parent solver
      */
-    Solver* getSolver() { return solver; }
+    Solver* solver() { return solver_; }
 
     /**
      * @return the number of bytes to allocate for the trailing structure
      */
-    std::size_t getTrailSize() const { return trailSize; }
+    std::size_t trailSize() const { return trailSize_; }
 
     /**
      * @return the current size of the domain of this variable
      */
-    unsigned getSize() const { return size; }
+    unsigned size() const { return size_; }
 
     /**
      * @return whether this variable is bound
      */
-    bool isBound() const { return size == 1; }
+    bool isBound() const { return size_ == 1; }
 
     /**
      * Write a checkpoint of the current domain to the memory pointed to by
@@ -71,7 +75,7 @@ public:
      * @param trail the target trail memory where the checkpoint must be
      *              written
      */
-    virtual void checkpoint(void *trail) const = 0;
+    virtual void checkpoint(void* trail) const = 0;
 
     /**
      * Restore the domain from the memory pointed to by trail. This memory, of
@@ -79,7 +83,7 @@ public:
      *
      * @param trail the source memory where the checkpoint has been written
      */
-    virtual void restore(const void *trail) = 0;
+    virtual void restore(const void* trail) = 0;
 
     /**
      * Bind this variable to a value of its domain. This is called during the
@@ -103,19 +107,19 @@ protected:
     /**
      * Parent solver class.
      */
-    Solver *solver;
+    Solver* solver_;
 
     /**
      * Current size of the domain.
      */
-    unsigned size;
+    unsigned size_;
 
 private:
     /**
      * Number of bytes to allocate for the trailing structure. This number does
      * not change after the construction of the variable.
      */
-    std::size_t trailSize;
+    std::size_t trailSize_;
 };
 
 }

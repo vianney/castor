@@ -18,13 +18,47 @@
 #ifndef CASTOR_UTIL_H
 #define CASTOR_UTIL_H
 
+#include <exception>
 #include <string>
+#include <sstream>
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
 
 namespace castor {
 
+/**
+ * Exception thrown by the Castor library.
+ *
+ * An exception can be constructed using the stream interface. E.g.,
+ * throw CastorException() << "Error " << 42;
+ */
+class CastorException : public std::exception {
+public:
+    CastorException() {}
+    CastorException(const CastorException& o) : msg_(o.msg_.str()) {}
+    ~CastorException() throw() {}
+
+    CastorException& operator=(const CastorException& o) {
+        msg_.str(o.msg_.str());
+        return *this;
+    }
+
+    const char* what() const throw() { return msg_.str().c_str(); }
+
+    template<typename T>
+    CastorException& operator<<(const T& t) {
+        msg_ << t;
+        return *this;
+    }
+
+private:
+    std::ostringstream msg_;
+};
+
+/**
+ * Comparator that compares the dereferenced values.
+ */
 struct DereferenceLess {
     template <typename T>
     bool operator()(T a, T b) const { return *a < *b; }
@@ -33,7 +67,8 @@ struct DereferenceLess {
 /**
  * Compare two (non-null terminated) strings with specified length
  */
-static inline int cmpstr(const char *a, size_t alen, const char *b, size_t blen) {
+static inline int cmpstr(const char* a, size_t alen,
+                         const char* b, size_t blen) {
     int cmp = memcmp(a, b, std::min(alen, blen));
     if(cmp) return cmp;
     else if(alen < blen) return -1;
@@ -45,12 +80,15 @@ static inline int cmpstr(const char *a, size_t alen, const char *b, size_t blen)
  * Check whether two (non-null terminated) strings with specified length are
  * equal
  */
-static inline bool eqstr(const char* a, size_t alen, const char *b, size_t blen) {
+static inline bool eqstr(const char* a, size_t alen,
+                         const char* b, size_t blen) {
     return alen == blen && cmpstr(a, alen, b, blen) == 0;
 }
 
 class Hash {
 public:
+    typedef uint32_t hash_t;
+
     /**
      * Hash a variable-length key into a 32-bit value
      *
@@ -59,16 +97,7 @@ public:
      * @param initval can be any 4-byte value
      * @return a 32-bit value
      */
-    static uint32_t hash(const void *key, size_t length, uint32_t initval=0);
-
-    /**
-     * Hash a string into a 32-bit value
-     *
-     * @see hash(const void*, size_t, uint32_t)
-     */
-    static uint32_t hash(const std::string &str, uint32_t initval=0) {
-        return hash(str.c_str(), str.size(), initval);
-    }
+    static hash_t hash(const void* key, size_t length, hash_t initval=0);
 };
 
 /**

@@ -26,46 +26,44 @@ namespace castor {
  * Wrapper for an xsd:decimal value.
  */
 class XSDDecimal {
-    rasqal_xsd_decimal *val;
-
 public:
     /**
      * Construct a new decimal.
      */
     XSDDecimal() {
-        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
+        val_ = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
     }
     /**
      * Copy constructor.
      */
-    XSDDecimal(const XSDDecimal &o) {
-        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
-        rasqal_xsd_decimal_set_string(val, rasqal_xsd_decimal_as_string(o.val));
+    XSDDecimal(const XSDDecimal& o) {
+        val_ = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
+        rasqal_xsd_decimal_set_string(val_, rasqal_xsd_decimal_as_string(o.val_));
     }
     /**
      * Construct a new decimal from a lexical form.
      */
     XSDDecimal(const char* lexical) {
-        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
-        rasqal_xsd_decimal_set_string(val, lexical);
+        val_ = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
+        rasqal_xsd_decimal_set_string(val_, lexical);
     }
     /**
      * Construct a new decimal from an integer.
      */
     XSDDecimal(long integer) {
-        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
-        rasqal_xsd_decimal_set_long(val, integer);
+        val_ = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
+        rasqal_xsd_decimal_set_long(val_, integer);
     }
     /**
      * Construct a new decimal from a floating point number
      */
     XSDDecimal(double floating) {
-        val = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
-        rasqal_xsd_decimal_set_double(val, floating);
+        val_ = rasqal_new_xsd_decimal(librdf::World::instance().rasqal);
+        rasqal_xsd_decimal_set_double(val_, floating);
     }
 
     ~XSDDecimal() {
-        rasqal_free_xsd_decimal(val);
+        rasqal_free_xsd_decimal(val_);
     }
 
     /**
@@ -73,19 +71,19 @@ public:
      */
     std::string getString() {
         size_t n;
-        char *str = rasqal_xsd_decimal_as_counted_string(val, &n);
+        char* str = rasqal_xsd_decimal_as_counted_string(val_, &n);
         return std::string(str, n);
     }
 
     /**
      * @return value as floating point number (may loose precision)
      */
-    double getFloat() { return rasqal_xsd_decimal_get_double(val); }
+    double getFloat() { return rasqal_xsd_decimal_get_double(val_); }
 
     /**
      * @return whether this value is zero
      */
-    bool isZero() { return rasqal_xsd_decimal_is_zero(val); }
+    bool isZero() { return rasqal_xsd_decimal_is_zero(val_); }
 
     /**
      * Compare two decimal numbers
@@ -93,44 +91,47 @@ public:
      * @param o second decimal
      * @return <0 if this < o, 0 if this == o and >0 if this > o
      */
-    int compare(const XSDDecimal &o) { return rasqal_xsd_decimal_compare(val, o.val); }
+    int compare(const XSDDecimal& o) { return rasqal_xsd_decimal_compare(val_, o.val_); }
 
-    bool operator==(const XSDDecimal &o) { return rasqal_xsd_decimal_equals(val, o.val); }
-    bool operator!=(const XSDDecimal &o) { return !rasqal_xsd_decimal_equals(val, o.val); }
-    bool operator<(const XSDDecimal &o) { return compare(o) < 0; }
-    bool operator>(const XSDDecimal &o) { return compare(o) > 0; }
-    bool operator<=(const XSDDecimal &o) { return compare(o) <= 0; }
-    bool operator>=(const XSDDecimal &o) { return compare(o) >= 0; }
+    bool operator==(const XSDDecimal& o) { return rasqal_xsd_decimal_equals(val_, o.val_); }
+    bool operator!=(const XSDDecimal& o) { return !rasqal_xsd_decimal_equals(val_, o.val_); }
+    bool operator<(const XSDDecimal& o) { return compare(o) < 0; }
+    bool operator>(const XSDDecimal& o) { return compare(o) > 0; }
+    bool operator<=(const XSDDecimal& o) { return compare(o) <= 0; }
+    bool operator>=(const XSDDecimal& o) { return compare(o) >= 0; }
 
     XSDDecimal* negate() {
-        XSDDecimal *result = new XSDDecimal();
-        rasqal_xsd_decimal_negate(result->val, val);
+        XSDDecimal* result = new XSDDecimal();
+        rasqal_xsd_decimal_negate(result->val_, val_);
         return result;
     }
 
-    XSDDecimal* add(const XSDDecimal &o) {
-        XSDDecimal *result = new XSDDecimal();
-        rasqal_xsd_decimal_add(result->val, val, o.val);
+    XSDDecimal* add(const XSDDecimal& o) {
+        XSDDecimal* result = new XSDDecimal();
+        rasqal_xsd_decimal_add(result->val_, val_, o.val_);
         return result;
     }
 
-    XSDDecimal* substract(const XSDDecimal &o) {
-        XSDDecimal *result = new XSDDecimal();
-        rasqal_xsd_decimal_subtract(result->val, val, o.val);
+    XSDDecimal* substract(const XSDDecimal& o) {
+        XSDDecimal* result = new XSDDecimal();
+        rasqal_xsd_decimal_subtract(result->val_, val_, o.val_);
         return result;
     }
 
-    XSDDecimal* multiply(const XSDDecimal &o) {
-        XSDDecimal *result = new XSDDecimal();
-        rasqal_xsd_decimal_multiply(result->val, val, o.val);
+    XSDDecimal* multiply(const XSDDecimal& o) {
+        XSDDecimal* result = new XSDDecimal();
+        rasqal_xsd_decimal_multiply(result->val_, val_, o.val_);
         return result;
     }
 
-    XSDDecimal* divide(const XSDDecimal &o) {
-        XSDDecimal *result = new XSDDecimal();
-        rasqal_xsd_decimal_divide(result->val, val, o.val);
+    XSDDecimal* divide(const XSDDecimal& o) {
+        XSDDecimal* result = new XSDDecimal();
+        rasqal_xsd_decimal_divide(result->val_, val_, o.val_);
         return result;
     }
+
+private:
+    rasqal_xsd_decimal* val_;
 };
 
 }

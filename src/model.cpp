@@ -15,18 +15,19 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "model.h"
+
 #include <cstdio>
 #include <cassert>
 #include <sstream>
 #include <algorithm>
-#include "model.h"
 
 namespace castor {
 
 ////////////////////////////////////////////////////////////////////////////////
 // Static definitions
 
-const char *Value::TYPE_URIS[] = {
+const char* Value::TYPE_URIS[] = {
     nullptr,
     nullptr,
     nullptr,
@@ -76,8 +77,7 @@ unsigned Value::TYPE_URIS_LEN[] = {
     sizeof("http://www.w3.org/2001/XMLSchema#dateTime") - 1
 };
 
-#define XSD_PREFIX "http://www.w3.org/2001/XMLSchema#"
-#define XSD_PREFIX_LEN static_cast<unsigned>(sizeof(XSD_PREFIX) - 1)
+static constexpr char XSD_PREFIX[] = "http://www.w3.org/2001/XMLSchema#";
 
 
 
@@ -89,16 +89,16 @@ unsigned Value::TYPE_URIS_LEN[] = {
  * @param[out] str a new string containing a copy of the URI
  * @param[out] len the length of the URI
  */
-static void convertURI(raptor_uri *uri, const char* &str, unsigned &len) {
-    char *uristr = reinterpret_cast<char*>(raptor_uri_as_string(uri));
+static void convertURI(raptor_uri* uri, const char*& str, unsigned& len) {
+    char* uristr = reinterpret_cast<char*>(raptor_uri_as_string(uri));
     len = strlen(uristr);
-    char *s = new char[len + 1];
+    char* s = new char[len + 1];
     memcpy(s, uristr, len + 1);
     str = s;
 }
 
-Value::Value(const raptor_term *term) {
-    char *s;
+Value::Value(const raptor_term* term) {
+    char* s;
     id = 0;
     cleanup = CLEAN_NOTHING;
     switch(term->type) {
@@ -154,8 +154,8 @@ Value::Value(const raptor_term *term) {
     }
 }
 
-Value::Value(const rasqal_literal *literal) {
-    char *s;
+Value::Value(const rasqal_literal* literal) {
+    char* s;
     id = 0;
     cleanup = CLEAN_NOTHING;
     if(literal->type == RASQAL_LITERAL_URI) {
@@ -260,27 +260,27 @@ void Value::clean() {
 ////////////////////////////////////////////////////////////////////////////////
 // Fill methods
 
-void Value::fillCopy(const Value &value, bool deep)  {
+void Value::fillCopy(const Value& value, bool deep)  {
     clean();
     memcpy(this, &value, sizeof(Value));
     cleanup = CLEAN_NOTHING;
     if(deep) {
         if(lexical && value.hasCleanFlag(CLEAN_LEXICAL)) {
-            char *s = new char[lexicalLen + 1];
+            char* s = new char[lexicalLen + 1];
             memcpy(s, value.lexical, lexicalLen + 1);
             s[lexicalLen] = '\0';
             lexical = s;
             addCleanFlag(CLEAN_LEXICAL);
         }
         if(type == TYPE_CUSTOM && value.hasCleanFlag(CLEAN_TYPE_URI)) {
-            char *s = new char[typeUriLen + 1];
+            char* s = new char[typeUriLen + 1];
             memcpy(s, value.typeUri, typeUriLen + 1);
             s[typeUriLen] = '\0';
             typeUri = s;
             addCleanFlag(CLEAN_TYPE_URI);
         }
         if(type == TYPE_PLAIN_STRING && language && value.hasCleanFlag(CLEAN_DATA)) {
-            char *s = new char[languageLen + 1];
+            char* s = new char[languageLen + 1];
             memcpy(s, value.language, languageLen + 1);
             s[languageLen] = '\0';
             language = s;
@@ -293,7 +293,7 @@ void Value::fillCopy(const Value &value, bool deep)  {
     }
 }
 
-void Value::fillMove(Value &value)  {
+void Value::fillMove(Value& value)  {
     clean();
     memcpy(this, &value, sizeof(Value));
     value.cleanup = CLEAN_NOTHING;
@@ -335,7 +335,7 @@ void Value::fillFloating(double value) {
     floating = value;
 }
 
-void Value::fillDecimal(XSDDecimal *value) {
+void Value::fillDecimal(XSDDecimal* value) {
     clean();
     id = 0;
     type = TYPE_DECIMAL;
@@ -348,7 +348,7 @@ void Value::fillDecimal(XSDDecimal *value) {
     cleanup = CLEAN_DATA;
 }
 
-void Value::fillSimpleLiteral(const char *lexical, unsigned len, bool freeLexical) {
+void Value::fillSimpleLiteral(const char* lexical, unsigned len, bool freeLexical) {
     clean();
     id = 0;
     type = TYPE_PLAIN_STRING;
@@ -361,7 +361,7 @@ void Value::fillSimpleLiteral(const char *lexical, unsigned len, bool freeLexica
     isInterpreted = true;
 }
 
-void Value::fillIRI(const char *lexical, unsigned len, bool freeLexical) {
+void Value::fillIRI(const char* lexical, unsigned len, bool freeLexical) {
     clean();
     id = 0;
     type = TYPE_IRI;
@@ -374,7 +374,7 @@ void Value::fillIRI(const char *lexical, unsigned len, bool freeLexical) {
     isInterpreted = true;
 }
 
-void Value::fillBlank(const char *lexical, unsigned len, bool freeLexical) {
+void Value::fillBlank(const char* lexical, unsigned len, bool freeLexical) {
     clean();
     id = 0;
     type = TYPE_BLANK;
@@ -392,7 +392,7 @@ void Value::fillBlank(const char *lexical, unsigned len, bool freeLexical) {
 ////////////////////////////////////////////////////////////////////////////////
 // Comparisons
 
-int Value::compare(const Value &o) const {
+int Value::compare(const Value& o) const {
     if(isNumeric() && o.isNumeric()) {
         if(isInteger() && o.isInteger()) {
             int diff = integer - o.integer;
@@ -425,29 +425,29 @@ int Value::compare(const Value &o) const {
     }
 }
 
-bool Value::operator<(const Value &o) const {
+bool Value::operator<(const Value& o) const {
     if(id > 0 && o.id > 0)
         return id < o.id;
-    Class cls = getClass();
-    Class ocls = o.getClass();
+    Category cat = category();
+    Category ocat = o.category();
     int cmp;
-    if(cls < ocls) {
+    if(cat < ocat) {
         return true;
-    } else if(cls > ocls) {
+    } else if(cat > ocat) {
         return false;
     } else {
-        switch(cls) {
-        case CLASS_BLANK:
-        case CLASS_IRI:
-        case CLASS_SIMPLE_LITERAL:
-        case CLASS_TYPED_STRING:
+        switch(cat) {
+        case CAT_BLANK:
+        case CAT_IRI:
+        case CAT_SIMPLE_LITERAL:
+        case CAT_TYPED_STRING:
             return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
-        case CLASS_BOOLEAN:
+        case CAT_BOOLEAN:
             if(boolean == o.boolean)
                 return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
             else
                 return !boolean && o.boolean;
-        case CLASS_NUMERIC:
+        case CAT_NUMERIC:
             cmp = compare(o);
             if(cmp == -1)
                 return true;
@@ -457,10 +457,10 @@ bool Value::operator<(const Value &o) const {
                 return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
             else
                 return type < o.type;
-        case CLASS_DATETIME:
+        case CAT_DATETIME:
             // TODO
             return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
-        case CLASS_OTHER:
+        case CAT_OTHER:
             if(isPlain() && o.isPlain()) {
                 // plain literals with language tags
                 cmp = cmpstr(language, languageLen, o.language, o.languageLen);
@@ -469,8 +469,8 @@ bool Value::operator<(const Value &o) const {
                 else
                     return cmp < 0;
             } else {
-                const char *uri1 = typeUri == nullptr ? "" : typeUri;
-                const char *uri2 = o.typeUri == nullptr ? "" : o.typeUri;
+                const char* uri1 = typeUri == nullptr ? "" : typeUri;
+                const char* uri2 = o.typeUri == nullptr ? "" : o.typeUri;
                 cmp = cmpstr(uri1, typeUriLen, uri2, o.typeUriLen);
                 if(cmp == 0)
                     return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
@@ -485,7 +485,7 @@ bool Value::operator<(const Value &o) const {
     return false;
 }
 
-int Value::rdfequals(const Value &o) const {
+int Value::rdfequals(const Value& o) const {
     if(id > 0 && id == o.id)
         return 0;
     int falseret = isLiteral() && o.isLiteral() ? -1 : 1;
@@ -527,20 +527,20 @@ void Value::ensureLexical() {
         }
     } else if(isInteger()) {
         lexicalLen = snprintf(nullptr, 0, "%ld", integer);
-        char *s = new char[lexicalLen + 1];
+        char* s = new char[lexicalLen + 1];
         sprintf(s, "%ld", integer);
         lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
     } else if(isFloating()) {
         lexicalLen = snprintf(nullptr, 0, "%f", floating);
-        char *s = new char[lexicalLen + 1];
+        char* s = new char[lexicalLen + 1];
         sprintf(s, "%f", floating);
         lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
     } else if(isDecimal()) {
         std::string str = decimal->getString();
         lexicalLen = str.size();
-        char *s = new char[lexicalLen + 1];
+        char* s = new char[lexicalLen + 1];
         memcpy(s, str.c_str(), lexicalLen);
         s[lexicalLen] = '\0';
         lexical = s;
@@ -574,14 +574,14 @@ void Value::ensureInterpreted() {
     isInterpreted = true;
 }
 
-uint32_t Value::hash() const {
-    uint32_t hash = type;
+Hash::hash_t Value::hash() const {
+    Hash::hash_t hash = type;
     if(type == TYPE_CUSTOM)
         hash = Hash::hash(typeUri, typeUriLen, hash);
     return Hash::hash(lexical, lexicalLen, hash);
 }
 
-std::ostream& operator<<(std::ostream &out, const Value &val) {
+std::ostream& operator<<(std::ostream& out, const Value& val) {
     switch(val.type) {
     case Value::TYPE_BLANK:
         out << "_:";
@@ -626,14 +626,14 @@ std::ostream& operator<<(std::ostream &out, const Value &val) {
     return out;
 }
 
-std::ostream& operator<<(std::ostream &out, const Value *val) {
+std::ostream& operator<<(std::ostream& out, const Value* val) {
     if(val)
         return out << *val;
     else
         return out;
 }
 
-void Value::promoteNumericType(Value &v1, Value &v2) {
+void Value::promoteNumericType(Value& v1, Value& v2) {
     v1.ensureInterpreted();
     v2.ensureInterpreted();
     if(v1.isDecimal() && v2.isInteger())
@@ -659,18 +659,19 @@ void Value::interpretDatatype() {
     if(type != TYPE_CUSTOM)
         return;
 
-    if(typeUriLen < XSD_PREFIX_LEN + 1)
+    constexpr unsigned PREFIXLEN = sizeof(XSD_PREFIX) - 1;
+    if(typeUriLen < PREFIXLEN + 1)
         return;
 
-    if(memcmp(typeUri, XSD_PREFIX, XSD_PREFIX_LEN) != 0)
+    if(memcmp(typeUri, XSD_PREFIX, PREFIXLEN) != 0)
         return;
 
-    const char *fragment = &typeUri[XSD_PREFIX_LEN];
-    unsigned fragmentLen = typeUriLen - XSD_PREFIX_LEN;
+    const char* fragment = &typeUri[PREFIXLEN];
+    unsigned fragmentLen = typeUriLen - PREFIXLEN;
     for(Type t = TYPE_FIRST_XSD; t <= TYPE_LAST_XSD;
         t = static_cast<Type>(t+1)) {
         if(typeUriLen == TYPE_URIS_LEN[t] &&
-           memcmp(fragment, &TYPE_URIS[t][XSD_PREFIX_LEN], fragmentLen) == 0) {
+           memcmp(fragment, &TYPE_URIS[t][PREFIXLEN], fragmentLen) == 0) {
             type = t;
             if(hasCleanFlag(CLEAN_TYPE_URI)) {
                 delete [] typeUri;

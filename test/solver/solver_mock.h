@@ -32,17 +32,17 @@ public:
         ON_CALL(*this, propagate()) .WillByDefault(Return(true));
     }
 
-    MOCK_METHOD1(add,     void(Constraint *c));
-    MOCK_METHOD1(refresh, void(Constraint *c));
+    MOCK_METHOD1(add,     void(Constraint* c));
+    MOCK_METHOD1(refresh, void(Constraint* c));
 
-    void enqueue(std::vector<Constraint*> &constraints) {
-        for(Constraint *c : constraints)
+    void enqueue(std::vector<Constraint*>& constraints) {
+        for(Constraint* c : constraints)
             c->propagate();
     }
 
 private:
     MOCK_METHOD0(postStatic, bool());
-    MOCK_METHOD1(post, bool(std::vector<Constraint*> *constraints));
+    MOCK_METHOD1(post, bool(std::vector<Constraint*>* constraints_));
     MOCK_METHOD0(propagate, bool());
     MOCK_METHOD0(clearQueue, void());
 };

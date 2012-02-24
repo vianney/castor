@@ -15,6 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#include "store.h"
+
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -25,78 +27,83 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include "store.h"
+
+#include "util.h"
 
 namespace castor {
 
-Store::Store(const char* fileName) : db(fileName) {
-    Cursor cur = db.getPage(0);
+const char Store::MAGIC[] = {'\xd0', '\xd4', '\xc5', '\xd8',
+                             'C', 'a', 's', 't', 'o', 'r'};
+
+Store::Store(const char* fileName) : db_(fileName) {
+    Cursor cur = db_.page(0);
 
     // check magic number and version format
-    if(memcmp(cur.get(), CASTOR_STORE_MAGIC, sizeof(CASTOR_STORE_MAGIC) - 1) != 0)
-        throw "Invalid magic number";
-    cur += sizeof(CASTOR_STORE_MAGIC) - 1;
+    if(memcmp(cur.get(), MAGIC, sizeof(MAGIC)) != 0)
+        throw CastorException() << "Invalid magic number";
+    cur += sizeof(MAGIC);
     if(cur.readInt() != VERSION)
-        throw "Invalid format version";
+        throw CastorException() << "Invalid format version";
 
 
     // Get triples pointers
-    for(int i = 0; i < 3; i++) {
-        triplesStart[i] = cur.readInt();
-        triplesIndex[i] = new BTree<Triple>(&db, cur.readInt());
+    for(int i = 0; i < ORDERS; i++) {
+        triples_[i].begin = cur.readInt();
+        triples_[i].index = new BTree<Triple>(&db_, cur.readInt());
     }
 
     // Get values pointers
-    valuesStart = cur.readInt();
-    valuesMapping = cur.readInt();
-    valuesIndex = new ValueHashTree(&db, cur.readInt());
-    valuesEqClasses = cur.readInt();
-    for(Value::Class cls = Value::CLASS_BLANK; cls <= Value::CLASSES_COUNT; ++cls)
-        valuesClassStart[cls] = cur.readInt();
-    nbValues = valuesClassStart[Value::CLASSES_COUNT] - 1;
+    values_.begin = cur.readInt();
+    values_.mapping = cur.readInt();
+    values_.index = new ValueHashTree(&db_, cur.readInt());
+    values_.eqClasses = cur.readInt();
+    for(Value::Category cat = Value::CAT_BLANK; cat <= Value::CATEGORIES; ++cat)
+        values_.categories[cat] = cur.readInt();
+    values_.count = values_.categories[Value::CATEGORIES] - 1;
 
     // initialize triples cache
-    cache.initialize(&db, valuesStart - 1);
+    cache_.initialize(&db_, values_.begin - 1);
 }
 
 Store::~Store() {
-    for(int i = 0; i < 3; i++)
-        delete triplesIndex[i];
-    delete valuesIndex;
+    for(int i = 0; i < ORDERS; i++)
+        delete triples_[i].index;
+    delete values_.index;
 }
 
-void Store::fetchValue(Value::id_t id, Value &val) {
+void Store::fetch(Value::id_t id, Value& val) {
     assert(id > 0);
     // read mapping
     const unsigned EPP = PageReader::PAGE_SIZE / 8; // entries per page in map
     id--;
-    Cursor cur = db.getPage(valuesMapping + id / EPP) + 8*(id % EPP);
+    Cursor cur = db_.page(values_.mapping + id / EPP) + 8*(id % EPP);
     unsigned page = cur.readInt();
     unsigned offset = cur.readInt();
 
     // read value
-    cur = db.getPage(page) + offset;
+    cur = db_.page(page) + offset;
     cur.readValue(val);
 }
 
-void Store::lookupId(Value &val) {
+void Store::lookup(Value& val) {
     if(val.id > 0)
         return;
 
     // look for pages containing the hash
     val.ensureLexical();
-    uint32_t hash = val.hash();
-    Cursor listCur = valuesIndex->lookup(hash);
+    Hash::hash_t hash = val.hash();
+    Cursor listCur = values_.index->lookup(hash);
     if(!listCur.valid())
         return;
 
     // scan all candidates in the collision list
-    for(Cursor listEnd = db.getPageEnd(listCur); listCur != listEnd;) {
+    Cursor listEnd = db_.pageEnd(listCur);
+    while(listCur != listEnd) {
         if(listCur.readInt() != hash)
             break;
 
         // scan page
-        Cursor cur = db.getPage(listCur.readInt());
+        Cursor cur = db_.page(listCur.readInt());
         cur.skipInt(); // skip next page header
         unsigned count = cur.readInt();
         unsigned idx = 0;
@@ -119,10 +126,10 @@ void Store::lookupId(Value &val) {
 }
 
 
-ValueRange Store::getValueEqClass(Value::id_t id) {
+ValueRange Store::eqClass(Value::id_t id) {
     assert(id > 0);
     id--;  // page offsets start with 0
-    Cursor cur = db.getPage(valuesEqClasses);
+    Cursor cur = db_.page(values_.eqClasses);
     ValueRange result;
     unsigned idOffset = id / 32;
     unsigned idWord = cur.peekInt(idOffset * 4);
@@ -164,20 +171,21 @@ ValueRange Store::getValueEqClass(Value::id_t id) {
     return result;
 }
 
-ValueRange Store::getValueEqClass(const Value &val) {
+ValueRange Store::eqClass(const Value& val) {
     if(val.id > 0)
-        return getValueEqClass(val.id);
+        return eqClass(val.id);
     assert(val.isInterpreted);
 
     // costly binary search for equivalent value
-    Value::id_t left = 1, right = nbValues + 1;
+    Value::id_t left  = 1;
+    Value::id_t right = values_.count + 1;
     while(left != right) {
         Value::id_t middle = left + (right - left) / 2;
         Value mVal;
-        fetchValue(middle, mVal);
+        fetch(middle, mVal);
         mVal.ensureInterpreted();
         if(mVal.compare(val) == 0)
-            return getValueEqClass(middle);
+            return eqClass(middle);
         if(mVal < val)
             left = middle + 1;
         else
@@ -187,18 +195,18 @@ ValueRange Store::getValueEqClass(const Value &val) {
     return result;
 }
 
-Value::Class Store::getValueClass(Value::id_t id) {
-    for(Value::Class cls = Value::CLASS_BLANK; cls <= Value::CLASSES_COUNT; ++cls) {
-        if(valuesClassStart[cls] > id)
-            return --cls;
+Value::Category Store::category(Value::id_t id) {
+    for(Value::Category cat = Value::CAT_BLANK; cat <= Value::CATEGORIES; ++cat) {
+        if(values_.categories[cat] > id)
+            return --cat;
     }
     // should not happen
     assert(false);
-    return Value::CLASSES_COUNT;
+    return static_cast<Value::Category>(Value::CATEGORIES);
 }
 
-Store::RangeQuery::RangeQuery(Store *store, Triple from, Triple to) :
-        store(store) {
+Store::TripleRange::TripleRange(Store* store, Triple from, Triple to) :
+        store_(store) {
     assert(from <= to);
     // determine index such that non-singleton ranges are the last components
     Triple key;
@@ -209,45 +217,46 @@ Store::RangeQuery::RangeQuery(Store *store, Triple from, Triple to) :
     case 4: // (s,p,*)
     case 6: // (s,*,*)
     case 7: // (*,*,*)
-        order = SPO;
-        key = from;
-        limit = to;
+        order_ = SPO;
+        key    = from;
+        limit_ = to;
         break;
     case 1: // (*,p,o)
     case 5: // (*,p,*)
-        order = POS;
-        key   = from << 1;
-        limit = to   << 1;
+        order_ = POS;
+        key    = from << 1;
+        limit_ = to   << 1;
         break;
     case 2: // (s,*,o)
     case 3: // (*,*,o)
-        order = OSP;
-        key   = from << 2;
-        limit = to   << 2;
+        order_ = OSP;
+        key    = from << 2;
+        limit_ = to   << 2;
         break;
     }
 
     // look for the first leaf
-    nextPage = store->triplesIndex[order]->lookupLeaf(key);
-    if(nextPage == 0) {
-        it = end = nullptr;
+    nextPage_ = store->triples_[order_].index->lookupLeaf(key);
+    if(nextPage_ == 0) {
+        it_ = end_ = nullptr;
         return;
     }
 
     // lookup page in cache
-    const TripleCache::Line *line = store->cache.fetch(nextPage);
-    it = line->triples;
-    end = it + line->count;
-    nextPage = line->nextPage;
+    const TripleCache::Line* line = store->cache_.fetch(nextPage_);
+    it_       = line->triples;
+    end_      = it_ + line->count;
+    nextPage_ = line->nextPage;
 
     // binary search for first triple
-    const Triple *left = it, *right = end;
+    const Triple* left  = it_;
+    const Triple* right = end_;
     while(left != right) {
-        const Triple *middle = left + (right - left) / 2;
+        const Triple* middle = left + (right - left) / 2;
         if(*middle < key) {
             left = middle + 1;
-        } else if(middle == it || *(middle - 1) < key) {
-            it = middle;
+        } else if(middle == it_ || *(middle - 1) < key) {
+            it_ = middle;
             break;
         } else {
             right = middle;
@@ -255,36 +264,36 @@ Store::RangeQuery::RangeQuery(Store *store, Triple from, Triple to) :
     }
     if(left == right) {
         // unsuccessful search
-        it = end;
-        nextPage = 0;
+        it_ = end_;
+        nextPage_ = 0;
     }
 }
 
-bool Store::RangeQuery::next(Triple *t) {
-    if(it == end) {
-        if(nextPage == 0)
+bool Store::TripleRange::next(Triple* t) {
+    if(it_ == end_) {
+        if(nextPage_ == 0)
             return false;
-        const TripleCache::Line *line = store->cache.fetch(nextPage);
-        it = line->triples;
-        end = it + line->count;
-        nextPage = line->nextPage;
+        const TripleCache::Line* line = store_->cache_.fetch(nextPage_);
+        it_       = line->triples;
+        end_      = it_ + line->count;
+        nextPage_ = line->nextPage;
     }
-    if(*it > limit)
+    if(*it_ > limit_)
         return false;
     if(t != nullptr) {
-        switch(order) {
+        switch(order_) {
         case SPO:
-            *t = *it;
+            *t = *it_;
             break;
         case POS:
-            *t = *it >> 1;
+            *t = *it_ >> 1;
             break;
         case OSP:
-            *t = *it >> 2;
+            *t = *it_ >> 2;
             break;
         }
     }
-    it++;
+    ++it_;
     return true;
 }
 

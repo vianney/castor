@@ -21,11 +21,13 @@
 #include <string>
 #include <iostream>
 #include <set>
+#include <vector>
+
+#include "util.h"
 #include "librdfwrapper.h"
 #include "store.h"
 #include "solver/solver.h"
 #include "variable.h"
-#include "util.h"
 
 namespace castor {
 
@@ -35,36 +37,24 @@ class DistinctConstraint;
 class BnBOrderConstraint;
 
 /**
- * Exception while parsing the query
- */
-class QueryParseException : public std::exception {
-    std::string msg;
-
-public:
-    QueryParseException(std::string msg) : msg(msg) {}
-    QueryParseException(const char* msg) : msg(msg) {}
-    QueryParseException(const QueryParseException &o) : msg(o.msg) {}
-    ~QueryParseException() throw() {}
-
-    const char *what() const throw() { return msg.c_str(); }
-};
-
-/**
  * A solution is a snapshot of the values assigned to the variables of a query.
  */
 class Solution {
-    Query *query;
-    Value::id_t *values;
 public:
     /**
      * Create a snapshot of the values currently assigned to the variables of
      * query.
      */
-    Solution(Query *query);
+    Solution(Query* query);
     ~Solution();
 
-    Value::id_t getValueId(int i) const { return values[i]; }
-    Value::id_t getValueId(Variable &var) const { return getValueId(var.getId()); }
+    //! Non-copyable
+    Solution(const Solution&) = delete;
+    Solution& operator=(const Solution&) = delete;
+
+    Value::id_t operator[](unsigned i)    const { return values_[i]; }
+    Value::id_t operator[](Variable& var) const { return values_[var.id()]; }
+    Value::id_t operator[](Variable* var) const { return values_[var->id()]; }
 
     /**
      * Assign the stored values to the variables of the query.
@@ -73,10 +63,35 @@ public:
 
     /**
      * Compare two solutions following the ordering given in the query.
+     * @pre this->query == o.query
      * @note this may change the values set in the query
      */
-    bool operator<(const Solution &o) const;
-    bool operator>(const Solution &o) const { return o < *this; }
+    bool operator<(const Solution& o) const;
+    bool operator>(const Solution& o) const { return o < *this; }
+
+private:
+    Query*       query_;
+    Value::id_t* values_;
+};
+
+/**
+ * Ordering clause in a query.
+ */
+class Order {
+public:
+    Order(Expression* expression, bool descending) :
+        expression_(expression), descending_(descending) {}
+
+    Order(const Order&) = default;
+    Order& operator=(const Order&) = default;
+
+    bool        isAscending()  const { return !descending_; }
+    bool        isDescending() const { return  descending_; }
+    Expression* expression()   const { return  expression_; }
+
+private:
+    Expression* expression_;
+    bool        descending_;
 };
 
 /**
@@ -89,74 +104,69 @@ public:
      *
      * @param store a store containing the values
      * @param queryString SPARQL query
-     * @throws QueryParseException on parse error
+     * @throws CastorException on parse error
      */
-    Query(Store *store, const char *queryString) throw(QueryParseException);
+    Query(Store* store, const char* queryString);
     ~Query();
 
+    //! Non-copyable
+    Query(const Query&) = delete;
+    Query& operator=(const Query&) = delete;
+
+    Store*      store()  { return store_; }   //!< @return the associated store
+    cp::Solver* solver() { return &solver_; } //!< @return the CP solver
+
     /**
-     * @return the store associated to this query
+     * @param id the id of a variable
+     * @return the variable
      */
-    Store* getStore() { return store; }
+    Variable* variable(unsigned id) const { return vars_[id]; }
     /**
-     * @return the CP solver
+     * @param v the identifier of a variable
+     * @pre v.isVariable()
+     * @return the variable referred to by v
      */
-    cp::Solver* getSolver() { return &solver; }
+    Variable* variable(VarVal v) const {
+        assert(v.isVariable());
+        return variable(v.variableId());
+    }
     /**
-     * @return the number of variables
+     * @return the variables (requested variables first)
      */
-    unsigned getVariablesCount() const { return nbVars; }
+    const std::vector<Variable*> variables() const { return vars_; }
     /**
      * @return the number of requested variables
      */
-    unsigned getRequestedCount() const { return nbRequestedVars; }
-    /**
-     * @param id id of a variable (within 0..getVariablesCount()-1)
-     * @return the variable with identifier id
-     */
-    Variable* getVariable(unsigned id) const { return &vars[id]; }
-    /**
-     * @return array of variables
-     */
-    Variable* getVariables() const { return vars; }
+    unsigned requested() const { return requested_; }
+
     /**
      * @return the graph pattern
      */
-    Pattern* getPattern() const { return pattern; }
+    Pattern* pattern() const { return pattern_; }
+
     /**
      * @return whether all returned solutions are distinct
      */
-    bool isDistinct() const { return distinct; }
+    bool isDistinct() const { return distinct_; }
     /**
      * @return the limit on the number of solutions to return or
      *         -1 to return all
      */
-    int getLimit() const { return limit; }
+    int limit() const { return limit_; }
     /**
      * @return the number of ignored solutions in the beginning
      */
-    unsigned getOffset() const { return offset; }
+    unsigned offset() const { return offset_; }
 
     /**
-     * @return the number of ORDER BY expressions.
+     * @return the ORDER BY clauses
      */
-    unsigned getOrderCount() const { return nbOrder; }
-    /**
-     * @param i index of an ORDER BY expression (within 0..getOrderCount()-1)
-     * @return the ORDERY BY expression at index i
-     */
-    Expression* getOrder(unsigned i) const { return order[i]; }
-    /**
-     * @param i index of an ORDER BY expression (within 0..getOrderCount()-1)
-     * @return whether ORDERY BY expression at index i should be in descending
-     *         direction
-     */
-    bool isOrderDescending(unsigned i) const { return orderDescending[i]; }
+    const std::vector<Order> orders() const { return orders_; }
 
     /**
      * @return the number of solutions found so far
      */
-    unsigned getSolutionCount() const { return nbSols; }
+    unsigned count() const { return nbSols_; }
 
     /**
      * Find the next solution
@@ -175,30 +185,25 @@ private:
      *
      * @param gp a rasqal_graph_pattern
      * @return the new pattern
-     * @throws QueryParseException on parse error
+     * @throws CastorException on parse error
      */
-    Pattern* convertPattern(rasqal_graph_pattern* gp) throw(QueryParseException);
+    Pattern* convert(rasqal_graph_pattern* gp);
 
     /**
      * Create an Expression from a rasqal_expression.
      *
      * @param expr the rasqal expression
      * @return the new expression
-     * @throws QueryParseException on parse error
+     * @throws CastorException on parse error
      */
-    Expression* convertExpression(rasqal_expression* expr) throw(QueryParseException);
-
-    /**
-     * Copy a raptor_uri into a new string
-     */
-    char* convertURI(raptor_uri *uri);
+    Expression* convert(rasqal_expression* expr);
 
     /**
      * @param literal a rasqal literal
      * @return the variable or value id of the literal in the store
-     * @throws QueryParseException on parse error
+     * @throws CastorException on parse error
      */
-    VarVal getVarVal(rasqal_literal* literal) throw(QueryParseException);
+    VarVal lookup(rasqal_literal* literal);
 
     /**
      * Find the next solution of the pattern, updating the DISTINCT constraint
@@ -208,72 +213,61 @@ private:
     bool nextPatternSolution();
 
 private:
-    Store *store; //!< store associated to this query
-    cp::Solver solver; //!< CP solver
-    unsigned nbVars; //!< number of variables
-    unsigned nbRequestedVars; //!< number of requested variables
+    Store*     store_;  //!< store associated to this query
+    cp::Solver solver_; //!< CP solver
     /**
      * Array of variables. The requested variables come first.
      */
-    Variable *vars;
+    std::vector<Variable*> vars_;
+    unsigned requested_; //!< number of requested variables
     /**
      * Graph pattern
      */
-    Pattern *pattern;
+    Pattern* pattern_;
     /**
      * Should all solutions be distinct?
      */
-    bool distinct;
+    bool distinct_;
     /**
      * Static distinct constraint or nullptr if not needed.
      */
-    DistinctConstraint *distinctCstr;
+    DistinctConstraint* distinctCstr_;
     /**
      * Limit of the number of solutions to return. -1 to return all.
      */
-    int limit;
+    int limit_;
     /**
      * Number of solutions to ignore in the beginning.
      */
-    unsigned offset;
+    unsigned offset_;
     /**
-     * Number of ORDER BY expressions.
+     * ORDER BY clauses
      */
-    unsigned nbOrder;
-    /**
-     * Array of ORDER BY expressions.
-     */
-    Expression **order;
-    /**
-     * Array of order directions. True for descending, false for ascending.
-     */
-    bool *orderDescending;
+    std::vector<Order> orders_;
     /**
      * Number of solutions found so far.
      */
-    unsigned nbSols;
+    unsigned nbSols_;
 
     typedef std::multiset<Solution*,DereferenceLess> SolutionSet;
     /**
      * The solution set if we need to compute it a priori. Otherwise, it is
      * nullptr.
      */
-    SolutionSet *solutions;
+    SolutionSet* solutions_;
     /**
      * Pointer to the next solution to return.
      */
-    SolutionSet::iterator it;
+    SolutionSet::iterator it_;
 
     /**
      * Static constraint for Branch-and-Bound or nullptr if not needed.
      */
-    BnBOrderConstraint *bnbOrderCstr;
+    BnBOrderConstraint* bnbOrderCstr_;
 };
 
-std::ostream& operator<<(std::ostream &out, const Query &q);
+std::ostream& operator<<(std::ostream& out, const Query& q);
 
 }
-
-#include "pattern.h"
 
 #endif // CASTOR_QUERY_H

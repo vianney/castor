@@ -39,9 +39,9 @@ namespace {
 struct Range {
     Cursor from, to;
 
-    Range(Cursor from, Cursor to) : from(from),to(to) {}
+    Range(Cursor from, Cursor to) : from(from), to(to) {}
 
-    bool operator ==(const Range& o) const {
+    bool operator==(const Range& o) const {
         return ((to - from) == (o.to - o.from))
                 && (memcmp(from.get(), o.from.get(), to-from) == 0);
     }
@@ -50,7 +50,7 @@ struct Range {
     /**
      * Write this item to a temporary file
      */
-    void write(TempFile &out) {
+    void write(TempFile& out) {
         out.write(to - from, reinterpret_cast<const char*>(from.get()));
     }
 };
@@ -78,14 +78,13 @@ struct CompareSorter
  * @param eliminateDuplicates should we eliminate the duplicates?
  * @return the number of bytes written
  */
-static unsigned spool(TempFile &out, const vector<Range> &items,
+static unsigned spool(TempFile& out, const vector<Range>& items,
                       bool eliminateDuplicates) {
     unsigned len = 0;
     Range last(0, 0);
-    for (vector<Range>::const_iterator it=items.begin(), end=items.end();
-         it != end; ++it) {
-        if(!eliminateDuplicates || last != *it) {
-            last = *it;
+    for(Range r : items) {
+        if(!eliminateDuplicates || last != r) {
+            last = r;
             last.write(out);
             len += last.to - last.from;
         }
@@ -95,17 +94,17 @@ static unsigned spool(TempFile &out, const vector<Range> &items,
 
 }
 
-void FileSorter::sort(TempFile &in, TempFile &out,
-                      void (*skip)(Cursor &),
+void FileSorter::sort(TempFile& in, TempFile& out,
+                      void (*skip)(Cursor&),
                       int (*compare)(Cursor, Cursor),
                       bool eliminateDuplicates) {
     in.close();
 
     // Produce runs
     vector<Range> runs;
-    TempFile intermediate(out.getBaseName());
+    TempFile intermediate(out.baseName());
     {
-        MMapFile fin(in.getFileName().c_str());
+        MMapFile fin(in.fileName().c_str());
         Cursor cur = fin.begin(), limit = fin.end();
         Cursor ofs(0);
         while (cur < limit) {
@@ -142,11 +141,10 @@ void FileSorter::sort(TempFile &in, TempFile &out,
     // Do we have to merge runs?
     if (!runs.empty()) {
         // Map the ranges
-        MMapFile tempIn(intermediate.getFileName().c_str());
-        for (vector<Range>::iterator it = runs.begin(), end=runs.end();
-             it != end; ++it) {
-            (*it).from += tempIn.begin().get() - static_cast<const unsigned char*>(0);
-            (*it).to += tempIn.begin().get() - static_cast<const unsigned char*>(0);
+        MMapFile tempIn(intermediate.fileName().c_str());
+        for(Range& r : runs) {
+            r.from += tempIn.begin().get() - static_cast<const unsigned char*>(nullptr);
+            r.to   += tempIn.begin().get() - static_cast<const unsigned char*>(nullptr);
         }
 
         // Sort the run heads

@@ -16,87 +16,88 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "triplecache.h"
+
 #include <cstring>
 #include <cassert>
 
 namespace castor {
 
 TripleCache::TripleCache() {
-    size = 0;
-    statHits = 0;
-    statMisses = 0;
+    size_ = 0;
+    statHits_ = 0;
+    statMisses_ = 0;
 }
 
 TripleCache::~TripleCache() {
-    delete [] map;
+    delete [] map_;
     // Clean used lines
-    for(unsigned i = 0; i < size; i++)
-        delete [] lines[i].triples;
+    for(unsigned i = 0; i < size_; i++)
+        delete [] lines_[i].triples;
 }
 
-void TripleCache::initialize(PageReader *db, unsigned maxPage) {
-    this->db = db;
-    map = new Line*[maxPage + 1];
-    memset(map, 0, (maxPage + 1) * sizeof(Line*));
-    head = nullptr;
-    tail = nullptr;
+void TripleCache::initialize(PageReader* db, unsigned maxPage) {
+    db_ = db;
+    map_ = new Line*[maxPage + 1];
+    memset(map_, 0, (maxPage + 1) * sizeof(Line*));
+    head_ = nullptr;
+    tail_ = nullptr;
 }
 
 const TripleCache::Line* TripleCache::fetch(unsigned page) {
     assert(page > 0);
 
     // lookup page in cache
-    Line *line = map[page];
+    Line* line = map_[page];
     if(line != nullptr) {
-        ++statHits;
+        ++statHits_;
         // move cache line to head of list
-        if(head != line) {
-            line->prev->next = line->next;
-            if(tail == line)
-                tail = line->prev;
+        if(head_ != line) {
+            line->prev_->next_ = line->next_;
+            if(tail_ == line)
+                tail_ = line->prev_;
             else
-                line->next->prev = line->prev;
-            head->prev = line;
-            line->next = head;
-            line->prev = nullptr;
-            head = line;
+                line->next_->prev_ = line->prev_;
+            head_->prev_ = line;
+            line->next_ = head_;
+            line->prev_ = nullptr;
+            head_ = line;
         }
         return line;
     }
 
-    ++statMisses;
+    ++statMisses_;
     // find free cache line
-    if(size < CAPACITY) {
+    if(size_ < CAPACITY) {
         // intialize new line
-        line = &lines[size++];
+        line = &lines_[size_++];
         line->triples = new Triple[Line::MAX_COUNT];
-        if(head == nullptr) {
-            head = tail = line;
-            line->prev = nullptr;
-            line->next = nullptr;
+        if(head_ == nullptr) {
+            head_ = tail_ = line;
+            line->prev_ = nullptr;
+            line->next_ = nullptr;
         } else {
-            head->prev = line;
-            line->next = head;
-            line->prev = nullptr;
-            head = line;
+            head_->prev_ = line;
+            line->next_ = head_;
+            line->prev_ = nullptr;
+            head_ = line;
         }
     } else {
         // evict least recently used line
-        line = tail;
-        tail = line->prev;
-        tail->next = nullptr;
-        head->prev = line;
-        line->next = head;
-        line->prev = nullptr;
-        head = line;
-        map[line->page] = nullptr;
+        line = tail_;
+        tail_ = line->prev_;
+        tail_->next_ = nullptr;
+        head_->prev_ = line;
+        line->next_ = head_;
+        line->prev_ = nullptr;
+        head_ = line;
+        map_[line->page] = nullptr;
     }
 
-    map[page] = line;
+    map_[page] = line;
 
     // read page and interpret header
-    Cursor cur = db->getPage(page);
-    Cursor pageEnd = cur + PageReader::PAGE_SIZE;
+    Cursor cur = db_->page(page);
+    Cursor end = cur + PageReader::PAGE_SIZE;
     line->page = page;
     line->prevPage = cur.readInt();
     line->nextPage = cur.readInt();
@@ -105,11 +106,11 @@ const TripleCache::Line* TripleCache::fetch(unsigned page) {
     Triple t;
     for(int i = 0; i < t.COMPONENTS; i++)
         t[i] = cur.readInt();
-    Triple *it = line->triples;
+    Triple* it = line->triples;
     (*it++) = t;
 
     // Unpack other triples
-    while(cur < pageEnd) {
+    while(cur < end) {
         unsigned header = cur.readByte();
         if(header < 0x80) {
             // small gap in last component

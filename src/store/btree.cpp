@@ -21,11 +21,11 @@
 
 namespace castor {
 
-Cursor ValueHashTree::lookup(uint32_t hash) {
+Cursor ValueHashTree::lookup(Hash::hash_t hash) {
     unsigned page = lookupLeaf(ValueHashKey(hash));
     if(page == 0)
-        return Cursor(0);
-    Cursor pageCur = db->getPage(page);
+        return Cursor(nullptr);
+    Cursor pageCur = db_->page(page);
     pageCur.skipInt(); // skip "previous page" pointers
     pageCur.skipInt(); // skip "next page" pointers
     // binary search
@@ -33,7 +33,7 @@ Cursor ValueHashTree::lookup(uint32_t hash) {
     while(left != right) {
         unsigned middle = (left + right) / 2;
         Cursor middleCur = pageCur + middle * 8;
-        uint32_t middleHash = middleCur.readInt();
+        Hash::hash_t middleHash = middleCur.readInt();
         if(middleHash < hash) {
             left = middle + 1;
         } else if(middleHash > hash) {
@@ -46,7 +46,7 @@ Cursor ValueHashTree::lookup(uint32_t hash) {
         }
     }
     // not found
-    return Cursor(0);
+    return Cursor(nullptr);
 }
 
 }

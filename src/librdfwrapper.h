@@ -18,8 +18,11 @@
 #ifndef CASTOR_LIBRDF_H
 #define CASTOR_LIBRDF_H
 
+#include <cassert>
 #include <raptor2.h>
 #include <rasqal.h>
+
+#include "util.h"
 
 namespace castor {
 /**
@@ -31,8 +34,8 @@ namespace librdf {
  * Structure for global librdf worlds
  */
 struct World {
-    raptor_world *raptor;
-    rasqal_world *rasqal;
+    raptor_world* raptor;
+    rasqal_world* rasqal;
 
     /**
      * Return the singleton World instance
@@ -57,55 +60,90 @@ private:
  */
 template <class T>
 class Sequence {
-    raptor_sequence *seq;
 public:
-    Sequence(raptor_sequence *seq = nullptr) : seq(seq) {}
-    Sequence& operator=(raptor_sequence *s) { seq = s; return *this; }
-    int size() { return seq ? raptor_sequence_size(seq) : 0; }
+    Sequence(raptor_sequence* seq = nullptr) : seq_(seq) {}
+    Sequence(const Sequence&) = default;
+    Sequence& operator=(const Sequence&) = default;
+    Sequence& operator=(raptor_sequence* s) { seq_ = s; return *this; }
+    int size() { return seq_ ? raptor_sequence_size(seq_) : 0; }
     T* operator[](int i) {
-        return reinterpret_cast<T*>(raptor_sequence_get_at(seq, i));
+        return reinterpret_cast<T*>(raptor_sequence_get_at(seq_, i));
     }
+    bool operator==(const Sequence& o) const { return seq_ == o.seq_; }
+    bool operator!=(const Sequence& o) const { return seq_ != o.seq_; }
+
+    // C++11 iterator
+    class Iterator {
+    public:
+        Iterator(Sequence<T> seq, int i) : seq_(seq), i_(i) {}
+        T* operator*() { return seq_[i_]; }
+        bool operator!=(const Iterator& o) const {
+            assert(seq_ == o.seq_);
+            return i_ != o.i_;
+        }
+        Iterator& operator++() { ++i_; return *this; }
+    private:
+        Sequence<T> seq_;
+        int i_;
+    };
+    Iterator begin() { return Iterator(*this, 0);      }
+    Iterator end()   { return Iterator(*this, size()); }
+
+private:
+    raptor_sequence* seq_;
 };
 
 
 /**
- * RDF Parser handler
+ * Intarface for an RDF Parser handler
  */
-class RDFParseHandler {
+class RdfParseHandler {
 public:
-    virtual ~RDFParseHandler() {}
+    virtual ~RdfParseHandler() {}
     virtual void parseTriple(raptor_statement* triple) = 0;
 };
 
 /**
  * Wrapper for RDF parser
  */
-class RDFParser {
-    raptor_parser *parser;
-    raptor_uri *fileURI;
-    unsigned char *fileURIstr;
-
-    static void stmt_handler(void* user_data, raptor_statement* triple) {
-        static_cast<RDFParseHandler*>(user_data)->parseTriple(triple);
-    }
-
+class RdfParser {
 public:
-    RDFParser(const char *syntax, const char *path) {
-        parser = raptor_new_parser(World::instance().raptor, syntax);
-        if(parser == nullptr)
-            throw "Unable to create parser";
-        fileURIstr = raptor_uri_filename_to_uri_string(path);
-        fileURI = raptor_new_uri(World::instance().raptor, fileURIstr);
+    RdfParser(const char* syntax, const char* path) {
+        parser_ = raptor_new_parser(World::instance().raptor, syntax);
+        if(parser_ == nullptr)
+            throw CastorException() << "Unable to create raptor parser";
+        uriString_ = raptor_uri_filename_to_uri_string(path);
+        uri_ = raptor_new_uri(World::instance().raptor, uriString_);
     }
-    ~RDFParser() {
-        raptor_free_parser(parser);
-        raptor_free_uri(fileURI);
-        raptor_free_memory(fileURIstr);
+    ~RdfParser() {
+        raptor_free_parser(parser_);
+        raptor_free_uri   (uri_);
+        raptor_free_memory(uriString_);
     }
-    void parse(RDFParseHandler *handler) {
-        raptor_parser_set_statement_handler(parser, handler, stmt_handler);
-        raptor_parser_parse_file(parser, fileURI, nullptr);
+
+    //! Non-copyable
+    RdfParser(const RdfParser&) = delete;
+    RdfParser& operator=(const RdfParser&) = delete;
+
+    /**
+     * Parse the RDF calling handler->parseTriple() on every triple.
+     *
+     * @param handler handler to call
+     */
+    void parse(RdfParseHandler* handler) {
+        raptor_parser_set_statement_handler(parser_, handler, stmt_handler);
+        raptor_parser_parse_file(parser_, uri_, nullptr);
     }
+
+private:
+    static void stmt_handler(void* user_data, raptor_statement* triple) {
+        static_cast<RdfParseHandler*>(user_data)->parseTriple(triple);
+    }
+
+private:
+    raptor_parser* parser_;
+    raptor_uri*    uri_;
+    unsigned char* uriString_;
 };
 
 

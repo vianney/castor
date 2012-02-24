@@ -19,56 +19,61 @@
 
 #include <cassert>
 
+#include "expression.h"
+
 namespace castor {
 
-BnBOrderConstraint::BnBOrderConstraint(Query *query) : query(query) {
+BnBOrderConstraint::BnBOrderConstraint(Query* query) : query_(query) {
     VariableSet vars(query);
-    for(unsigned i = 0; i < query->getOrderCount(); i++)
-        vars += query->getOrder(i)->getVars();
-    assert(vars.getSize() > 0);
-    for(Variable *x : vars)
-        x->getCPVariable()->registerBind(this);
-    boundOrderVals = new Value[query->getOrderCount()];
-    boundOrderError = new bool[query->getOrderCount()];
-    bound = nullptr;
+    for(Order order : query->orders())
+        vars += order.expression()->variables();
+    assert(vars.size() > 0);
+    for(Variable* x : vars)
+        x->cp()->registerBind(this);
+    boundOrderVals_ = new Value[query->orders().size()];
+    boundOrderError_ = new bool[query->orders().size()];
+    bound_ = nullptr;
 }
 
 BnBOrderConstraint::~BnBOrderConstraint() {
-    delete [] boundOrderVals;
-    delete [] boundOrderError;
+    delete [] boundOrderVals_;
+    delete [] boundOrderError_;
 }
 
-void BnBOrderConstraint::updateBound(Solution *sol) {
-    bound = sol;
-    bound->restore();
-    for(unsigned i = 0; i < query->getOrderCount(); i++) {
-        if(VariableExpression *varexpr = dynamic_cast<VariableExpression*>(query->getOrder(i))) {
-            boundOrderVals[i].id = varexpr->getVariable()->getValueId();
-            boundOrderError[i] = (boundOrderVals[i].id > 0);
+void BnBOrderConstraint::updateBound(Solution* sol) {
+    bound_ = sol;
+    bound_->restore();
+    unsigned i = 0;
+    for(Order order : query_->orders()) {
+        if(VariableExpression* varexpr = dynamic_cast<VariableExpression*>(order.expression())) {
+            boundOrderVals_[i].id = varexpr->variable()->valueId();
+            boundOrderError_[i] = (boundOrderVals_[i].id > 0);
         } else {
-            boundOrderError[i] = !query->getOrder(i)->evaluate(boundOrderVals[i]);
-            if(!boundOrderError[i])
-                boundOrderVals[i].ensureInterpreted();
+            boundOrderError_[i] = !order.expression()->evaluate(boundOrderVals_[i]);
+            if(!boundOrderError_[i])
+                boundOrderVals_[i].ensureInterpreted();
         }
+        ++i;
     }
-    solver->refresh(this);
+    solver_->refresh(this);
 }
 
 void BnBOrderConstraint::reset() {
-    bound = nullptr;
+    bound_ = nullptr;
 }
 
 bool BnBOrderConstraint::propagate() {
-    if(bound == nullptr)
+    if(bound_ == nullptr)
         return true;
-    for(unsigned i = 0; i < query->getOrderCount(); i++) {
-        if(boundOrderError[i])
+    unsigned i = 0;
+    for(Order order : query_->orders()) {
+        if(boundOrderError_[i])
             return true; // don't know what to do if evaluation error
-        Expression *expr = query->getOrder(i);
-        bool desc = query->isOrderDescending(i);
-        Value *bval = &boundOrderVals[i];
-        if(VariableExpression *varexpr = dynamic_cast<VariableExpression*>(expr)) {
-            cp::RDFVar *x = varexpr->getVariable()->getCPVariable();
+        Expression* expr = order.expression();
+        bool desc = order.isDescending();
+        Value* bval = &boundOrderVals_[i];
+        if(VariableExpression* varexpr = dynamic_cast<VariableExpression*>(expr)) {
+            cp::RDFVar* x = varexpr->variable()->cp();
             assert(bval->id > 0);
             if(desc) {
                 if(!x->updateMin(bval->id))
@@ -77,18 +82,18 @@ bool BnBOrderConstraint::propagate() {
                 if(!x->updateMax(bval->id))
                     return false;
             }
-            if(i == query->getOrderCount() - 1) {
+            if(i == query_->orders().size() - 1) {
                 if(!x->remove(bval->id))
                     return false;
             }
             if(!x->isBound() ||
-                    (!desc && x->getValue() < bval->id) ||
-                    (desc && x->getValue() > bval->id))
+                    (!desc && x->value() < bval->id) ||
+                    (desc && x->value() > bval->id))
                 return true;
         } else {
-            for(unsigned j = 0; j < expr->getVars().getSize(); j++) {
-                if(expr->getVars()[j]->isBound())
-                    expr->getVars()[j]->setValueFromCP();
+            for(Variable* var : expr->variables()) {
+                if(var->isBound())
+                    var->setFromCP();
                 else
                     return true;
             }
@@ -108,6 +113,7 @@ bool BnBOrderConstraint::propagate() {
                     return false;
             }
         }
+        ++i;
     }
     return false;
 }

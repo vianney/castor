@@ -15,8 +15,10 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#include <cstdlib>
 #include "solver.h"
+
+#include <cstdlib>
+#include <iostream>
 
 namespace castor {
 namespace cp {
@@ -24,76 +26,61 @@ namespace cp {
 Solver::Solver() {
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
         p <= Constraint::PRIOR_LAST; ++p)
-        propagQueue[p] = nullptr;
-    current = nullptr;
-    tsCurrent = 0;
-    tsLastConstraint = 0;
-    statBacktracks = 0;
-    statSubtrees = 0;
-    statPost = 0;
-    statPropagate = 0;
+        propagQueue_[p] = nullptr;
+    current_ = nullptr;
+    tsCurrent_ = 0;
+    tsLastConstraint_ = 0;
+    statBacktracks_ = 0;
+    statSubtrees_ = 0;
+    statPost_ = 0;
+    statPropagate_ = 0;
 }
 
 Solver::~Solver() {
-    for(std::vector<Constraint*>::iterator it = constraints.begin(),
-        end = constraints.end(); it != end; ++it)
-        delete *it;
+    for(Constraint* c : constraints_)
+        delete c;
 }
 
-/**
- * Dummy non-null pointer to indicate a constraint is not currently queued for
- * for propagation.
- * This value is used in the nextPropag field. We use the address of the solver
- * object, so we are sure no Constraint object will have this address.
- */
-#define CSTR_UNQUEUED reinterpret_cast<Constraint*>(this)
-
-void Solver::add(Constraint *c) {
-    c->solver = this;
-    c->parent = nullptr;
-    c->nextPropag = CSTR_UNQUEUED;
-    c->timestamp = ++tsLastConstraint;
-    constraints.push_back(c);
+void Solver::add(Constraint* c) {
+    c->solver_ = this;
+    c->parent_ = nullptr;
+    c->nextPropag_ = unqueued();
+    c->timestamp_ = ++tsLastConstraint_;
+    constraints_.push_back(c);
 }
 
-void Solver::refresh(Constraint *c) {
-    c->timestamp = ++tsLastConstraint;
+void Solver::refresh(Constraint* c) {
+    c->timestamp_ = ++tsLastConstraint_;
 }
 
-void Solver::enqueue(std::vector<Constraint*> &constraints) {
-    for(std::vector<Constraint*>::iterator it = constraints.begin(),
-        end = constraints.end(); it != end; ++it) {
-        Constraint *c = *it;
-        if(!c->done && c->nextPropag == CSTR_UNQUEUED &&
-                ((c->parent == nullptr && c->timestamp <= tsCurrent) ||
-                 (current != nullptr && c->parent == current))) {
-            Constraint::Priority p = c->getPriority();
-            c->nextPropag = propagQueue[p];
-            propagQueue[p] = c;
+void Solver::enqueue(std::vector<Constraint*>& constraints) {
+    for(Constraint* c : constraints) {
+        if(!c->done_ && c->nextPropag_ == unqueued() &&
+                ((c->parent_ == nullptr && c->timestamp_ <= tsCurrent_) ||
+                 (current_ != nullptr && c->parent_ == current_))) {
+            Constraint::Priority p = c->priority();
+            c->nextPropag_ = propagQueue_[p];
+            propagQueue_[p] = c;
         }
     }
 }
 
 bool Solver::postStatic() {
-    int ts = tsCurrent;
-    tsCurrent = tsLastConstraint;
+    Constraint::timestamp_t ts = tsCurrent_;
+    tsCurrent_ = tsLastConstraint_;
     // mark all to-be reposted constraints as propagating or unqueued if they
     // are stateless
-    for(std::vector<Constraint*>::iterator it = constraints.begin(),
-        end = constraints.end(); it != end; ++it) {
-        Constraint *c = *it;
-        if(c->timestamp > ts) {
-            c->nextPropag = dynamic_cast<StatelessConstraint*>(c) ?
-                        CSTR_UNQUEUED : nullptr;
+    for(Constraint* c : constraints_) {
+        if(c->timestamp_ > ts) {
+            c->nextPropag_ = dynamic_cast<StatelessConstraint*>(c) ?
+                        unqueued() : nullptr;
             c->init();
         }
     }
     // call initial propagation
-    for(std::vector<Constraint*>::iterator it = constraints.begin(),
-        end = constraints.end(); it != end; ++it) {
-        Constraint *c = *it;
-        if(c->timestamp > ts) {
-            statPost++;
+    for(Constraint* c : constraints_) {
+        if(c->timestamp_ > ts) {
+            statPost_++;
             if(!c->post()) {
                 /* Beware that some constraints are left in "propagating" state
                  * while they are not in queue. As we are inconsistent, we will
@@ -102,43 +89,38 @@ bool Solver::postStatic() {
                  */
                 return false;
             }
-            c->nextPropag = CSTR_UNQUEUED;
+            c->nextPropag_ = unqueued();
         }
     }
     // propagate
     return propagate();
 }
 
-bool Solver::post(std::vector<Constraint *> *constraints) {
+bool Solver::post(std::vector<Constraint *>* constraints) {
     // mark all constraints as propagating or unqueued if they are stateless
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
         p <= Constraint::PRIOR_LAST; ++p) {
-        for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
-            end = constraints[p].end(); it != end; ++it) {
-            Constraint *c = *it;
-            c->nextPropag = dynamic_cast<StatelessConstraint*>(c) ?
-                        CSTR_UNQUEUED : nullptr;
+        for(Constraint* c : constraints[p]) {
+            c->nextPropag_ = dynamic_cast<StatelessConstraint*>(c) ?
+                        unqueued() : nullptr;
             c->init();
         }
     }
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
         p <= Constraint::PRIOR_LAST; ++p) {
         // mark constraints as propagating
-        for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
-            end = constraints[p].end(); it != end; ++it)
-            (*it)->nextPropag = nullptr;
+        for(Constraint* c : constraints[p])
+            c->nextPropag_ = nullptr;
         // call initial propagation
-        for(std::vector<Constraint*>::iterator it = constraints[p].begin(),
-            end = constraints[p].end(); it != end; ++it) {
-            Constraint *c = *it;
-            statPost++;
+        for(Constraint* c : constraints[p]) {
+            statPost_++;
             if(!c->post())
                 /* Beware that some constraints are left in "propagating" state
                  * while they are not in queue. As we are in initial propagation,
                  * the subtree will be inconsistent and be discarded.
                  */
                 return false;
-            c->nextPropag = CSTR_UNQUEUED;
+            c->nextPropag_ = unqueued();
         }
         // propagate
         if(!propagate())
@@ -150,15 +132,15 @@ bool Solver::post(std::vector<Constraint *> *constraints) {
 bool Solver::propagate() {
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
         p <= Constraint::PRIOR_LAST; ++p) {
-        if(propagQueue[p] != nullptr) {
-            Constraint *c = propagQueue[p];
-            propagQueue[p] = c->nextPropag;
-            statPropagate++;
+        if(propagQueue_[p] != nullptr) {
+            Constraint* c = propagQueue_[p];
+            propagQueue_[p] = c->nextPropag_;
+            statPropagate_++;
             if(!c->propagate()) {
-                c->nextPropag = CSTR_UNQUEUED;
+                c->nextPropag_ = unqueued();
                 return false;
             }
-            c->nextPropag = CSTR_UNQUEUED;
+            c->nextPropag_ = unqueued();
             return propagate();
         }
     }
@@ -168,10 +150,10 @@ bool Solver::propagate() {
 void Solver::clearQueue() {
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
         p <= Constraint::PRIOR_LAST; ++p) {
-        while(propagQueue[p]) {
-            Constraint *c = propagQueue[p];
-            propagQueue[p] = c->nextPropag;
-            c->nextPropag = CSTR_UNQUEUED;
+        while(propagQueue_[p]) {
+            Constraint* c = propagQueue_[p];
+            propagQueue_[p] = c->nextPropag_;
+            c->nextPropag_ = unqueued();
         }
     }
 }

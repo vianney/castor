@@ -30,13 +30,13 @@ class Query;
  */
 class BnBOrderConstraint : public cp::Constraint {
 public:
-    BnBOrderConstraint(Query *query);
+    BnBOrderConstraint(Query* query);
     ~BnBOrderConstraint();
 
     /**
      * Update the bound to sol
      */
-    void updateBound(Solution *sol);
+    void updateBound(Solution* sol);
 
     /**
      * Clear the bound.
@@ -46,10 +46,10 @@ public:
     bool propagate();
 
 private:
-    Query *query;
-    Solution *bound; //!< the current bound
-    Value *boundOrderVals; //!< the evaluated ordering expressions given bound
-    bool *boundOrderError; //!< has an error occured while evaluating the ordering expression?
+    Query* query_;
+    Solution* bound_; //!< the current bound
+    Value* boundOrderVals_; //!< the evaluated ordering expressions given bound
+    bool* boundOrderError_; //!< has an error occured while evaluating the ordering expression?
 };
 
 }

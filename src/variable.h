@@ -37,106 +37,160 @@ public:
     /**
      * @return parent query
      */
-    Query* getQuery() const { return query; }
+    Query* query() const { return query_; }
 
     /**
      * @return id of the variable
      */
-    unsigned getId() const { return id; }
+    unsigned id() const { return id_; }
 
     /**
      * @return the name of the variable (empty for an anonymous variable)
      */
-    const std::string& getName() const { return name; }
-
-    /**
-     * @return the value id bound to this variable or 0 if unbound
-     */
-    Value::id_t getValueId() const { return val; }
+    const std::string& name() const { return name_; }
 
     /**
      * @return whether the variable is bound
      */
-    bool isBound() const { return val != 0; }
+    bool isBound() const { return val_ != 0; }
 
     /**
      * @return the CP variable corrsponding to this variable.
      */
-    cp::RDFVar* getCPVariable() const { return var; }
+    cp::RDFVar* cp() { return &var_; }
+
+    /**
+     * @return the value id bound to this variable or 0 if unbound
+     */
+    Value::id_t valueId() const { return val_; }
 
     /**
      * Set the value of this variable using an id from the store
      * @param id the id of the new value or 0 for unbound
      */
-    void setValueId(Value::id_t id) { val = id; }
+    void valueId(Value::id_t id) { val_ = id; }
 
     /**
      * Set the value of this variable according to the value of the CP variable
      */
-    void setValueFromCP();
+    void setFromCP();
 
 private:
-    Query* query;       //!< Parent query
-    unsigned id;        //!< Id of the variable
-    std::string name;   //!< Name of the variable
-    cp::RDFVar *var;   //!< CP variable
-    Value::id_t val;    //!< value (0 means unbound)
+    /**
+     * Variables are only meant to be created from Query. Hence, this
+     * constructor is private.
+     *
+     * @param query the query
+     * @param id index of this variable
+     * @param name name of the variable (empty string for anonymous variables)
+     */
+    Variable(Query* query, unsigned id, const char* name);
 
-    Variable() : var(nullptr), val(0) {}
-    ~Variable() {
-        if(var != nullptr)
-            delete var;
-    }
+    //! Non-copyable
+    Variable(const Variable&) = delete;
+    Variable& operator=(const Variable&) = delete;
 
     friend class Query;
+
+private:
+    Query*      query_; //!< Parent query
+    unsigned    id_;    //!< Id of the variable
+    std::string name_;  //!< Name of the variable
+    cp::RDFVar  var_;   //!< CP variable
+    Value::id_t val_;   //!< value (0 means unbound)
 };
 
-std::ostream& operator<<(std::ostream &out, const Variable &v);
+std::ostream& operator<<(std::ostream& out, const Variable& v);
 
 /**
  * Small structure containing a value or variable id.
  */
 class VarVal {
-    Value::id_t valid; //!< id of the value or 0 if variable or unknown
-    unsigned varid; //!< id of the variable + 1 or 0 if value or unknown
-
 public:
+    explicit VarVal(Value::id_t valid) : valid_(valid), varid_(0) {}
+    VarVal(const Variable& variable) : valid_(0), varid_(variable.id()+1) {}
+    VarVal(const Variable* variable) : valid_(0), varid_(variable->id()+1) {}
+    VarVal(const Value& value) : valid_(value.id), varid_(0) {}
+    VarVal(const Value* value) : valid_(value->id), varid_(0) {}
 
-    explicit VarVal(Value::id_t valid) : valid(valid), varid(0) {}
-    VarVal(const Variable &variable) : valid(0), varid(variable.getId()+1) {}
-    VarVal(const Variable *variable) : valid(0), varid(variable->getId()+1) {}
-    VarVal(const Value &value) : valid(value.id), varid(0) {}
-    VarVal(const Value *value) : valid(value->id), varid(0) {}
+    VarVal(const VarVal&) = default;
+    VarVal& operator=(const VarVal&) = default;
 
     /**
      * @return whether the id refers to a variable
      */
-    bool isVariable() const { return varid > 0; }
+    bool isVariable() const { return varid_ > 0; }
     /**
      * @return whether this refers to an unknown value (id 0)
      */
-    bool isUnknown() const { return valid == 0 && varid == 0; }
+    bool isUnknown() const { return valid_ == 0 && varid_ == 0; }
     /**
      * @pre !isVariable()
      * @return the value id
      */
-    Value::id_t getValueId() const { return valid; }
+    Value::id_t valueId() const { return valid_; }
     /**
      * @pre isVariable()
      * @return the variable id
      */
-    unsigned getVariableId() const { return varid - 1; }
+    unsigned variableId() const { return varid_ - 1; }
 
-    bool operator==(const VarVal &o) const { return valid == o.valid && varid == o.varid; }
-    bool operator!=(const VarVal &o) const { return valid != o.valid || varid != o.varid; }
+    bool operator==(const VarVal& o) const { return valid_ == o.valid_ && varid_ == o.varid_; }
+    bool operator!=(const VarVal& o) const { return valid_ != o.valid_ || varid_ != o.varid_; }
+
+private:
+    Value::id_t valid_; //!< id of the value or 0 if variable or unknown
+    unsigned    varid_; //!< id of the variable + 1 or 0 if value or unknown
 };
 
-std::ostream& operator<<(std::ostream &out, const VarVal &v);
+std::ostream& operator<<(std::ostream& out, const VarVal& v);
 
 /**
  * Set of variables
  */
 class VariableSet {
+public:
+    VariableSet(unsigned capacity) { initialize(capacity); }
+    VariableSet(Query* query);
+    VariableSet(const VariableSet& o);
+    ~VariableSet();
+
+    VariableSet& operator=(const VariableSet& o);
+
+    /**
+     * Add a variable to this set
+     */
+    VariableSet& operator+=(Variable* v);
+
+    /**
+     * Union with another set
+     */
+    VariableSet& operator+=(const VariableSet& o);
+
+    /**
+     * Intersection with another set
+     */
+    VariableSet operator*(const VariableSet& o) const;
+
+    unsigned size() const { return size_; }
+    Variable* operator[](unsigned i) { return vars_[i]; }
+
+    /**
+     * @param v a variable
+     * @return whether v is in this set
+     */
+    bool contains(Variable* v) const { return map_[v->id()]; }
+
+    // C++11 iterators
+    Variable** begin() const { return vars_; }
+    Variable** end()   const { return vars_ + size_; }
+
+private:
+    unsigned   size_;     //!< number of variables in the list
+    unsigned   capacity_; //!< maximum number of variables
+    Variable** vars_;     //!< array of variables
+    bool*      map_;      //!< map of ids
+
     /**
      * Initialize the set.
      *
@@ -144,63 +198,7 @@ class VariableSet {
      *
      * @todo this could be refactored using C++11
      */
-    void _init(unsigned capacity);
-
-public:
-    VariableSet(unsigned capacity) { _init(capacity); }
-    VariableSet(Query *query);
-    VariableSet(const VariableSet &o);
-    ~VariableSet();
-
-    VariableSet& operator=(const VariableSet &o);
-
-    /**
-     * Add a variable to this set
-     */
-    VariableSet& operator+=(Variable *v);
-
-    /**
-     * Union with another set
-     */
-    VariableSet& operator+=(const VariableSet &o);
-
-    /**
-     * Intersection with another set
-     */
-    VariableSet operator*(const VariableSet &o) const;
-
-    unsigned getSize() const { return size; }
-    Variable* operator[](unsigned i) { return vars[i]; }
-
-    /**
-     * @param v a variable
-     * @return whether v is in this set
-     */
-    bool contains(Variable *v) const { return varMap[v->getId()]; }
-
-    /**
-     * @return the list of variables
-     */
-    const Variable** getList() const {
-        return const_cast<const Variable**>(vars);
-    }
-
-    /**
-     * @return the list of CP variables corresponding to the variables in the
-     *         set
-     */
-    cp::RDFVar** getCPVars();
-
-    // C++11 iterators
-    Variable** begin() { return vars; }
-    Variable** end() { return vars + size; }
-
-private:
-    unsigned size; //!< number of variables in the list
-    unsigned capacity; //!< maximum number of variables
-    Variable **vars; //!< array of variables
-    bool *varMap; //!< map of ids
-    cp::RDFVar **cpvars; //!< List of CP variables. nullptr if not yet created.
+    void initialize(unsigned capacity);
 };
 
 }

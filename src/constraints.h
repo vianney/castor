@@ -38,53 +38,52 @@ public:
  * Ensure a SPARQL variable is bound by removing value 0 from the CP domain
  */
 class BoundConstraint : public cp::Constraint {
-    cp::RDFVar *x;
 public:
-    BoundConstraint(cp::RDFVar *x) : Constraint(PRIOR_HIGH), x(x) {}
-    bool post() { return x->remove(0); }
+    BoundConstraint(cp::RDFVar* x) : Constraint(PRIOR_HIGH), x_(x) {}
+    bool post() { return x_->remove(0); }
+
+private:
+    cp::RDFVar* x_;
 };
 
 /**
  * Restrict domain to a specified range
  */
 class InRangeConstraint : public cp::Constraint {
-    cp::RDFVar *x;
-    ValueRange rng;
 public:
-    InRangeConstraint(cp::RDFVar *x, ValueRange rng)
-        : Constraint(PRIOR_HIGH), x(x), rng(rng) {}
+    InRangeConstraint(cp::RDFVar* x, ValueRange rng)
+        : Constraint(PRIOR_HIGH), x_(x), rng_(rng) {}
     bool post() {
-        x->clearMarks();
-        for(Value::id_t id : rng)
-            x->mark(id);
-        return x->restrictToMarks();
+        x_->clearMarks();
+        for(Value::id_t id : rng_)
+            x_->mark(id);
+        return x_->restrictToMarks();
     }
+
+private:
+    cp::RDFVar* x_;
+    ValueRange rng_;
 };
 
 /**
  * Restrict domain to a set of ranges
  */
 class InRangesConstraint : public cp::Constraint {
-    cp::RDFVar *x;
-    ValueRange *ranges;
-    unsigned nbRanges;
 public:
-    InRangesConstraint(cp::RDFVar *x, ValueRange ranges[], unsigned nbRanges)
-        : Constraint(PRIOR_HIGH), x(x), nbRanges(nbRanges) {
-        this->ranges = new ValueRange[nbRanges];
-        memcpy(this->ranges, ranges, nbRanges * sizeof(ValueRange));
-    }
-    ~InRangesConstraint() {
-        delete [] ranges;
-    }
+    InRangesConstraint(cp::RDFVar* x, std::initializer_list<ValueRange> ranges)
+        : Constraint(PRIOR_HIGH), x_(x), ranges_(ranges) {}
     bool post() {
-        x->clearMarks();
-        for(unsigned i = 0; i < nbRanges; i++) {
-            for(Value::id_t id : ranges[i])
-                x->mark(id);
+        x_->clearMarks();
+        for(ValueRange rng : ranges_) {
+            for(Value::id_t id : rng)
+                x_->mark(id);
         }
-        return x->restrictToMarks();
+        return x_->restrictToMarks();
     }
+
+private:
+    cp::RDFVar* x_;
+    std::initializer_list<ValueRange> ranges_;
 };
 
 /**
@@ -93,155 +92,183 @@ public:
  */
 class ComparableConstraint : public InRangeConstraint {
 public:
-    ComparableConstraint(Store *store, cp::RDFVar *x) : InRangeConstraint(x,
-        store->getClassValues(Value::CLASS_SIMPLE_LITERAL,
-                              Value::CLASS_DATETIME)) {}
+    ComparableConstraint(Store* store, cp::RDFVar* x) : InRangeConstraint(x,
+        store->range(Value::CAT_SIMPLE_LITERAL,
+                              Value::CAT_DATETIME)) {}
 };
 
 /**
  * Remove a specified range from a domain
  */
 class NotInRangeConstraint : public cp::Constraint {
-    cp::RDFVar *x;
-    ValueRange rng;
 public:
-    NotInRangeConstraint(cp::RDFVar *x, ValueRange rng)
-        : Constraint(PRIOR_HIGH), x(x), rng(rng) {}
+    NotInRangeConstraint(cp::RDFVar* x, ValueRange rng)
+        : Constraint(PRIOR_HIGH), x_(x), rng_(rng) {}
     bool post() {
-        for(Value::id_t id : rng) {
-            if(!x->remove(id))
+        for(Value::id_t id : rng_) {
+            if(!x_->remove(id))
                 return false;
         }
         return true;
     }
+
+private:
+    cp::RDFVar* x_;
+    ValueRange rng_;
 };
 
 /**
  * x >= v
  */
 class ConstGEConstraint : public cp::Constraint {
-    cp::RDFVar *x;
-    Value::id_t v;
 public:
-    ConstGEConstraint(cp::RDFVar *x, Value::id_t v)
-        : Constraint(PRIOR_HIGH), x(x), v(v) {}
-    bool post() { return x->updateMin(v); }
+    ConstGEConstraint(cp::RDFVar* x, Value::id_t v)
+        : Constraint(PRIOR_HIGH), x_(x), v_(v) {}
+    bool post() { return x_->updateMin(v_); }
+
+private:
+    cp::RDFVar* x_;
+    Value::id_t v_;
 };
 
 /**
  * x <= v
  */
 class ConstLEConstraint : public cp::Constraint {
-    cp::RDFVar *x;
-    Value::id_t v;
 public:
-    ConstLEConstraint(cp::RDFVar *x, Value::id_t v)
-        : Constraint(PRIOR_HIGH), x(x), v(v) {}
-    bool post() { return x->updateMax(v); }
+    ConstLEConstraint(cp::RDFVar* x, Value::id_t v)
+        : Constraint(PRIOR_HIGH), x_(x), v_(v) {}
+    bool post() { return x_->updateMax(v_); }
+
+private:
+    cp::RDFVar* x_;
+    Value::id_t v_;
 };
 
 /**
  * Statement constraint
  */
 class TripleConstraint : public cp::StatelessConstraint {
-    Store *store; //!< The store containing the triples
-    TriplePattern pat; //!< The triple pattern
+public:
+    TripleConstraint(Query* query, TriplePattern pat);
+    void restore();
+    bool propagate();
+
+private:
+    Store* store_; //!< The store containing the triples
+    TriplePattern pat_; //!< The triple pattern
     /**
      * CP variables corresponding to the components of the triple pattern or
      * nullptr if the component is a fixed value.
      */
-    cp::RDFVar *x[TriplePattern::COMPONENTS];
-public:
-    TripleConstraint(Query *query, TriplePattern pat);
-    void restore();
-    bool propagate();
+    cp::RDFVar* x_[TriplePattern::COMPONENTS];
 };
 
 /**
  * Generic filter constraint
  */
 class FilterConstraint : public cp::StatelessConstraint {
-    Store *store; //!< The store containing the values
-    Expression *expr; //!< The expression
 public:
-    FilterConstraint(Store *store, Expression *expr);
+    FilterConstraint(Store* store, Expression* expr);
     void restore();
     bool propagate();
+
+private:
+    Store*      store_; //!< The store containing the values
+    Expression* expr_;  //!< The expression
 };
 
 /**
  * Variables must take values of the same classes.
  */
 class SameClassConstraint : public cp::StatelessConstraint {
-    Store *store;
-    cp::RDFVar *x1, *x2;
 public:
-    SameClassConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2);
+    SameClassConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
     void restore();
     bool propagate();
+
+private:
+    Store* store_;
+    cp::RDFVar* x1_;
+    cp::RDFVar* x2_;
 };
 
 /**
  * Variable difference constraint x1 != x2
  */
 class VarDiffConstraint : public cp::StatelessConstraint {
-    Store *store;
-    cp::RDFVar *x1, *x2;
 public:
-    VarDiffConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2);
+    VarDiffConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
     void restore();
     bool propagate();
+
+private:
+    Store* store_;
+    cp::RDFVar* x1_;
+    cp::RDFVar* x2_;
 };
 
 /**
  * Variable equality constraint x1 = x2
  */
 class VarEqConstraint : public cp::Constraint {
-    Store *store;
-    cp::RDFVar *x1, *x2;
-    int s1, s2; //!< previous size of the domain
 public:
-    VarEqConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2);
+    VarEqConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
     void restore();
     bool post();
     bool propagate();
+
+private:
+    Store* store_;
+    cp::RDFVar* x1_;
+    cp::RDFVar* x2_;
+    unsigned s1_, s2_; //!< previous size of the domain
 };
 
 /**
  * Variable inequality constraint x1 {<,<=} x2
  */
 class VarLessConstraint : public cp::StatelessConstraint {
-    Store *store;
-    cp::RDFVar *x1, *x2;
-    bool equality; //!< true for <=, false for <
 public:
-    VarLessConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2, bool equality);
+    VarLessConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2, bool equality);
     void restore();
     bool propagate();
+
+private:
+    Store* store_;
+    cp::RDFVar* x1_;
+    cp::RDFVar* x2_;
+    bool equality; //!< true for <=, false for <
 };
 
 /**
  * Variable difference in sameTerm sense
  */
 class VarDiffTermConstraint : public cp::StatelessConstraint {
-    cp::RDFVar *x1, *x2;
 public:
-    VarDiffTermConstraint(cp::RDFVar *x1, cp::RDFVar *x2);
+    VarDiffTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2);
     void restore();
     bool propagate();
+
+private:
+    cp::RDFVar* x1_;
+    cp::RDFVar* x2_;
 };
 
 /**
  * Variable equality in sameTerm sense
  */
 class VarSameTermConstraint : public cp::Constraint {
-    cp::RDFVar *x1, *x2;
-    int s1, s2; //!< previous size of the domain
 public:
-    VarSameTermConstraint(cp::RDFVar *x1, cp::RDFVar *x2);
+    VarSameTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2);
     void restore();
     bool post();
     bool propagate();
+
+private:
+    cp::RDFVar* x1_;
+    cp::RDFVar* x2_;
+    unsigned s1_, s2_; //!< previous size of the domain
 };
 
 }

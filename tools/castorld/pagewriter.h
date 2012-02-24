@@ -29,20 +29,14 @@ namespace castor {
  */
 class PageWriter {
 public:
-    static const unsigned PAGE_SIZE = PageReader::PAGE_SIZE;  //!< page size
-
-private:
-
-    std::ofstream out;  //!< database output stream
-    unsigned page;  //!< current page number
-    unsigned char buffer[PAGE_SIZE];  //!< page buffer
-    unsigned char *iter; //!< current write pointer in the page
-    unsigned char *bufEnd; //!< pointer to the end of the buffer (first byte outside)
-
-public:
+    static constexpr unsigned PAGE_SIZE = PageReader::PAGE_SIZE;  //!< page size
 
     PageWriter(const char* fileName);
     ~PageWriter();
+
+    //! Non-copyable
+    PageWriter(const PageWriter&) = delete;
+    PageWriter& operator=(const PageWriter&) = delete;
 
     /**
      * Close the writer
@@ -52,20 +46,20 @@ public:
     /**
      * @return the current page number
      */
-    unsigned getPage() const { return page; }
+    unsigned page() const { return page_; }
     /**
      * @return the current offset in the page
      */
-    unsigned getOffset() const { return iter - buffer; }
+    unsigned offset() const { return iter_ - buffer_; }
     /**
      * @return remaining bytes left in the page
      */
-    unsigned getRemaining() const { return bufEnd - iter; }
+    unsigned remaining() const { return end_ - iter_; }
 
     /**
      * Goto page p
      */
-    void setPage(unsigned p);
+    void seek(unsigned p);
 
     /**
      * Write directly an entire page
@@ -77,12 +71,12 @@ public:
     /**
      * Pad the remaining of the page with zeros and write the page to disk.
      */
-    void flushPage();
+    void flush();
 
     /**
      * Skip len bytes
      */
-    void skip(unsigned len) { iter += len; }
+    void skip(unsigned len) { iter_ += len; }
 
     /**
      * Write raw data.
@@ -104,21 +98,21 @@ public:
      *
      * @pre enough room should be available in the page
      */
-    void writeInt(unsigned value) { writeInt(iter, value); }
+    void writeInt(unsigned value) { writeInt(iter_, value); }
 
     /**
      * Write a 32-bit unsigned integer to the page in big endian encoding at
      * the specified offset. Do not move the write pointer.
      */
     void writeInt(unsigned value, unsigned offset) {
-        unsigned char *it = buffer + offset;
+        unsigned char *it = buffer_ + offset;
         writeInt(it, value);
     }
     /**
      * Static version of writeInt(unsigned) to write in other buffers.
      * Advances the write pointer.
      */
-    static void writeInt(unsigned char* &it, unsigned value);
+    static void writeInt(unsigned char*& it, unsigned value);
 
     /**
      * @return the number of bytes value would take to write using delta
@@ -132,6 +126,13 @@ public:
      * @pre enough room should be available in the page
      */
     void writeDelta(unsigned value);
+
+private:
+    std::ofstream  out_;               //!< database output stream
+    unsigned       page_;              //!< current page number
+    unsigned char  buffer_[PAGE_SIZE]; //!< page buffer
+    unsigned char* iter_;              //!< current write pointer in the page
+    unsigned char* end_;               //!< pointer to the end of the buffer (first byte outside)
 };
 
 }

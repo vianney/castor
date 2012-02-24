@@ -39,12 +39,16 @@ public:
      *
      * @param solver the solver
      */
-    Subtree(Solver *solver);
+    Subtree(Solver* solver);
 
     /**
      * Destructor.
      */
     ~Subtree();
+
+    //! Non-copyable
+    Subtree(const Subtree&) = delete;
+    Subtree& operator=(const Subtree&) = delete;
 
     /**
      * Add a variable. Make sure to add all variables that need to be
@@ -58,7 +62,7 @@ public:
      * @param label true if x is a decision variable that should be labeled on
      *              search, false if x is an auxiliary variable
      */
-    void add(Variable *x, bool label = false);
+    void add(Variable* x, bool label = false);
 
     /**
      * Add a constraint.
@@ -68,17 +72,17 @@ public:
      *
      * @param c the constraint
      */
-    void add(Constraint *c);
+    void add(Constraint* c);
 
     /**
      * @return whether this subtree is active
      */
-    bool isActive() { return active; }
+    bool isActive() { return active_; }
 
     /**
      * @return whether this subtree is the current subtree
      */
-    bool isCurrent() { return solver->current == this; }
+    bool isCurrent() { return solver_->current_ == this; }
 
     /**
      * Activate this subtree.
@@ -105,7 +109,7 @@ private:
      *
      * @param x chosen variable
      */
-    void checkpoint(Variable *x);
+    void checkpoint(Variable* x);
 
     /**
      * Backtrack to the previous checkpoint. Remove the chosen value from the
@@ -121,52 +125,52 @@ private:
     /**
      * Parent solver.
      */
-    Solver *solver;
+    Solver* solver_;
 
     /**
      * Is this subtree active?
      */
-    bool active;
+    bool active_;
 
     /**
      * Previous active subtree
      */
-    Subtree *previous;
+    Subtree* previous_;
 
     /**
      * Is this subtree inconsistent?
      */
-    bool inconsistent;
+    bool inconsistent_;
 
     /**
      * Has the search begun?
      */
-    bool started;
+    bool started_;
 
     /**
      * Variables.
      */
-    std::vector<Variable*> vars;
+    std::vector<Variable*> vars_;
     /**
      * Number of decision variables to label. The decision variables appear
      * first in the vars array.
      */
-    int nbDecision;
+    int nbDecision_;
 
     /**
      * Posted constraints.
      */
-    std::vector<Constraint*> constraints[Constraint::PRIOR_COUNT];
+    std::vector<Constraint*> constraints_[Constraint::PRIOR_COUNT];
 
     /**
      * Trail to backtrack.
      */
-    Checkpoint *trail;
+    Checkpoint* trail_;
 
     /**
      * Current index in the trail array.
      */
-    int trailIndex;
+    int trailIndex_;
 };
 
 }

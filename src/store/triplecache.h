@@ -25,10 +25,13 @@ namespace castor {
 
 struct Triple : public BasicTriple<Value::id_t> {
     Triple() {}
-    Triple(const BasicTriple<Value::id_t> &o) : BasicTriple(o[0], o[1], o[2]) {}
+    Triple(const BasicTriple<Value::id_t>& o) : BasicTriple(o) {}
+
+    Triple(const Triple&) = default;
+    Triple& operator=(const Triple&) = default;
 
     // For use as keys in a B+-tree
-    static const unsigned SIZE = 12;
+    static constexpr unsigned SIZE = 12;
 
     static Triple read(Cursor cur) {
         Triple t;
@@ -47,25 +50,29 @@ public:
      * A cache line
      */
     struct Line {
-        Triple   *triples;  //!< array of triples
-        unsigned  count;    //!< number of triples in the line
+        Triple*  triples;  //!< array of triples
+        unsigned count;    //!< number of triples in the line
 
-        unsigned  page;     //!< page number of this line
-        unsigned  prevPage; //!< previous page (or 0 if first)
-        unsigned  nextPage; //!< next page (or 0 if last)
+        unsigned page;     //!< page number of this line
+        unsigned prevPage; //!< previous page (or 0 if first)
+        unsigned nextPage; //!< next page (or 0 if last)
 
     private:
-        Line     *prev;     //!< previous line in the LRU list
-        Line     *next;     //!< next line in the LRU list
+        Line*    prev_;    //!< previous line in the LRU list
+        Line*    next_;    //!< next line in the LRU list
 
         //! Maximum number of triples in a page
-        static const unsigned MAX_COUNT = PageReader::PAGE_SIZE;
+        static constexpr unsigned MAX_COUNT = PageReader::PAGE_SIZE;
 
         friend class TripleCache;
     };
 
     TripleCache();
     ~TripleCache();
+
+    //! Non-copyable
+    TripleCache(const TripleCache&) = delete;
+    TripleCache& operator=(const TripleCache&) = delete;
 
     /**
      * Initialize the cache. This method is not a constructor, so we can call
@@ -74,7 +81,7 @@ public:
      * @param db the database
      * @param maxPage the highest page number we will encounter
      */
-    void initialize(PageReader *db, unsigned maxPage);
+    void initialize(PageReader* db_, unsigned maxPage);
 
     /**
      * Read and decompress a leaf page in a triples index.
@@ -86,23 +93,23 @@ public:
      */
     const Line* fetch(unsigned page);
 
-    unsigned getStatHits()   { return statHits; }
-    unsigned getStatMisses() { return statMisses; }
+    unsigned statHits()   const { return statHits_; }
+    unsigned statMisses() const { return statMisses_; }
 
 private:
-    PageReader *db;
+    PageReader* db_;
 
     static const unsigned CAPACITY = 100; //!< maximum size of the cache
 
-    Line lines[CAPACITY]; //!< cache lines
-    unsigned size; //!< number of pages in cache
-    Line *head; //!< head of the LRU list (= most recently used)
-    Line *tail; //!< tail of the LRU list (= least recently used)
+    Line     lines_[CAPACITY]; //!< cache lines
+    unsigned size_;            //!< number of pages in cache
+    Line*    head_;            //!< head of the LRU list (= most recently used)
+    Line*    tail_;            //!< tail of the LRU list (= least recently used)
 
-    Line **map; //!< map from page number to cach line
+    Line**   map_;             //!< map from page number to cach line
 
-    unsigned statHits;   //!< number of cache hits
-    unsigned statMisses; //!< number of cache misses
+    unsigned statHits_;        //!< number of cache hits
+    unsigned statMisses_;      //!< number of cache misses
 };
 
 }

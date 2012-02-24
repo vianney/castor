@@ -31,31 +31,22 @@ namespace castor {
  * A temporary file. Also includes utilities to read/write it.
  */
 class TempFile {
-
-    std::string baseName; //!< basename for name creation
-    std::string fileName; //!< name of this temporary file
-    std::ofstream out; //!< file stream
-
-    static unsigned nextId; //!< next id for name creation
-
-    static const unsigned BUFFER_SIZE = 16384; //!< buffer size
-    char buffer[BUFFER_SIZE]; //!< write buffer
-    char *iter; //!< current write pointer in the buffer
-    char *bufEnd; //!< pointer to the end of the buffer (first byte outside)
-
 public:
-
-    TempFile(const std::string &baseName);
+    explicit TempFile(const std::string& baseName_);
     ~TempFile();
+
+    //! Non-copyable
+    TempFile(const TempFile&) = delete;
+    TempFile& operator=(const TempFile&) = delete;
 
     /**
      * @return the basename used to construct the filename
      */
-    const std::string& getBaseName() const { return baseName; }
+    const std::string& baseName() const { return baseName_; }
     /**
      * @return the name of this temporary file
      */
-    const std::string& getFileName() const { return fileName; }
+    const std::string& fileName() const { return fileName_; }
 
     /**
      * Flush the buffer.
@@ -95,7 +86,19 @@ public:
      * typelen includes terminal null character
      * length is the length of type/lang + lexical (including terminal null)
      */
-    void writeValue(const Value &val);
+    void writeValue(const Value& val);
+
+private:
+    std::string baseName_; //!< basename for name creation
+    std::string fileName_; //!< name of this temporary file
+    std::ofstream out_; //!< file stream
+
+    static unsigned nextId_; //!< next id for name creation
+
+    static constexpr unsigned BUFFER_SIZE = 16384; //!< buffer size
+    char buffer_[BUFFER_SIZE]; //!< write buffer
+    char* iter_; //!< current write pointer in the buffer
+    char* end_; //!< pointer to the end of the buffer (first byte outside)
 };
 
 }

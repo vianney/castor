@@ -16,44 +16,45 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include "constraints.h"
+
 #include "config.h"
 
 namespace castor {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TripleConstraint::TripleConstraint(Query *query, TriplePattern pat) :
+TripleConstraint::TripleConstraint(Query* query, TriplePattern pat) :
         StatelessConstraint(CASTOR_CONSTRAINTS_STATEMENT_PRIORITY),
-        store(query->getStore()), pat(pat) {
+        store_(query->store()), pat_(pat) {
     for(int i = 0; i < pat.COMPONENTS; i++) {
         if(pat[i].isVariable()) {
-            x[i] = query->getVariable(pat[i].getVariableId())->getCPVariable();
-            x[i]->registerBind(this);
+            x_[i] = query->variable(pat[i])->cp();
+            x_[i]->registerBind(this);
         } else {
-            x[i] = nullptr;
+            x_[i] = nullptr;
         }
     }
 }
 
 void TripleConstraint::restore() {
     int bound = 0;
-    for(int i = 0; i < pat.COMPONENTS; i++)
-        bound += (x[i] == nullptr || x[i]->isBound());
-    done = (bound >= pat.COMPONENTS - 1);
+    for(int i = 0; i < pat_.COMPONENTS; i++)
+        bound += (x_[i] == nullptr || x_[i]->isBound());
+    done_ = (bound >= pat_.COMPONENTS - 1);
 }
 
 bool TripleConstraint::propagate() {
     StatelessConstraint::propagate();
 
     Triple min, max;
-    int bound = pat.COMPONENTS;
-    for(int i = 0; i < pat.COMPONENTS; i++) {
-        if(x[i] == nullptr) {
-            min[i] = max[i] = pat[i].getValueId();
+    int bound = pat_.COMPONENTS;
+    for(int i = 0; i < pat_.COMPONENTS; i++) {
+        if(x_[i] == nullptr) {
+            min[i] = max[i] = pat_[i].valueId();
         } else {
-            min[i] = x[i]->getMin();
-            max[i] = x[i]->getMax();
-            bound -= x[i]->isBound() ? 0 : 1;
+            min[i] = x_[i]->min();
+            max[i] = x_[i]->max();
+            bound -= x_[i]->isBound() ? 0 : 1;
         }
     }
 
@@ -61,50 +62,50 @@ bool TripleConstraint::propagate() {
         // nothing bound, we do not want to check all triples
         return true;
 
-    if(bound >= pat.COMPONENTS - 1)
-        done = true;
+    if(bound >= pat_.COMPONENTS - 1)
+        done_ = true;
 
-    Store::RangeQuery q(store, min, max);
+    Store::TripleRange q(store_, min, max);
 
-    if(bound == pat.COMPONENTS)
+    if(bound == pat_.COMPONENTS)
         // all variables are bound, just check
         return q.next(nullptr);
 
-    for(int i = 0; i < pat.COMPONENTS; i++)
-        if(min[i] != max[i]) x[i]->clearMarks();
+    for(int i = 0; i < pat_.COMPONENTS; i++)
+        if(min[i] != max[i]) x_[i]->clearMarks();
     Triple t;
     while(q.next(&t)) {
-        for(int i = 0; i < pat.COMPONENTS; i++)
-            if(min[i] != max[i] && !x[i]->contains(t[i])) goto nextTriple;
-        for(int i = 0; i < pat.COMPONENTS; i++)
-            if(min[i] != max[i]) x[i]->mark(t[i]);
+        for(int i = 0; i < pat_.COMPONENTS; i++)
+            if(min[i] != max[i] && !x_[i]->contains(t[i])) goto nextTriple;
+        for(int i = 0; i < pat_.COMPONENTS; i++)
+            if(min[i] != max[i]) x_[i]->mark(t[i]);
     nextTriple:
         ;
     }
-    for(int i = 0; i < pat.COMPONENTS; i++)
-        if(min[i] != max[i] && !x[i]->restrictToMarks()) return false;
+    for(int i = 0; i < pat_.COMPONENTS; i++)
+        if(min[i] != max[i] && !x_[i]->restrictToMarks()) return false;
     return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-FilterConstraint::FilterConstraint(Store *store, Expression *expr) :
+FilterConstraint::FilterConstraint(Store* store, Expression* expr) :
         StatelessConstraint(CASTOR_CONSTRAINTS_FILTER_PRIORITY),
-        store(store), expr(expr) {
-    for(Variable* var : expr->getVars())
-        var->getCPVariable()->registerBind(this);
+        store_(store), expr_(expr) {
+    for(Variable* var : expr->variables())
+        var->cp()->registerBind(this);
 }
 
 void FilterConstraint::restore() {
-    done = true;
+    done_ = true;
     int unbound = 0;
-    for(Variable* var : expr->getVars()) {
-        cp::RDFVar *x = var->getCPVariable();
+    for(Variable* var : expr_->variables()) {
+        cp::RDFVar* x = var->cp();
         if(!x->contains(0) && !x->isBound()) {
             unbound++;
             if(unbound > 1) {
                 // more than one unbound variable, we are not done
-                done = false;
+                done_ = false;
                 return;
             }
         }
@@ -114,29 +115,29 @@ void FilterConstraint::restore() {
 bool FilterConstraint::propagate() {
     StatelessConstraint::propagate();
     Variable* unbound = nullptr;
-    for(Variable *x : expr->getVars()) {
-        if(x->getCPVariable()->contains(0))
-            x->setValueId(0);
-        else if(x->getCPVariable()->isBound())
-            x->setValueId(x->getCPVariable()->getValue());
+    for(Variable* var : expr_->variables()) {
+        if(var->cp()->contains(0))
+            var->valueId(0);
+        else if(var->cp()->isBound())
+            var->valueId(var->cp()->value());
         else if(unbound)
             return true; // too many unbound variables (> 1)
         else
-            unbound = x;
+            unbound = var;
     }
-    done = true;
+    done_ = true;
     if(!unbound) {
         // all variables are bound -> check
-        return expr->isTrue();
+        return expr_->isTrue();
     } else {
         // all variables, except one, are bound -> forward checking
-        cp::RDFVar *x = unbound->getCPVariable();
+        cp::RDFVar* x = unbound->cp();
         x->clearMarks();
-        unsigned n = x->getSize();
-        const Value::id_t* dom = x->getDomain();
+        unsigned n = x->size();
+        const Value::id_t* dom = x->domain();
         for(unsigned i = 0; i < n; i++) {
-            unbound->setValueId(dom[i]);
-            if(expr->isTrue())
+            unbound->valueId(dom[i]);
+            if(expr_->isTrue())
                 x->mark(dom[i]);
         }
         return x->restrictToMarks();
@@ -145,8 +146,9 @@ bool FilterConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-SameClassConstraint::SameClassConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2)
-        : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
+SameClassConstraint::SameClassConstraint(Store* store, cp::RDFVar* x1,
+                                         cp::RDFVar* x2)
+        : StatelessConstraint(PRIOR_HIGH), store_(store), x1_(x1), x2_(x2) {
     x1->registerMin(this);
     x1->registerMax(this);
     x2->registerMin(this);
@@ -154,62 +156,63 @@ SameClassConstraint::SameClassConstraint(Store *store, cp::RDFVar *x1, cp::RDFVa
 }
 
 void SameClassConstraint::restore() {
-    Value::Class clsMin1 = store->getValueClass(x1->getMin());
-    Value::Class clsMax1 = store->getValueClass(x1->getMax());
-    Value::Class clsMin2 = store->getValueClass(x2->getMin());
-    Value::Class clsMax2 = store->getValueClass(x2->getMax());
-    Value::Class clsMin = std::max(clsMin1, clsMin2);
-    Value::Class clsMax = std::min(clsMax1, clsMax2);
-    done = (clsMin == clsMax);
+    Value::Category catMin1 = store_->category(x1_->min());
+    Value::Category catMax1 = store_->category(x1_->max());
+    Value::Category catMin2 = store_->category(x2_->min());
+    Value::Category catMax2 = store_->category(x2_->max());
+    Value::Category catMin = std::max(catMin1, catMin2);
+    Value::Category catMax = std::min(catMax1, catMax2);
+    done_ = (catMin == catMax);
 }
 
 bool SameClassConstraint::propagate() {
     StatelessConstraint::propagate();
-    Value::Class clsMin1 = store->getValueClass(x1->getMin());
-    Value::Class clsMax1 = store->getValueClass(x1->getMax());
-    Value::Class clsMin2 = store->getValueClass(x2->getMin());
-    Value::Class clsMax2 = store->getValueClass(x2->getMax());
-    Value::Class clsMin = std::max(clsMin1, clsMin2);
-    Value::Class clsMax = std::min(clsMax1, clsMax2);
-    if(clsMin > clsMax)
+    Value::Category catMin1 = store_->category(x1_->min());
+    Value::Category catMax1 = store_->category(x1_->max());
+    Value::Category catMin2 = store_->category(x2_->min());
+    Value::Category catMax2 = store_->category(x2_->max());
+    Value::Category catMin = std::max(catMin1, catMin2);
+    Value::Category catMax = std::min(catMax1, catMax2);
+    if(catMin > catMax)
         return false;
-    if(clsMin == clsMax)
-        done = true;
-    ValueRange allowed = store->getClassValues(clsMin, clsMax);
+    if(catMin == catMax)
+        done_ = true;
+    ValueRange allowed = store_->range(catMin, catMax);
     if(allowed.empty())
         return false;
-    return x1->updateMin(allowed.from) && x1->updateMax(allowed.to) &&
-           x2->updateMin(allowed.from) && x2->updateMax(allowed.to);
+    return x1_->updateMin(allowed.from) && x1_->updateMax(allowed.to) &&
+           x2_->updateMin(allowed.from) && x2_->updateMax(allowed.to);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarDiffConstraint::VarDiffConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2)
-        : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
+VarDiffConstraint::VarDiffConstraint(Store* store, cp::RDFVar* x1,
+                                     cp::RDFVar* x2)
+        : StatelessConstraint(PRIOR_HIGH), store_(store), x1_(x1), x2_(x2) {
     x1->registerBind(this);
     x2->registerBind(this);
 }
 
 void VarDiffConstraint::restore() {
-    done = (x1->isBound() || x2->isBound());
+    done_ = (x1_->isBound() || x2_->isBound());
 }
 
 bool VarDiffConstraint::propagate() {
     StatelessConstraint::propagate();
     // TODO we could start propagating once only equivalent values remain
-    if(!x1->isBound() && !x2->isBound())
+    if(!x1_->isBound() && !x2_->isBound())
         return true;
-    cp::RDFVar *x1 = this->x1->isBound() ? this->x1 : this->x2;
-    cp::RDFVar *x2 = this->x1->isBound() ? this->x2 : this->x1;
-    done = true;
-    for(Value::id_t id : store->getValueEqClass(x1->getValue())) {
+    cp::RDFVar* x1 = x1_->isBound() ? x1_ : x2_;
+    cp::RDFVar* x2 = x1_->isBound() ? x2_ : x1_;
+    done_ = true;
+    for(Value::id_t id : store_->eqClass(x1->value())) {
         if(!x2->remove(id))
             return false;
     }
-    Value::Class cls = store->getValueClass(x1->getValue());
-    if(cls > Value::CLASS_IRI) {
+    Value::Category cat = store_->category(x1->value());
+    if(cat > Value::CAT_IRI) {
         // Comparing two literals of different class result in type error
-        ValueRange rng = store->getClassValues(cls);
+        ValueRange rng = store_->range(cat);
         if(!x2->updateMin(rng.from) || !x2->updateMax(rng.to))
             return false;
     }
@@ -218,15 +221,15 @@ bool VarDiffConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarEqConstraint::VarEqConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2) :
-        Constraint(PRIOR_HIGH), store(store), x1(x1), x2(x2) {
+VarEqConstraint::VarEqConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2) :
+        Constraint(PRIOR_HIGH), store_(store), x1_(x1), x2_(x2) {
     x1->registerChange(this);
     x2->registerChange(this);
 }
 
 void VarEqConstraint::restore() {
-    s1 = x1->getSize();
-    s2 = x2->getSize();
+    s1_ = x1_->size();
+    s2_ = x2_->size();
 }
 
 bool VarEqConstraint::post() {
@@ -235,17 +238,20 @@ bool VarEqConstraint::post() {
 }
 
 bool VarEqConstraint::propagate() {
-    cp::RDFVar *x1 = this->x1, *x2 = this->x2;
-    int n1 = x1->getSize(), n2 = x2->getSize();
-    int oldn1 = s1, oldn2 = s2;
-    int removed = (oldn1 - n1) + (oldn2 - n2);
+    cp::RDFVar* x1 = x1_;
+    cp::RDFVar* x2 = x2_;
+    unsigned n1 = x1->size();
+    unsigned n2 = x2->size();
+    unsigned oldn1 = s1_;
+    unsigned oldn2 = s2_;
+    unsigned removed = (oldn1 - n1) + (oldn2 - n2);
     /* removed is 0 on initial propagation. In such case, we must compute the
      * union of both domains.
      */
     if(removed > 0 && removed < n1 && removed < n2) {
-        const Value::id_t *dom = x1->getDomain();
-        for(int i = n1; i < oldn1; i++) {
-            ValueRange eqClass = store->getValueEqClass(dom[i]);
+        const Value::id_t* dom = x1->domain();
+        for(unsigned i = n1; i < oldn1; i++) {
+            ValueRange eqClass = store_->eqClass(dom[i]);
             bool prune = true;
             for(Value::id_t id : eqClass) {
                 if(x1->contains(id)) {
@@ -260,9 +266,9 @@ bool VarEqConstraint::propagate() {
                 }
             }
         }
-        dom = x2->getDomain();
-        for(int i = n2; i < oldn2; i++) {
-            ValueRange eqClass = store->getValueEqClass(dom[i]);
+        dom = x2->domain();
+        for(unsigned i = n2; i < oldn2; i++) {
+            ValueRange eqClass = store_->eqClass(dom[i]);
             bool prune = true;
             for(Value::id_t id : eqClass) {
                 if(x2->contains(id)) {
@@ -280,14 +286,14 @@ bool VarEqConstraint::propagate() {
     } else {
         if(n2 < n1) {
             x1 = x2;
-            x2 = this->x1;
+            x2 = x1_;
             n1 = n2;
         }
         x2->clearMarks();
-        const Value::id_t *dom = x1->getDomain();
-        for(int i = 0; i < n1; i++) {
-            int v = dom[i];
-            ValueRange eqClass = store->getValueEqClass(v);
+        const Value::id_t* dom = x1->domain();
+        for(unsigned i = 0; i < n1; i++) {
+            Value::id_t v = dom[i];
+            ValueRange eqClass = store_->eqClass(v);
             bool prune = true;
             for(Value::id_t id : eqClass) {
                 if(x2->contains(id))
@@ -308,15 +314,17 @@ bool VarEqConstraint::propagate() {
         if(!x2->restrictToMarks())
             return false;
     }
-    s1 = x1->getSize();
-    s2 = x2->getSize();
+    s1_ = x1_->size();
+    s2_ = x2_->size();
     return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarLessConstraint::VarLessConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x2, bool equality)
-        : StatelessConstraint(PRIOR_HIGH), store(store), x1(x1), x2(x2), equality(equality) {
+VarLessConstraint::VarLessConstraint(Store* store, cp::RDFVar* x1,
+                                     cp::RDFVar* x2, bool equality)
+        : StatelessConstraint(PRIOR_HIGH), store_(store), x1_(x1), x2_(x2),
+          equality(equality) {
     x1->registerMin(this);
     x1->registerMax(this);
     x2->registerMin(this);
@@ -324,47 +332,47 @@ VarLessConstraint::VarLessConstraint(Store *store, cp::RDFVar *x1, cp::RDFVar *x
 }
 
 void VarLessConstraint::restore() {
-    ValueRange eqClass1 = store->getValueEqClass(x1->getMax());
-    ValueRange eqClass2 = store->getValueEqClass(x2->getMin());
-    done = equality ? eqClass1.to <= eqClass2.to
+    ValueRange eqClass1 = store_->eqClass(x1_->max());
+    ValueRange eqClass2 = store_->eqClass(x2_->min());
+    done_ = equality ? eqClass1.to <= eqClass2.to
                     : eqClass1.to < eqClass2.from;
 }
 
 bool VarLessConstraint::propagate() {
     StatelessConstraint::propagate();
-    ValueRange eqClassMax1 = store->getValueEqClass(x1->getMax());
-    ValueRange eqClassMin2 = store->getValueEqClass(x2->getMin());
-    done = equality ? eqClassMax1.to <= eqClassMin2.to
+    ValueRange eqClassMax1 = store_->eqClass(x1_->max());
+    ValueRange eqClassMin2 = store_->eqClass(x2_->min());
+    done_ = equality ? eqClassMax1.to <= eqClassMin2.to
                     : eqClassMax1.to < eqClassMin2.from;
-    if(done)
+    if(done_)
         return true;
-    ValueRange eqClassMax2 = store->getValueEqClass(x2->getMax());
-    if(!x1->updateMax(equality ? eqClassMax2.to : eqClassMax2.from - 1))
+    ValueRange eqClassMax2 = store_->eqClass(x2_->max());
+    if(!x1_->updateMax(equality ? eqClassMax2.to : eqClassMax2.from - 1))
         return false;
-    ValueRange eqClassMin1 = store->getValueEqClass(x1->getMin());
-    return x2->updateMin(equality ? eqClassMin1.from : eqClassMin1.to + 1);
+    ValueRange eqClassMin1 = store_->eqClass(x1_->min());
+    return x2_->updateMin(equality ? eqClassMin1.from : eqClassMin1.to + 1);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarDiffTermConstraint::VarDiffTermConstraint(cp::RDFVar *x1, cp::RDFVar *x2) :
-        StatelessConstraint(PRIOR_HIGH), x1(x1), x2(x2) {
+VarDiffTermConstraint::VarDiffTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2) :
+        StatelessConstraint(PRIOR_HIGH), x1_(x1), x2_(x2) {
     x1->registerBind(this);
     x2->registerBind(this);
 }
 
 void VarDiffTermConstraint::restore() {
-    done = (x1->isBound() || x2->isBound());
+    done_ = (x1_->isBound() || x2_->isBound());
 }
 
 bool VarDiffTermConstraint::propagate() {
     StatelessConstraint::propagate();
-    if(x1->isBound()) {
-        done = true;
-        return x2->remove(x1->getValue());
-    } else if(x2->isBound()) {
-        done = true;
-        return x1->remove(x2->getValue());
+    if(x1_->isBound()) {
+        done_ = true;
+        return x2_->remove(x1_->value());
+    } else if(x2_->isBound()) {
+        done_ = true;
+        return x1_->remove(x2_->value());
     } else {
         return true;
     }
@@ -372,15 +380,15 @@ bool VarDiffTermConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarSameTermConstraint::VarSameTermConstraint(cp::RDFVar *x1, cp::RDFVar *x2) :
-        Constraint(PRIOR_HIGH), x1(x1), x2(x2) {
+VarSameTermConstraint::VarSameTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2) :
+        Constraint(PRIOR_HIGH), x1_(x1), x2_(x2) {
     x1->registerChange(this);
     x2->registerChange(this);
 }
 
 void VarSameTermConstraint::restore() {
-    s1 = x1->getSize();
-    s2 = x2->getSize();
+    s1_ = x1_->size();
+    s2_ = x2_->size();
 }
 
 bool VarSameTermConstraint::post() {
@@ -389,34 +397,37 @@ bool VarSameTermConstraint::post() {
 }
 
 bool VarSameTermConstraint::propagate() {
-    cp::RDFVar *x1 = this->x1, *x2 = this->x2;
-    int n1 = x1->getSize(), n2 = x2->getSize();
-    int oldn1 = s1, oldn2 = s2;
-    int removed = (oldn1 - n1) + (oldn2 - n2);
+    cp::RDFVar* x1 = x1_;
+    cp::RDFVar* x2 = x2_;
+    unsigned n1 = x1->size();
+    unsigned n2 = x2->size();
+    unsigned oldn1 = s1_;
+    unsigned oldn2 = s2_;
+    unsigned removed = (oldn1 - n1) + (oldn2 - n2);
     /* removed is 0 on initial propagation. In such case, we must compute the
      * union of both domains.
      */
     if(removed > 0 && removed < n1 && removed < n2) {
-        const Value::id_t *dom = x1->getDomain();
-        for(int i = n1; i < oldn1; i++) {
+        const Value::id_t* dom = x1->domain();
+        for(unsigned i = n1; i < oldn1; i++) {
             if(!x2->remove(dom[i]))
                 return false;
         }
-        dom = x2->getDomain();
-        for(int i = n2; i < oldn2; i++) {
+        dom = x2->domain();
+        for(unsigned i = n2; i < oldn2; i++) {
             if(!x1->remove(dom[i]))
                 return false;
         }
     } else {
         if(n2 < n1) {
             x1 = x2;
-            x2 = this->x1;
+            x2 = x1_;
             n1 = n2;
         }
         x2->clearMarks();
-        const Value::id_t *dom = x1->getDomain();
-        for(int i = 0; i < n1; i++) {
-            int v = dom[i];
+        const Value::id_t* dom = x1->domain();
+        for(unsigned i = 0; i < n1; i++) {
+            Value::id_t v = dom[i];
             if(x2->contains(v)) {
                 x2->mark(v);
             } else {
@@ -429,8 +440,8 @@ bool VarSameTermConstraint::propagate() {
         if(!x2->restrictToMarks())
             return false;
     }
-    s1 = x1->getSize();
-    s2 = x2->getSize();
+    s1_ = x1_->size();
+    s2_ = x2_->size();
     return true;
 }
 

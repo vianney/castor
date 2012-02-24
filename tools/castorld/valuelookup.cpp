@@ -23,31 +23,31 @@
 
 namespace castor {
 
-ValueLookup::ValueLookup(TempFile *file) : file(file) {
-    values = new Value[SIZE];
-    ids = new uint64_t[SIZE];
-    memset(ids, 0, SIZE * sizeof(uint64_t));
-    next = 1;
+ValueLookup::ValueLookup(TempFile* file) : file_(file) {
+    values_ = new Value[SIZE];
+    ids_ = new uint64_t[SIZE];
+    memset(ids_, 0, SIZE * sizeof(uint64_t));
+    next_ = 1;
 }
 
 ValueLookup::~ValueLookup() {
-    delete [] values;
-    delete [] ids;
+    delete [] values_;
+    delete [] ids_;
 }
 
-uint64_t ValueLookup::lookup(const Value &val) {
+uint64_t ValueLookup::lookup(const Value& val) {
     // already in hash table?
     unsigned slot = val.hash() % SIZE;
-    if(ids[slot] && values[slot] == val)
-        return ids[slot];
+    if(ids_[slot] && values_[slot] == val)
+        return ids_[slot];
 
     // no, construct a new id
-    values[slot].fillCopy(val, true);
-    uint64_t id = ids[slot] = next++;
+    values_[slot] = val;
+    uint64_t id = ids_[slot] = next_++;
 
     // write mapping to file
-    file->writeValue(val);
-    file->writeBigInt(id);
+    file_->writeValue(val);
+    file_->writeBigInt(id);
 
     return id;
 }

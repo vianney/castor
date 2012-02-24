@@ -18,15 +18,16 @@
 #ifndef CASTOR_DISTINCT_H
 #define CASTOR_DISTINCT_H
 
+#include <set>
+
 #include "solver/constraint.h"
 #include "query.h"
-#include <set>
 
 namespace castor {
 
 class DistinctConstraint : public cp::Constraint {
 public:
-    DistinctConstraint(Query *query);
+    DistinctConstraint(Query* query);
     ~DistinctConstraint();
 
     /**
@@ -46,19 +47,22 @@ private:
      * Comparator for solutions
      */
     class LexLess {
-        unsigned size; //!< number of values in a solution
-        unsigned index; //!< index to ignore
     public:
-        LexLess(unsigned size, unsigned index = -1) : size(size), index(index) {}
+        LexLess(unsigned size, unsigned index = -1) :
+            size_(size), index_(index) {}
         template <typename T>
         bool operator()(T* a, T* b) const;
+
+    private:
+        unsigned size_;  //!< number of values in a solution
+        unsigned index_; //!< index to ignore
     };
 
-    Query *query;
+    Query* query_;
 
     typedef std::multiset<Value::id_t*, LexLess> SolSet;
-    SolSet *solutions;
-    SolSet **indexes; //!< solution indexes
+    SolSet* solutions_;
+    SolSet** indexes_; //!< solution indexes
 };
 
 }

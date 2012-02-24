@@ -53,20 +53,37 @@ public:
     };
     static const int PRIOR_COUNT = PRIOR_LAST - PRIOR_FIRST + 1;
 
+    /**
+     * Type of the timestamps used for static constraints. Defined to be at
+     * least 64bits long.
+     */
+    typedef unsigned long long timestamp_t;
+
+    /**
+     * Create a new constraint.
+     * The constraint will be marked as "propagating" (nextPropag_ = nullptr)
+     * and not entailed (done_ = false).
+     *
+     * @param priority the priority of the constraint
+     */
     Constraint(Priority priority = PRIOR_MEDIUM) :
-            priority(priority) {}
+        done_(false), priority_(priority), nextPropag_(nullptr) {}
     virtual ~Constraint() {}
+
+    //! Non-copyable
+    Constraint(const Constraint&) = delete;
+    Constraint& operator=(const Constraint&) = delete;
 
     /**
      * Priority of this constraint.
      */
-    Priority getPriority() { return priority; }
+    Priority priority() { return priority_; }
 
     /**
      * Constraint (re)initialization. Called when parent subtree is activated
      * and before any propagation occurs. Should not propagate anything.
      */
-    virtual void init() { done = false; }
+    virtual void init() { done_ = false; }
 
     /**
      * Initial propagation callback. It should perform the initial propagation
@@ -91,42 +108,42 @@ protected:
     /**
      * Solver containing this constraint.
      */
-    Solver *solver;
+    Solver* solver_;
 
     /**
      * Parent subtree in which this constraint is posted or nullptr if posted
      * globally.
      * This variable is initialized by Subtree or Solver.
      */
-    Subtree *parent;
+    Subtree* parent_;
 
     /**
      * If this variable is set to true, the constraint will not react to further
      * events. The restore callback will still be called, such that done can
      * be reset to false when appropriate.
      */
-    bool done;
+    bool done_;
 
 private:
     /**
      * Constraint priority. The priority is constant for a constraint.
      */
-    Priority priority;
+    Priority priority_;
     /**
      * Internal use by solver.
      * Next constraint in propagation queue.
      */
-    Constraint *nextPropag;
+    Constraint* nextPropag_;
     /**
      * Timestamp of this constraint. This is only used for static constraints.
      */
-    int timestamp;
+    timestamp_t timestamp_;
 
     friend class Solver;
     friend class Subtree;
 };
 
-static inline Constraint::Priority& operator++(Constraint::Priority &p) {
+static inline Constraint::Priority& operator++(Constraint::Priority& p) {
     return p = static_cast<Constraint::Priority>(p + 1);
 }
 
@@ -139,19 +156,19 @@ static inline Constraint::Priority& operator++(Constraint::Priority &p) {
  *       implementation when overriding methods.
  */
 class StatelessConstraint : public Constraint {
-    bool posted; //!< true if initial propagation has been performed
 public:
     StatelessConstraint() : Constraint() {}
     StatelessConstraint(Priority priority) : Constraint(priority) {}
 
-    void init() { Constraint::init(); posted = false; }
-    bool post() { return posted ? true : propagate(); }
-    bool propagate() { posted = true; return true; }
+    void init() { Constraint::init(); posted_ = false; }
+    bool post() { return posted_ ? true : propagate(); }
+    bool propagate() { posted_ = true; return true; }
+
+private:
+    bool posted_; //!< true if initial propagation has been performed
 };
 
 }
 }
-
-#include "solver.h"
 
 #endif // CASTOR_CP_CONSTRAINT_H

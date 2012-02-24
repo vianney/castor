@@ -46,11 +46,11 @@ public:
      * @param min initial lower bound
      * @param max initial upper bound
      */
-    BoundsVariable(Solver *solver, T min, T max);
+    BoundsVariable(Solver* solver, T min, T max);
 
     // Implementation of virtual functions
-    void checkpoint(void *trail) const;
-    void restore(const void *trail);
+    void checkpoint(void* trail) const;
+    void restore(const void* trail);
     void select();
     void unselect();
 
@@ -58,22 +58,22 @@ public:
      * @pre isBound() == true
      * @return the value bound to this variable
      */
-    T getValue() const { return min; }
+    T value() const { return min_; }
 
     /**
      * @param v a value
      * @return whether value v is in the domain
      */
-    bool contains(T v) const { return v >= min && v <= max; }
+    bool contains(T v) const { return v >= min_ && v <= max_; }
 
     /**
      * @return the lower bound
      */
-    T getMin() const { return min; }
+    T min() const { return min_; }
     /**
      * @return the upper bound
      */
-    T getMax() const { return max; }
+    T max() const { return max_; }
 
     /**
      * Bind a value to a variable.
@@ -111,7 +111,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerBind(Constraint *c) { evBind.push_back(c); }
+    void registerBind(Constraint* c) { evBind_.push_back(c); }
 
     /**
      * Register constraint c to the update min event of this variable.
@@ -119,7 +119,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerMin(Constraint *c) { evMin.push_back(c); }
+    void registerMin(Constraint* c) { evMin_.push_back(c); }
 
     /**
      * Register constraint c to the update max event of this variable.
@@ -127,26 +127,24 @@ public:
      *
      * @param c the constraint
      */
-    void registerMax(Constraint *c) { evMax.push_back(c); }
+    void registerMax(Constraint* c) { evMax_.push_back(c); }
 
 private:
-    /**
-     * Lower and upper bounds of the values in the domain.
-     */
-    T min, max;
+    T min_; //!< lower bound
+    T max_; //!< upper bound
 
     /**
      * List of constraints registered to the bind event.
      */
-    std::vector<Constraint*> evBind;
+    std::vector<Constraint*> evBind_;
     /**
      * List of constraints registered to the update min event
      */
-    std::vector<Constraint*> evMin;
+    std::vector<Constraint*> evMin_;
     /**
      * List of constraints registered to the update max event
      */
-    std::vector<Constraint*> evMax;
+    std::vector<Constraint*> evMax_;
 };
 
 
@@ -154,70 +152,70 @@ private:
 // Template implementation
 
 template<class T>
-BoundsVariable<T>::BoundsVariable(Solver *solver, T min, T max) :
+BoundsVariable<T>::BoundsVariable(Solver* solver, T min, T max) :
         Variable(solver, 2 * sizeof(T)),
-        min(min),
-        max(max) {
-    size = max - min + 1;
+        min_(min),
+        max_(max) {
+    size_ = max - min + 1;
 }
 
 template<class T>
-void BoundsVariable<T>::checkpoint(void *trail) const {
-    *((reinterpret_cast<T*&>(trail))++) = min;
-    *((reinterpret_cast<T*&>(trail))++) = max;
+void BoundsVariable<T>::checkpoint(void* trail) const {
+    *((reinterpret_cast<T*&>(trail))++) = min_;
+    *((reinterpret_cast<T*&>(trail))++) = max_;
 }
 
 template<class T>
-void BoundsVariable<T>::restore(const void *trail) {
-    min  = *((reinterpret_cast<const T*&>(trail))++);
-    max  = *((reinterpret_cast<const T*&>(trail))++);
-    size = max - min + 1;
+void BoundsVariable<T>::restore(const void* trail) {
+    min_  = *((reinterpret_cast<const T*&>(trail))++);
+    max_  = *((reinterpret_cast<const T*&>(trail))++);
+    size_ = max_ - min_ + 1;
 }
 
 template<class T>
 void BoundsVariable<T>::select() {
-    assert(min < max && size > 1);
-    bool ret = bind(min);
+    assert(min_ < max_ && size_ > 1);
+    bool ret = bind(min_);
     assert(ret);
 }
 
 template<class T>
 void BoundsVariable<T>::unselect() {
-    assert(min < max && size > 1);
-    bool ret = updateMin(min + 1);
+    assert(min_ < max_ && size_ > 1);
+    bool ret = updateMin(min_ + 1);
     assert(ret);
 }
 
 template<class T>
 bool BoundsVariable<T>::bind(T v) {
-    if(v < min || v > max)
+    if(v < min_ || v > max_)
         return false;
-    if(size == 1)
+    if(size_ == 1)
         return true;
-    size = 1;
-    if(v != min) {
-        min = v;
-        solver->enqueue(evMin);
+    size_ = 1;
+    if(v != min_) {
+        min_ = v;
+        solver_->enqueue(evMin_);
     }
-    if(v != max) {
-        max = v;
-        solver->enqueue(evMax);
+    if(v != max_) {
+        max_ = v;
+        solver_->enqueue(evMax_);
     }
-    solver->enqueue(evBind);
-    assert(size == max - min + 1);
+    solver_->enqueue(evBind_);
+    assert(size_ == max_ - min_ + 1);
     return true;
 }
 
 template<class T>
 bool BoundsVariable<T>::updateMin(T v) {
-    if(v > max) {
+    if(v > max_) {
         return false;
-    } else if(v == max) {
+    } else if(v == max_) {
         return bind(v);
-    } else if(v > min) {
-        min = v;
-        size = max - min + 1;
-        solver->enqueue(evMin);
+    } else if(v > min_) {
+        min_ = v;
+        size_ = max_ - min_ + 1;
+        solver_->enqueue(evMin_);
         return true;
     } else {
         return true;
@@ -226,14 +224,14 @@ bool BoundsVariable<T>::updateMin(T v) {
 
 template<class T>
 bool BoundsVariable<T>::updateMax(T v) {
-    if(v < min) {
+    if(v < min_) {
         return false;
-    } else if(v == min) {
+    } else if(v == min_) {
         return bind(v);
-    } else if(v < max) {
-        max = v;
-        size = max - min + 1;
-        solver->enqueue(evMax);
+    } else if(v < max_) {
+        max_ = v;
+        size_ = max_ - min_ + 1;
+        solver_->enqueue(evMax_);
         return true;
     } else {
         return true;

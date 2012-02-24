@@ -30,17 +30,13 @@ namespace castor {
  * Lookup cache for early string aggregation
  */
 class ValueLookup {
-    static const unsigned SIZE = 1009433;  //!< hash table size
-
-    TempFile *file; //!< file for storing the mappings
-
-    Value *values;  //!< strings seen so far
-    uint64_t *ids;  //!< ids for the strings
-    uint64_t next;  //!< next id
-
 public:
-    ValueLookup(TempFile *file);
+    ValueLookup(TempFile* file_);
     ~ValueLookup();
+
+    //! Non-copyable
+    ValueLookup(const ValueLookup&) = delete;
+    ValueLookup& operator=(const ValueLookup&) = delete;
 
     /**
      * Lookup a value. Generate an id if necessary and write the mapping
@@ -49,7 +45,15 @@ public:
      * @param val the value the look for. Must have a lexical form
      * @return the id (!= 0)
      */
-    uint64_t lookup(const Value &val);
+    uint64_t lookup(const Value& val);
+
+private:
+    static constexpr unsigned SIZE = 1009433;  //!< hash table size
+
+    TempFile* file_;   //!< file for storing the mappings
+    Value*    values_; //!< values seen so far
+    uint64_t* ids_;    //!< ids for the strings
+    uint64_t  next_;   //!< next id
 };
 
 }

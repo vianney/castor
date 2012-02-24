@@ -59,15 +59,15 @@ protected:
      * @param min lower bound
      * @param max upper bound
      */
-    void expect_domain(const Var &x, unsigned min, unsigned max) {
+    void expect_domain(const Var& x, unsigned min, unsigned max) {
         ASSERT_LE(min, max);
         // check size and bound
-        EXPECT_EQ(min, x.getMin());
-        EXPECT_EQ(max, x.getMax());
-        EXPECT_EQ(max - min + 1, x.getSize());
+        EXPECT_EQ(min, x.min());
+        EXPECT_EQ(max, x.max());
+        EXPECT_EQ(max - min + 1, x.size());
         if(min == max) {
             EXPECT_TRUE(x.isBound());
-            EXPECT_EQ(min, x.getValue());
+            EXPECT_EQ(min, x.value());
         } else {
             EXPECT_FALSE(x.isBound());
         }
@@ -93,7 +93,7 @@ protected:
  * checkpoint() should not overflow
  */
 TEST_F(SolverBoundsVarTest, CheckpointOverflow) {
-    std::size_t size = x.getTrailSize();
+    std::size_t size = x.trailSize();
     char buf[21*size];
 
     memset(buf, 0xA5, 21*size);
@@ -115,7 +115,7 @@ TEST_F(SolverBoundsVarTest, CheckpointOverflow) {
  * checkpoint() should not modify the domain
  */
 TEST_F(SolverBoundsVarTest, CheckpointSanity) {
-    char trail[x.getTrailSize()];
+    char trail[x.trailSize()];
     x.checkpoint(trail);
     y.checkpoint(trail);
     expect_initial_state();
@@ -125,7 +125,7 @@ TEST_F(SolverBoundsVarTest, CheckpointSanity) {
  * restore() should restore the domain to the state of a checkpoint
  */
 TEST_F(SolverBoundsVarTest, CheckpointRestore) {
-    char trail[x.getTrailSize()];
+    char trail[x.trailSize()];
 
     x.checkpoint(trail);
     x.updateMin(3);
@@ -152,45 +152,45 @@ TEST_F(SolverBoundsVarTest, Select) {
 
     x.select();
     EXPECT_TRUE(x.isBound());
-    EXPECT_LE(0u, x.getValue());
-    EXPECT_GE(9u, x.getValue());
-    expect_domain(x, x.getValue(), x.getValue());
+    EXPECT_LE(0u, x.value());
+    EXPECT_GE(9u, x.value());
+    expect_domain(x, x.value(), x.value());
 
     y.select();
     EXPECT_TRUE(y.isBound());
-    EXPECT_LE(5u, y.getValue());
-    EXPECT_GE(9u, y.getValue());
-    expect_domain(y, y.getValue(), y.getValue());
+    EXPECT_LE(5u, y.value());
+    EXPECT_GE(9u, y.value());
+    expect_domain(y, y.value(), y.value());
 }
 
 /**
  * Check the unselect() method
  */
 TEST_F(SolverBoundsVarTest, UnSelect) {
-    char trail[x.getTrailSize()];
+    char trail[x.trailSize()];
     unsigned val;
 
     x.checkpoint(trail);
     x.select();
     EXPECT_TRUE(x.isBound());
-    val = x.getValue();
+    val = x.value();
     x.restore(trail);
     EXPECT_FALSE(x.isBound());
     EXPECT_TRUE(x.contains(val));
     x.unselect();
     EXPECT_FALSE(x.contains(val));
-    EXPECT_EQ(9u, x.getSize());
+    EXPECT_EQ(9u, x.size());
 
     y.checkpoint(trail);
     y.select();
     EXPECT_TRUE(y.isBound());
-    val = y.getValue();
+    val = y.value();
     y.restore(trail);
     EXPECT_FALSE(y.isBound());
     EXPECT_TRUE(y.contains(val));
     y.unselect();
     EXPECT_FALSE(y.contains(val));
-    EXPECT_EQ(4u, y.getSize());
+    EXPECT_EQ(4u, y.size());
 }
 
 /**

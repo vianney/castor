@@ -52,7 +52,7 @@ public:
      * @param minVal lowest value in the domain
      * @param maxVal highest value in the domain
      */
-    DiscreteVariable(Solver *solver, T minVal, T maxVal);
+    DiscreteVariable(Solver* solver, T minVal_, T maxVal_);
 
     /**
      * Destructor.
@@ -60,8 +60,8 @@ public:
     ~DiscreteVariable();
 
     // Implementation of virtual functions
-    void checkpoint(void *trail) const;
-    void restore(const void *trail);
+    void checkpoint(void* trail) const;
+    void restore(const void* trail);
     void select();
     void unselect();
 
@@ -69,7 +69,7 @@ public:
      * @pre isBound() == true
      * @return the value bound to this variable
      */
-    T getValue() const { return domain[0]; }
+    T value() const { return domain_[0]; }
 
     /**
      * Get the domain array. Beware that this is a pointer directly to the
@@ -79,7 +79,7 @@ public:
      *
      * @return pointer to the domain array
      */
-    const T* getDomain() const { return domain; }
+    const T* domain() const { return domain_; }
 
     /**
      * @param v a value
@@ -87,17 +87,17 @@ public:
      *         representations)
      */
     bool contains(T v) const {
-        return v >= min && v <= max && map[v-minVal] < size;
+        return v >= min_ && v <= max_ && map_[v-minVal_] < size_;
     }
 
     /**
      * @return the lower bound (may not be consistent)
      */
-    T getMin() const { return min; }
+    T min() const { return min_; }
     /**
      * @return the upper bound (may not be consistent)
      */
-    T getMax() const { return max; }
+    T max() const { return max_; }
 
     /**
      * Mark a value in the domain. Do nothing if the value is not in
@@ -171,7 +171,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerBind(Constraint *c) { evBind.push_back(c); }
+    void registerBind(Constraint* c) { evBind_.push_back(c); }
 
     /**
      * Register constraint c to the change event of this variable. A constraint
@@ -179,7 +179,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerChange(Constraint *c) { evChange.push_back(c); }
+    void registerChange(Constraint* c) { evChange_.push_back(c); }
 
     /**
      * Register constraint c to the update min event of this variable.
@@ -187,7 +187,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerMin(Constraint *c) { evMin.push_back(c); }
+    void registerMin(Constraint* c) { evMin_.push_back(c); }
 
     /**
      * Register constraint c to the update max event of this variable.
@@ -195,33 +195,36 @@ public:
      *
      * @param c the constraint
      */
-    void registerMax(Constraint *c) { evMax.push_back(c); }
+    void registerMax(Constraint* c) { evMax_.push_back(c); }
 
 private:
-    /**
-     * Lowest and highest value in the initial domain.
-     */
-    T minVal, maxVal;
+    T minVal_; //!< lowest value in the initial domain
+    T maxVal_; //!< highest value in the initial domain
 
     /**
-     * Lower and upper bounds of the values in the domain.
+     * Lower bound of the values in the domain.
      * The thightness of the bounds is not guaranteed when size > 1.
      * In other words, these bounds may be inconsistent, except when the
      * variable is bound.
      */
-    T min, max;
+    T min_;
+    /**
+     * Upper bound of the values in the domain.
+     * @sa min_
+     */
+    T max_;
 
     /**
      * @invariant domain[0..size-1] = domain of the variable
      */
-    T* domain;
+    T* domain_;
 
     /**
      * @invariant map[v-minVal] = position of value v in domain
      * @invariant map[v-minVal] = i <=> domain[i] = v
      * @invariant contains(v) <=> map[v-minVal] < size
      */
-    unsigned* map;
+    unsigned* map_;
 
     /**
      * Number of marked values.
@@ -229,227 +232,226 @@ private:
      *
      * @invariant marked <= size
      */
-    unsigned marked;
+    unsigned marked_;
 
-    /**
-     * Lowest and highest marked values.
-     */
-    T markedmin, markedmax;
+    T markedmin_; //!< lowest marked value
+    T markedmax_; //!< highest marked value
 
     /**
      * List of constraints registered to the bind event.
      */
-    std::vector<Constraint*> evBind;
+    std::vector<Constraint*> evBind_;
     /**
      * List of constraints registered to the change event.
      */
-    std::vector<Constraint*> evChange;
+    std::vector<Constraint*> evChange_;
     /**
      * List of constraints registered to the update min event
      */
-    std::vector<Constraint*> evMin;
+    std::vector<Constraint*> evMin_;
     /**
      * List of constraints registered to the update max event
      */
-    std::vector<Constraint*> evMax;
+    std::vector<Constraint*> evMax_;
 };
 
 template<class T>
-std::ostream& operator<<(std::ostream &out, const DiscreteVariable<T> &x);
+std::ostream& operator<<(std::ostream& out, const DiscreteVariable<T>& x);
 
 
 ////////////////////////////////////////////////////////////////////////////////
 // Template implementation
 
 template<class T>
-DiscreteVariable<T>::DiscreteVariable(Solver *solver, T minVal, T maxVal) :
+DiscreteVariable<T>::DiscreteVariable(Solver* solver, T minVal, T maxVal) :
         Variable(solver, sizeof(unsigned) + 2 * sizeof(T)),
-        minVal(minVal),
-        maxVal(maxVal) {
-    size = maxVal - minVal + 1;
-    domain = new T[size];
-    map = new unsigned[size];
+        minVal_(minVal),
+        maxVal_(maxVal) {
+    size_ = maxVal - minVal + 1;
+    domain_ = new T[size_];
+    map_ = new unsigned[size_];
     for(T v = minVal, i = 0; v <= maxVal; ++v, ++i) {
-        domain[i] = v;
-        map[v-minVal] = i;
+        domain_[i] = v;
+        map_[v-minVal] = i;
     }
-    min = minVal;
-    max = maxVal;
+    min_ = minVal;
+    max_ = maxVal;
     clearMarks();
 }
 
 template<class T>
 DiscreteVariable<T>::~DiscreteVariable() {
-    delete[] domain;
-    delete[] map;
+    delete[] domain_;
+    delete[] map_;
 }
 
 template<class T>
-void DiscreteVariable<T>::checkpoint(void *trail) const {
-    *((reinterpret_cast<unsigned*&>(trail))++) = size;
-    *((reinterpret_cast<T*&>       (trail))++) = min;
-    *((reinterpret_cast<T*&>       (trail))++) = max;
+void DiscreteVariable<T>::checkpoint(void* trail) const {
+    *((reinterpret_cast<unsigned*&>(trail))++) = size_;
+    *((reinterpret_cast<T*&>       (trail))++) = min_;
+    *((reinterpret_cast<T*&>       (trail))++) = max_;
 }
 
 template<class T>
-void DiscreteVariable<T>::restore(const void *trail) {
-    size = *((reinterpret_cast<const unsigned*&>(trail))++);
-    min  = *((reinterpret_cast<const T*&>       (trail))++);
-    max  = *((reinterpret_cast<const T*&>       (trail))++);
+void DiscreteVariable<T>::restore(const void* trail) {
+    size_ = *((reinterpret_cast<const unsigned*&>(trail))++);
+    min_  = *((reinterpret_cast<const T*&>       (trail))++);
+    max_  = *((reinterpret_cast<const T*&>       (trail))++);
 }
 
 template<class T>
 void DiscreteVariable<T>::select() {
-    assert(size > 1);
-    bool ret = bind(domain[0]);
+    assert(size_ > 1);
+    bool ret = bind(domain_[0]);
     assert(ret);
 }
 
 template<class T>
 void DiscreteVariable<T>::unselect() {
-    assert(size > 1);
-    bool ret = remove(domain[0]);
+    assert(size_ > 1);
+    bool ret = remove(domain_[0]);
     assert(ret);
 }
 
 template<class T>
 void DiscreteVariable<T>::mark(T v) {
-    if(v < min || v > max)
+    if(v < min_ || v > max_)
         return;
-    unsigned i = map[v-minVal];
-    if(i >= size || i < marked)
+    unsigned i = map_[v-minVal_];
+    if(i >= size_ || i < marked_)
         return;
-    if(i != marked) {
-        T v2 = domain[marked];
-        domain[i] = v2;
-        domain[marked] = v;
-        map[v2-minVal] = i;
-        map[v-minVal] = marked;
+    if(i != marked_) {
+        T v2 = domain_[marked_];
+        domain_[i] = v2;
+        domain_[marked_] = v;
+        map_[v2-minVal_] = i;
+        map_[v-minVal_] = marked_;
     }
-    if(marked == 0 || v < markedmin)
-        markedmin = v;
-    if(marked == 0 || v > markedmax)
-        markedmax = v;
-    ++marked;
+    if(marked_ == 0 || v < markedmin_)
+        markedmin_ = v;
+    if(marked_ == 0 || v > markedmax_)
+        markedmax_ = v;
+    ++marked_;
 }
 
 template<class T>
 void DiscreteVariable<T>::clearMarks() {
-    marked = 0;
+    marked_ = 0;
 }
 
 template<class T>
 bool DiscreteVariable<T>::bind(T v) {
     clearMarks();
-    if(v < min || v > max)
+    if(v < min_ || v > max_)
         return false;
-    unsigned i = map[v-minVal];
-    if(i >= size)
+    unsigned i = map_[v-minVal_];
+    if(i >= size_)
         return false;
-    if(size == 1)
+    if(size_ == 1)
         return true;
     if(i != 0) {
-        T v2 = domain[0];
-        domain[i] = v2;
-        domain[0] = v;
-        map[v2-minVal] = i;
-        map[v-minVal] = 0;
+        T v2 = domain_[0];
+        domain_[i] = v2;
+        domain_[0] = v;
+        map_[v2-minVal_] = i;
+        map_[v-minVal_] = 0;
     }
-    size = 1;
-    if(v != min) {
-        min = v;
-        solver->enqueue(evMin);
+    size_ = 1;
+    if(v != min_) {
+        min_ = v;
+        solver_->enqueue(evMin_);
     }
-    if(v != max) {
-        max = v;
-        solver->enqueue(evMax);
+    if(v != max_) {
+        max_ = v;
+        solver_->enqueue(evMax_);
     }
-    solver->enqueue(evChange);
-    solver->enqueue(evBind);
-    assert(min == max && min == getValue());
+    solver_->enqueue(evChange_);
+    solver_->enqueue(evBind_);
+    assert(min_ == max_ && min_ == value());
     return true;
 }
 
 template<class T>
 bool DiscreteVariable<T>::remove(T v) {
     clearMarks();
-    if(v < minVal || v > maxVal)
+    if(v < minVal_ || v > maxVal_)
         return true;
-    unsigned i = map[v-minVal];
-    if(i >= size)
+    unsigned i = map_[v-minVal_];
+    if(i >= size_)
         return true;
-    switch(size) {
+    switch(size_) {
     case 0: case 1:
         return false;
     case 2:
-        return bind(domain[1-i]);
+        return bind(domain_[1-i]);
     default:
-        size--;
-        if(i != size) {
-            T v2 = domain[size];
-            domain[i] = v2;
-            domain[size] = v;
-            map[v2-minVal] = i;
-            map[v-minVal] = size;
+        size_--;
+        if(i != size_) {
+            T v2 = domain_[size_];
+            domain_[i] = v2;
+            domain_[size_] = v;
+            map_[v2-minVal_] = i;
+            map_[v-minVal_] = size_;
         }
         // FIXME this may break the invariants
-        // e.g.: domain = [10 11 12], min=10, max=11; remove(10)
-        /*if(v == min) {
+        // e.g.: domain_ = [10 11 12], min_=10, max_=11; remove(10)
+        /*if(v == min_) {
             // TODO is this usefull?
-            min++; // not perfect bound
-            solver->enqueue(evMin);
+            min_++; // not perfect bound
+            solver_->enqueue(evMin_);
         }
-        if(v == max) {
+        if(v == max_) {
             // TODO is this usefull?
-            max--; // not perfect bound
-            solver->enqueue(evMax);
+            max_--; // not perfect bound
+            solver_->enqueue(evMax_);
         }*/
-        solver->enqueue(evChange);
-        assert(size > 1 || (min == max && min == getValue()));
-        assert(min < max || (size == 1 && min == getValue()));
+        solver_->enqueue(evChange_);
+        assert(size_ > 1 || (min_ == max_ && min_ == value()));
+        assert(min_ < max_ || (size_ == 1 && min_ == value()));
         return true;
     }
 }
 
 template<class T>
 bool DiscreteVariable<T>::restrictToMarks() {
-    unsigned m = marked;
-    T mmin = markedmin, mmax = markedmax;
+    unsigned m = marked_;
+    T mmin = markedmin_;
+    T mmax = markedmax_;
     clearMarks();
-    if(m != size) {
-        size = m;
+    if(m != size_) {
+        size_ = m;
         if(m == 0)
             return false;
-        if(min != mmin) {
-            min = mmin;
-            solver->enqueue(evMin);
+        if(min_ != mmin) {
+            min_ = mmin;
+            solver_->enqueue(evMin_);
         }
-        if(max != mmax) {
-            max = mmax;
-            solver->enqueue(evMax);
+        if(max_ != mmax) {
+            max_ = mmax;
+            solver_->enqueue(evMax_);
         }
-        solver->enqueue(evChange);
+        solver_->enqueue(evChange_);
         if(m == 1)
-            solver->enqueue(evBind);
+            solver_->enqueue(evBind_);
     }
-    assert(size > 1 || (min == max && min == getValue()));
-    assert(min < max || (size == 1 && min == getValue()));
+    assert(size_ > 1 || (min_ == max_ && min_ == value()));
+    assert(min_ < max_ || (size_ == 1 && min_ == value()));
     return true;
 }
 
 template<class T>
 bool DiscreteVariable<T>::updateMin(T v) {
     clearMarks();
-    if(v > max) {
+    if(v > max_) {
         return false;
-    } else if(v == max) {
+    } else if(v == max_) {
         return bind(v);
-    } else if(v > min) {
-        min = v;
-        solver->enqueue(evChange);
-        solver->enqueue(evMin);
-        assert(size > 1 || (min == max && min == getValue()));
-        assert(min < max || (size == 1 && min == getValue()));
+    } else if(v > min_) {
+        min_ = v;
+        solver_->enqueue(evChange_);
+        solver_->enqueue(evMin_);
+        assert(size_ > 1 || (min_ == max_ && min_ == value()));
+        assert(min_ < max_ || (size_ == 1 && min_ == value()));
         return true;
     } else {
         return true;
@@ -459,16 +461,16 @@ bool DiscreteVariable<T>::updateMin(T v) {
 template<class T>
 bool DiscreteVariable<T>::updateMax(T v) {
     clearMarks();
-    if(v < min) {
+    if(v < min_) {
         return false;
-    } else if(v == min) {
+    } else if(v == min_) {
         return bind(v);
-    } else if(v < max) {
-        max = v;
-        solver->enqueue(evChange);
-        solver->enqueue(evMax);
-        assert(size > 1 || (min == max && min == getValue()));
-        assert(min < max || (size == 1 && min == getValue()));
+    } else if(v < max_) {
+        max_ = v;
+        solver_->enqueue(evChange_);
+        solver_->enqueue(evMax_);
+        assert(size_ > 1 || (min_ == max_ && min_ == value()));
+        assert(min_ < max_ || (size_ == 1 && min_ == value()));
         return true;
     } else {
         return true;
@@ -476,8 +478,8 @@ bool DiscreteVariable<T>::updateMax(T v) {
 }
 
 template<class T>
-std::ostream& operator<<(std::ostream &out, const DiscreteVariable<T> &x) {
-    out << "(" << x.getSize() << ")[" << x.getMin() << ".." << x.getMax()
+std::ostream& operator<<(std::ostream& out, const DiscreteVariable<T>& x) {
+    out << "(" << x.size() << ")[" << x.min() << ".." << x.max()
         << "]";
     return out;
 }

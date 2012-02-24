@@ -22,9 +22,9 @@
 namespace castor {
 
 template <typename T>
-bool DistinctConstraint::LexLess::operator ()(T* a, T* b) const {
-    for(unsigned i = 0; i < size; i++) {
-        if(i == index)
+bool DistinctConstraint::LexLess::operator()(T* a, T* b) const {
+    for(unsigned i = 0; i < size_; i++) {
+        if(i == index_)
             continue;
         if(a[i] < b[i])
             return true;
@@ -34,57 +34,53 @@ bool DistinctConstraint::LexLess::operator ()(T* a, T* b) const {
     return false;
 }
 
-DistinctConstraint::DistinctConstraint(Query *query) {
-    this->query = query;
-    unsigned n = query->getRequestedCount();
+DistinctConstraint::DistinctConstraint(Query* query) {
+    query_ = query;
+    unsigned n = query->requested();
     assert(n > 0);
-    solutions = new SolSet(LexLess(n));
-    indexes = new SolSet*[n];
+    solutions_ = new SolSet(LexLess(n));
+    indexes_ = new SolSet*[n];
     for(unsigned i = 0; i < n; i++) {
-        indexes[i] = new SolSet(LexLess(n, i));
-        query->getVariable(i)->getCPVariable()->registerBind(this);
+        indexes_[i] = new SolSet(LexLess(n, i));
+        query->variable(i)->cp()->registerBind(this);
     }
 }
 
 DistinctConstraint::~DistinctConstraint() {
-    for(unsigned i = 0; i < query->getRequestedCount(); i++)
-        delete indexes[i];
-    delete [] indexes;
-    for(SolSet::iterator it = solutions->begin(), end = solutions->end();
-        it != end; ++it) {
-        delete *it;
-    }
-    delete solutions;
+    for(unsigned i = 0; i < query_->requested(); i++)
+        delete indexes_[i];
+    delete [] indexes_;
+    for(Value::id_t* sol : *solutions_)
+        delete [] sol;
+    delete solutions_;
 }
 
 void DistinctConstraint::addSolution() {
-    unsigned n = query->getRequestedCount();
-    Value::id_t *sol = new Value::id_t[n];
+    unsigned n = query_->requested();
+    Value::id_t* sol = new Value::id_t[n];
     for(unsigned i = 0; i < n; i++)
-        sol[i] = query->getVariable(i)->getValueId();
-    solutions->insert(sol);
+        sol[i] = query_->variable(i)->valueId();
+    solutions_->insert(sol);
     for(unsigned i = 0; i < n; i++)
-        indexes[i]->insert(sol);
-    solver->refresh(this);
+        indexes_[i]->insert(sol);
+    solver_->refresh(this);
 }
 
 void DistinctConstraint::reset() {
-    for(unsigned i = 0; i < query->getRequestedCount(); i++)
-        indexes[i]->clear();
-    for(SolSet::iterator it = solutions->begin(), end = solutions->end();
-        it != end; ++it) {
-        delete *it;
-    }
-    solutions->clear();
+    for(unsigned i = 0; i < query_->requested(); i++)
+        indexes_[i]->clear();
+    for(Value::id_t* sol : *solutions_)
+        delete [] sol;
+    solutions_->clear();
 }
 
 bool DistinctConstraint::propagate() {
-    Value::id_t sol[query->getRequestedCount()];
+    Value::id_t sol[query_->requested()];
     int unbound = -1;
-    for(unsigned i = 0; i < query->getRequestedCount(); i++) {
-        cp::RDFVar *x = query->getVariable(i)->getCPVariable();
+    for(unsigned i = 0; i < query_->requested(); i++) {
+        cp::RDFVar* x = query_->variable(i)->cp();
         if(x->isBound())
-            sol[i] = x->getValue();
+            sol[i] = x->value();
         else if(unbound != -1)
             return true; // too many unbound variables (> 1)
         else
@@ -92,12 +88,12 @@ bool DistinctConstraint::propagate() {
     }
     if(unbound == -1) {
         // all variables are bound -> check
-        return solutions->find(sol) == solutions->end();
+        return solutions_->find(sol) == solutions_->end();
     } else {
         // all variables, except one, are bound -> forward checking
-        cp::RDFVar *x = query->getVariable(unbound)->getCPVariable();
+        cp::RDFVar* x = query_->variable(unbound)->cp();
         std::pair<SolSet::iterator,SolSet::iterator> range
-                = indexes[unbound]->equal_range(sol);
+                = indexes_[unbound]->equal_range(sol);
         for(SolSet::iterator it = range.first; it != range.second; ++it) {
             if(!x->remove((*it)[unbound]))
                 return false;

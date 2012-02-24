@@ -164,7 +164,7 @@ Use for hash table lookup, or anything where one collision in 2^^32 is
 acceptable.  Do NOT use for cryptographic purposes.
 -------------------------------------------------------------------------------
 */
-uint32_t Hash::hash(const void *key, size_t length, uint32_t initval) {
+Hash::hash_t Hash::hash(const void *key, size_t length, hash_t initval) {
   uint32_t a,b,c;                                          /* internal state */
   union { const void *ptr; size_t i; } u;     /* needed for Mac Powerbook G4 */
 
