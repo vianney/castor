@@ -49,6 +49,7 @@ Store::Store(const char* fileName) : db_(fileName) {
     // Get triples pointers
     for(int i = 0; i < ORDERS; i++) {
         triples_[i].begin = cur.readInt();
+        triples_[i].end   = cur.readInt();
         triples_[i].index = new BTree<Triple>(&db_, cur.readInt());
     }
 
@@ -205,35 +206,64 @@ Value::Category Store::category(Value::id_t id) {
     return static_cast<Value::Category>(Value::CATEGORIES);
 }
 
-Store::TripleRange::TripleRange(Store* store, Triple from, Triple to) :
+Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
+                                Store::TripleOrder order) :
         store_(store) {
-    assert(from <= to);
-    // determine index such that non-singleton ranges are the last components
+    if(order == Store::AUTO) {
+        /* determine index such that non-singleton ranges are the last
+         * components
+         */
+        switch((from[0] != to[0]) |
+               (from[1] != to[1]) << 1 |
+               (from[2] != to[2]) << 2) {
+        case 0: // (s,p,o)
+        case 4: // (s,p,*)
+        case 6: // (s,*,*)
+        case 7: // (*,*,*)
+            order = SPO;
+            break;
+        case 1: // (*,p,o)
+        case 5: // (*,p,*)
+            order = POS;
+            break;
+        case 2: // (s,*,o)
+        case 3: // (*,*,o)
+            order = OSP;
+            break;
+        }
+    }
+
     Triple key;
-    switch((from[0] != to[0]) |
-           (from[1] != to[1]) << 1 |
-           (from[2] != to[2]) << 2) {
-    case 0: // (s,p,o)
-    case 4: // (s,p,*)
-    case 6: // (s,*,*)
-    case 7: // (*,*,*)
-        order_ = SPO;
+
+    order_ = order;
+    switch(order) {
+    case SPO:
         key    = from;
         limit_ = to;
         break;
-    case 1: // (*,p,o)
-    case 5: // (*,p,*)
-        order_ = POS;
-        key    = from << 1;
-        limit_ = to   << 1;
+    case SOP:
+        key    = from.reorder<0,2,1>();
+        limit_ = to  .reorder<0,2,1>();
         break;
-    case 2: // (s,*,o)
-    case 3: // (*,*,o)
-        order_ = OSP;
-        key    = from << 2;
-        limit_ = to   << 2;
+    case PSO:
+        key    = from.reorder<1,0,2>();
+        limit_ = to  .reorder<1,0,2>();
+        break;
+    case POS:
+        key    = from.reorder<1,2,0>();
+        limit_ = to  .reorder<1,2,0>();
+        break;
+    case OSP:
+        key    = from.reorder<2,0,1>();
+        limit_ = to  .reorder<2,0,1>();
+        break;
+    case OPS:
+        key    = from.reorder<2,1,0>();
+        limit_ = to  .reorder<2,1,0>();
         break;
     }
+
+    direction_ = from <= to ? +1 : -1;
 
     // look for the first leaf
     nextPage_ = store->triples_[order_].index->lookupLeaf(key);
@@ -242,31 +272,81 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to) :
         return;
     }
 
-    // lookup page in cache
-    const TripleCache::Line* line = store->cache_.fetch(nextPage_);
-    it_       = line->triples;
-    end_      = it_ + line->count;
-    nextPage_ = line->nextPage;
-
-    // binary search for first triple
-    const Triple* left  = it_;
-    const Triple* right = end_;
-    while(left != right) {
-        const Triple* middle = left + (right - left) / 2;
-        if(*middle < key) {
-            left = middle + 1;
-        } else if(middle == it_ || *(middle - 1) < key) {
-            it_ = middle;
-            break;
-        } else {
-            right = middle;
+    if(direction_ < 0) {
+        /* We are searching backwards. The leaf we just found is the first
+         * containing keys >= the upper bound ("from"). If all keys are >= from,
+         * i.e., the first key >= from, the leaf has no interesting triple and
+         * we need to get the previous one, if possible.
+         */
+        unsigned p;
+        unsigned n;
+        Triple k;
+        store->cache_.peek(nextPage_, p, n, k);
+        if(key < k) {
+            if(p != 0) {
+                /* We are in such a case, just fetch the previous page and
+                 * start iterating from the last triple.
+                 */
+                nextPage_ = p;
+                const TripleCache::Line* line = store->cache_.fetch(nextPage_);
+                end_      = line->triples;
+                it_       = end_ + (line->count - 1);
+                nextPage_ = line->prevPage;
+            } else {
+                it_ = end_ = nullptr;
+                nextPage_  = 0;
+            }
+            return;
         }
     }
-    if(left == right) {
-        // unsuccessful search
-        it_ = end_;
-        nextPage_ = 0;
+
+    // lookup page in cache
+    const TripleCache::Line* line = store->cache_.fetch(nextPage_);
+    if(direction_ > 0) {
+        it_       = line->triples;
+        end_      = it_ + line->count;
+        nextPage_ = line->nextPage;
+
+        // binary search for first triple
+        const Triple* left  = it_;
+        const Triple* right = end_;
+        while(left != right) {
+            const Triple* middle = left + (right - left) / 2;
+            if(*middle < key) {
+                left = middle + 1;
+            } else if(middle == it_ || *(middle - 1) < key) {
+                // found!
+                it_ = middle;
+                return;
+            } else {
+                right = middle;
+            }
+        }
+    } else {
+        end_      = line->triples - 1;
+        it_       = end_ + line->count;
+        nextPage_ = line->prevPage;
+
+        // binary search for last triple
+        const Triple* left  = end_ + 1;
+        const Triple* right = it_ + 1;
+        while(left != right) {
+            const Triple* middle = left + (right - left) / 2;
+            if(key < *middle) {
+                right = middle;
+            } else if(middle == it_ || key < *(middle + 1)) {
+                // found!
+                it_ = middle;
+                return;
+            } else {
+                left = middle + 1;
+            }
+        }
     }
+
+    // unsuccessful search
+    it_ = end_;
+    nextPage_ = 0;
 }
 
 bool Store::TripleRange::next(Triple* t) {
@@ -274,26 +354,30 @@ bool Store::TripleRange::next(Triple* t) {
         if(nextPage_ == 0)
             return false;
         const TripleCache::Line* line = store_->cache_.fetch(nextPage_);
-        it_       = line->triples;
-        end_      = it_ + line->count;
-        nextPage_ = line->nextPage;
+        if(direction_ > 0) {
+            it_       = line->triples;
+            end_      = it_ + line->count;
+            nextPage_ = line->nextPage;
+        } else {
+            end_      = line->triples - 1;
+            it_       = end_ + line->count;
+            nextPage_ = line->prevPage;
+        }
     }
-    if(*it_ > limit_)
+    if((direction_ > 0 && *it_ > limit_) ||
+       (direction_ < 0 && *it_ < limit_))
         return false;
     if(t != nullptr) {
         switch(order_) {
-        case SPO:
-            *t = *it_;
-            break;
-        case POS:
-            *t = *it_ >> 1;
-            break;
-        case OSP:
-            *t = *it_ >> 2;
-            break;
+        case SPO: *t = *it_;                  break;
+        case SOP: *t = it_->reorder<0,2,1>(); break;
+        case PSO: *t = it_->reorder<1,0,2>(); break;
+        case POS: *t = it_->reorder<2,0,1>(); break;
+        case OSP: *t = it_->reorder<1,2,0>(); break;
+        case OPS: *t = it_->reorder<2,1,0>(); break;
         }
     }
-    ++it_;
+    it_ += direction_;
     return true;
 }
 

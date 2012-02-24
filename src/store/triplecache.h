@@ -88,10 +88,23 @@ public:
      *
      * @pre initialize() has been called
      * @param page the page number (should contain triples),
-     *             minPage <= page <= maxPage
+     *             page <= maxPage
      * @return the cache line with the uncompressed page
      */
     const Line* fetch(unsigned page);
+
+    /**
+     * Read the header (previous and next page) and the first key of a leaf
+     * page in a triples index.
+     *
+     * @param[in] page the page number (should contain triples)
+     *                 page <= maxPage
+     * @param[out] previousPage page number of the previous page
+     * @param[out] nextPage page number of the next page
+     * @param[out] firstKey first key of the page
+     */
+    void peek(unsigned page, unsigned& prevPage, unsigned& nextPage,
+              Triple& firstKey);
 
     unsigned statHits()   const { return statHits_; }
     unsigned statMisses() const { return statMisses_; }

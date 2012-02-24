@@ -36,13 +36,15 @@ namespace castor {
  */
 class Store {
 public:
-    static constexpr unsigned VERSION = 6; //!< format version
+    static constexpr unsigned VERSION = 7; //!< format version
     static const     char     MAGIC[10];   //!< magic number
 
     enum TripleOrder {
-        SPO = 0, POS = 1, OSP = 2
+        SPO, SOP, PSO, POS, OSP, OPS
     };
-    static constexpr int ORDERS = 3;
+    static constexpr int ORDERS = 6;
+    //! Virtual ordering indicating automatic selection of the order
+    static constexpr TripleOrder AUTO = static_cast<TripleOrder>(-1);
 
     /**
      * Open a store.
@@ -143,8 +145,10 @@ public:
          * @param store the store
          * @param from lower bound
          * @param to upper bound
+         * @param order which index to use
          */
-        TripleRange(Store* store, Triple from, Triple to);
+        TripleRange(Store* store, Triple from, Triple to,
+                    TripleOrder order=AUTO);
 
         //! Non-copyable
         TripleRange(const TripleRange&) = delete;
@@ -161,14 +165,15 @@ public:
         bool next(Triple* t);
 
     private:
-        Store* store_;
-        Triple limit_; //!< the upper bound
-        TripleOrder order_; //!< order of components in the key
+        Store*        store_;
+        Triple        limit_;     //!< the upper bound
+        TripleOrder   order_;     //!< order of components in the key
+        int           direction_; //!< +1=forward search, -1=backward search
 
-        unsigned nextPage_; //!< next page to read or 0 if no more
+        unsigned      nextPage_;  //!< next page to read or 0 if no more
 
-        const Triple* it_; //!< current triple
-        const Triple* end_; //!< last triple in current cache line
+        const Triple* it_;        //!< current triple
+        const Triple* end_;       //!< last triple in current cache line
     };
 
 private:
@@ -179,6 +184,7 @@ private:
      */
     struct {
         unsigned begin;       //!< first page of table
+        unsigned end;         //!< last page of table
         BTree<Triple>* index; //!< index
     } triples_[ORDERS];
 

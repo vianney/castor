@@ -254,4 +254,13 @@ const TripleCache::Line* TripleCache::fetch(unsigned page) {
     return line;
 }
 
+void TripleCache::peek(unsigned page, unsigned &prevPage, unsigned &nextPage,
+                       Triple &firstKey) {
+    Cursor cur = db_->page(page);
+    prevPage = cur.readInt();
+    nextPage = cur.readInt();
+    for(int i = 0; i < firstKey.COMPONENTS; i++)
+        firstKey[i] = cur.readInt();
+}
+
 }

@@ -285,6 +285,7 @@ struct StoreBuilder {
      */
     struct {
         unsigned begin; //!< first page of the table
+        unsigned end;   //!< last page of the table
         unsigned index; //!< root node of the B+-tree
     } triples[Store::ORDERS];
 
@@ -409,6 +410,8 @@ static void storeTriplesOrder(StoreBuilder& b, TempFile& triples,
         tb.endLeaf(last);
     }
 
+    b.triples[order].end = tb.getLastLeaf();
+
     // Construct inner nodes
     b.triples[order].index = tb.constructTree();
 }
@@ -432,8 +435,11 @@ static void storeTriplesOrderSorted(StoreBuilder& b, TempFile& triples,
  */
 static void storeTriples(StoreBuilder& b, TempFile& triples) {
     storeTriplesOrder             (b, triples, Store::SPO);
+    storeTriplesOrderSorted<0,2,1>(b, triples, Store::SOP);
+    storeTriplesOrderSorted<1,0,2>(b, triples, Store::PSO);
     storeTriplesOrderSorted<1,2,0>(b, triples, Store::POS);
     storeTriplesOrderSorted<2,0,1>(b, triples, Store::OSP);
+    storeTriplesOrderSorted<2,1,0>(b, triples, Store::OPS);
     triples.discard();
 }
 
@@ -682,6 +688,7 @@ static void storeHeader(StoreBuilder& b) {
     // Triples
     for(int i = 0; i < Store::ORDERS; i++) {
         b.w.writeInt(b.triples[i].begin);
+        b.w.writeInt(b.triples[i].end);
         b.w.writeInt(b.triples[i].index);
     }
 
