@@ -21,26 +21,12 @@
 #include <vector>
 
 #include "pagewriter.h"
+#include "store/btree.h"
 
 namespace castor {
 
 /**
- * Helper to build a B+-tree. A B+-tree is encoded as follows:
- *
- * Leaves:
- * +-----------+-----------+---------------------------------+
- * | prev page | next page | data                            |
- * +-----------+-----------+---------------------------------+
- * 0           4           8                                end
- * (prev/next page is 0 for the first/last leaf)
- *
- * Inner nodes:
- * +--------+-------+----------------------------------------+
- * | marker | count | nodes                                  |
- * +--------+-------+----------------------------------------+
- * 0        4       8                                       end
- * (a node is a key followed by the page number of lower level containing up
- * to that key)
+ * Helper to build a B+-tree.
  *
  * To construct the tree, proceed as follows:
  * 1. create a BTreeBuilder (this will initialize the leaf header)
@@ -55,6 +41,8 @@ namespace castor {
  * The key class K must implement these two members
  * - static const unsigned SIZE: the size in bytes of a written key
  * - void write(PageWriter& writer): write the key
+ *
+ * @see BTree
  */
 template<class K>
 class BTreeBuilder {
@@ -85,7 +73,7 @@ public:
     /**
      * @return the page number of the last ended leaf
      */
-    unsigned getLastLeaf() { return previousLeaf_; }
+    unsigned getLastLeaf() { return lastLeaf_; }
 
     /**
      * Construct the inner nodes of the tree.
@@ -98,11 +86,10 @@ private:
     PageWriter* writer_; //!< output writer
     std::vector<std::pair<K, unsigned> > boundaries_; //!< level boundaries
 
-    bool pendingLeaf_; //!< there is a leaf pending to write
-    unsigned previousLeaf_; //!< page number of the previous leaf
+    unsigned leaves_; //!< number of leaves so far
+    unsigned lastLeaf_; //!< page number of the last ended leaf
 
-    static constexpr unsigned LEAF_HEADER_SIZE = 8; //!< size of leaf header
-    static constexpr unsigned NODE_HEADER_SIZE = 8; //!< size of inner node header
+    static constexpr unsigned HEADER_SIZE = 4; //!< size of node header
 };
 
 
@@ -112,43 +99,47 @@ private:
 template<class K>
 BTreeBuilder<K>::BTreeBuilder(PageWriter* writer) : writer_(writer) {
     assert(writer->offset() == 0);
-    pendingLeaf_ = false;
-    previousLeaf_ = 0;
+    leaves_ = 0;
+    lastLeaf_ = 0;
 }
 
 template<class K>
 void BTreeBuilder<K>::beginLeaf() {
-    if(pendingLeaf_) {
-        // update header and flush previous leaf
-        previousLeaf_ = writer_->page();
-        writer_->writeInt(writer_->page() + 1, 4); // next page pointer
+    if(leaves_ > 0) {
+        // update header flags and flush previous leaf
+        BTreeFlags flags;
+        if(leaves_ == 1)
+            flags |= BTreeFlags::FIRST_LEAF;
+        writer_->writeInt(flags, 0);
         writer_->flush();
-        pendingLeaf_ = false;
     }
-    writer_->writeInt(previousLeaf_);
-    writer_->skip(4); // leave room for next page pointer
+    writer_->skip(HEADER_SIZE); // leave room for header
+    leaves_++;
 }
 
 template<class K>
 void BTreeBuilder<K>::endLeaf(K last) {
     boundaries_.push_back(std::pair<K,unsigned>(last, writer_->page()));
-    pendingLeaf_ = true;
+    lastLeaf_ = writer_->page();
 }
 
 template<class K>
 unsigned BTreeBuilder<K>::constructTree() {
-    assert(pendingLeaf_);
-    assert(!boundaries_.empty());
+    assert(leaves_ > 0);
+    assert(leaves_ == boundaries_.size());
 
     // flush last leaf
-    writer_->writeInt(0, 4);
+    BTreeFlags flags = BTreeFlags::LAST_LEAF;
+    if(leaves_ == 1)
+        flags |= BTreeFlags::FIRST_LEAF;
+    writer_->writeInt(flags, 0);
     writer_->flush();
 
     // create inner nodes
     bool first = true;
     while(first || boundaries_.size() > 1) {
         first = false;
-        writer_->skip(NODE_HEADER_SIZE);
+        writer_->skip(HEADER_SIZE);
         std::vector<std::pair<K, unsigned> > newBoundaries;
         unsigned count = 0;
         K last;
@@ -158,11 +149,10 @@ unsigned BTreeBuilder<K>::constructTree() {
                 // write header, flush page and start a new one
                 newBoundaries.push_back(
                             std::pair<K,unsigned>(last, writer_->page()));
-                writer_->writeInt(0xffffffff, 0);
-                writer_->writeInt(count, 4);
+                writer_->writeInt(BTreeFlags::INNER_NODE | count, 0);
                 writer_->flush();
                 count = 0;
-                writer_->skip(NODE_HEADER_SIZE);
+                writer_->skip(HEADER_SIZE);
             }
 
             // write entry
@@ -174,8 +164,7 @@ unsigned BTreeBuilder<K>::constructTree() {
         }
         // flush last page
         newBoundaries.push_back(std::pair<K,unsigned>(last, writer_->page()));
-        writer_->writeInt(0xffffffff, 0);
-        writer_->writeInt(count, 4);
+        writer_->writeInt(BTreeFlags::INNER_NODE | count, 0);
         writer_->flush();
 
         std::swap(boundaries_, newBoundaries);

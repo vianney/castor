@@ -27,6 +27,32 @@ namespace castor {
  * Base class for a disk-backed B+-tree. Page 0 must not be a node as it is used
  * to indicate an unknown key.
  *
+ * A B+-tree is encoded as follows:
+ *
+ * Leaves:
+ * +-------+-------------------------------------------------+
+ * | flags | data                                            |
+ * +-------+-------------------------------------------------+
+ * 0   |   4                                                end
+ *     |
+ *     +-> bit 0: set if first leaf, unset otherwise
+ *         bit 1: set if last leaf, unset otherwise
+ *         bit 31: unset to indicate a leaf
+ *
+ * All leaf pages are written sequentially.
+ *
+ * Inner nodes:
+ * +-------------+-------------------------------------------+
+ * | flags/count | children                                  |
+ * +-------------+-------------------------------------------+
+ * 0     |       4    |                                     end
+ *       |            |
+ *       |            +-> a child is a key followed by the page number of lower
+ *       |                level containing up to that key
+ *       |
+ *       +-> bits 0-30: count (number of direct children)
+ *           bit 31: set to indicate an inner node
+ *
  * The key class K must provide these members
  * - static const unsigned SIZE: the size in bytes of the key
  * - bool operator<(const K& o) const: comparator
@@ -47,6 +73,51 @@ public:
 protected:
     PageReader* db_; //!< the database
     unsigned rootPage_; //!< the page containing the root of the tree
+};
+
+/**
+ * Wrapper class around the flags field of the nodes.
+ *
+ * @see BTree
+ */
+class BTreeFlags {
+public:
+    BTreeFlags() : flags_(0) {}
+    constexpr BTreeFlags(unsigned flags) : flags_(flags) {}
+    constexpr BTreeFlags(const BTreeFlags&) = default;
+
+    static constexpr unsigned INNER_NODE = 1 << 31;
+    static constexpr unsigned FIRST_LEAF = 1 << 0;
+    static constexpr unsigned LAST_LEAF  = 1 << 1;
+
+    BTreeFlags& operator=(const BTreeFlags&) = default;
+    operator unsigned() const { return flags_; }
+
+    BTreeFlags operator|(const BTreeFlags& o) const { return flags_ | o.flags_; }
+    BTreeFlags& operator|=(const BTreeFlags& o) { flags_ |= o.flags_; return *this; }
+
+    /**
+     * @return whether the node is an inner node
+     */
+    bool inner    () { return flags_ & INNER_NODE; }
+    /**
+     * @pre !inner()
+     * @return whether the node is the first leaf
+     */
+    bool firstLeaf() { return flags_ & FIRST_LEAF; }
+    /**
+     * @pre !inner()
+     * @return whether the node is the last leaf
+     */
+    bool lastLeaf () { return flags_ & LAST_LEAF; }
+    /**
+     * @pre inner()
+     * @return the number of direct children of the inner node
+     */
+    unsigned count() { return flags_ & (INNER_NODE - 1); }
+
+private:
+    unsigned flags_;
 };
 
 /**
@@ -93,9 +164,10 @@ unsigned BTree<K>::lookupLeaf(K key) {
     unsigned page = rootPage_;
     while(true) {
         Cursor pageCur = db_->page(page);
-        if(pageCur.readInt() == 0xffffffff) {
+        BTreeFlags flags = pageCur.readInt();
+        if(flags.inner()) {
             // inner node: perform binary search
-            unsigned left = 0, right = pageCur.readInt();
+            unsigned left = 0, right = flags.count();
             while(left != right) {
                 unsigned middle = (left + right) / 2;
                 Cursor middleCur = pageCur + middle * (K::SIZE + 4);

@@ -278,20 +278,20 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
          * i.e., the first key >= from, the leaf has no interesting triple and
          * we need to get the previous one, if possible.
          */
-        unsigned p;
-        unsigned n;
+        bool first;
+        bool last;
         Triple k;
-        store->cache_.peek(nextPage_, p, n, k);
+        store->cache_.peek(nextPage_, first, last, k);
         if(key < k) {
-            if(p != 0) {
+            if(!first) {
                 /* We are in such a case, just fetch the previous page and
                  * start iterating from the last triple.
                  */
-                nextPage_ = p;
+                nextPage_--;
                 const TripleCache::Line* line = store->cache_.fetch(nextPage_);
                 end_      = line->triples;
                 it_       = end_ + (line->count - 1);
-                nextPage_ = line->prevPage;
+                nextPage_ = line->first ? 0 : nextPage_ - 1;
             } else {
                 it_ = end_ = nullptr;
                 nextPage_  = 0;
@@ -305,7 +305,7 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
     if(direction_ > 0) {
         it_       = line->triples;
         end_      = it_ + line->count;
-        nextPage_ = line->nextPage;
+        nextPage_ = line->last ? 0 : nextPage_ + 1;
 
         // binary search for first triple
         const Triple* left  = it_;
@@ -325,7 +325,7 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
     } else {
         end_      = line->triples - 1;
         it_       = end_ + line->count;
-        nextPage_ = line->prevPage;
+        nextPage_ = line->first ? 0 : nextPage_ - 1;
 
         // binary search for last triple
         const Triple* left  = end_ + 1;
@@ -357,11 +357,11 @@ bool Store::TripleRange::next(Triple* t) {
         if(direction_ > 0) {
             it_       = line->triples;
             end_      = it_ + line->count;
-            nextPage_ = line->nextPage;
+            nextPage_ = line->last ? 0 : nextPage_ + 1;
         } else {
             end_      = line->triples - 1;
             it_       = end_ + line->count;
-            nextPage_ = line->prevPage;
+            nextPage_ = line->first ? 0 : nextPage_ - 1;
         }
     }
     if((direction_ > 0 && *it_ > limit_) ||

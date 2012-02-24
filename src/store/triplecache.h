@@ -54,8 +54,8 @@ public:
         unsigned count;    //!< number of triples in the line
 
         unsigned page;     //!< page number of this line
-        unsigned prevPage; //!< previous page (or 0 if first)
-        unsigned nextPage; //!< next page (or 0 if last)
+        bool     first;    //!< whether it is the first triples page
+        bool     last;     //!< whether it is the last triples page
 
     private:
         Line*    prev_;    //!< previous line in the LRU list
@@ -94,17 +94,16 @@ public:
     const Line* fetch(unsigned page);
 
     /**
-     * Read the header (previous and next page) and the first key of a leaf
+     * Read the header (first or last page) and the first key of a leaf
      * page in a triples index.
      *
      * @param[in] page the page number (should contain triples)
      *                 page <= maxPage
-     * @param[out] previousPage page number of the previous page
-     * @param[out] nextPage page number of the next page
+     * @param[out] first whether it is the first page
+     * @param[out] last whether it is the last page
      * @param[out] firstKey first key of the page
      */
-    void peek(unsigned page, unsigned& prevPage, unsigned& nextPage,
-              Triple& firstKey);
+    void peek(unsigned page, bool& first, bool& last, Triple& firstKey);
 
     unsigned statHits()   const { return statHits_; }
     unsigned statMisses() const { return statMisses_; }

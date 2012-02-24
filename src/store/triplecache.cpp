@@ -20,6 +20,8 @@
 #include <cstring>
 #include <cassert>
 
+#include "btree.h"
+
 namespace castor {
 
 TripleCache::TripleCache() {
@@ -99,8 +101,10 @@ const TripleCache::Line* TripleCache::fetch(unsigned page) {
     Cursor cur = db_->page(page);
     Cursor end = cur + PageReader::PAGE_SIZE;
     line->page = page;
-    line->prevPage = cur.readInt();
-    line->nextPage = cur.readInt();
+    BTreeFlags flags = cur.readInt();
+    assert(!flags.inner());
+    line->first = flags.firstLeaf();
+    line->last = flags.lastLeaf();
 
     // read first triple
     Triple t;
@@ -254,11 +258,12 @@ const TripleCache::Line* TripleCache::fetch(unsigned page) {
     return line;
 }
 
-void TripleCache::peek(unsigned page, unsigned &prevPage, unsigned &nextPage,
-                       Triple &firstKey) {
+void TripleCache::peek(unsigned page, bool& first, bool& last, Triple& firstKey) {
     Cursor cur = db_->page(page);
-    prevPage = cur.readInt();
-    nextPage = cur.readInt();
+    BTreeFlags flags = cur.readInt();
+    assert(!flags.inner());
+    first = flags.firstLeaf();
+    last = flags.lastLeaf();
     for(int i = 0; i < firstKey.COMPONENTS; i++)
         firstKey[i] = cur.readInt();
 }
