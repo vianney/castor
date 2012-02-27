@@ -22,6 +22,10 @@ option(CASTOR_UNITTESTS
        "Add check target to run unit tests (may affect performances)"
        OFF)
 
+option(CASTOR_NOFILTERS
+       "Do not post filters as constraints, always perform post-processing"
+       OFF)
+
 find_package(Raptor2 REQUIRED)
 find_package(Rasqal REQUIRED)
 

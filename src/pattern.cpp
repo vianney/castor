@@ -17,6 +17,7 @@
  */
 #include "pattern.h"
 
+#include "config.h"
 #include "query.h"
 #include "constraints.h"
 
@@ -95,25 +96,31 @@ bool isNotBound(Expression* expr, LeftJoinPattern* pat) {
 
 Pattern* FilterPattern::optimize() {
     subpattern_ = subpattern_->optimize();
+#ifndef CASTOR_NOFILTERS
     LeftJoinPattern* subpat = dynamic_cast<LeftJoinPattern*>(subpattern_);
     if(subpat && isNotBound(condition_, subpat)) {
         DiffPattern* pat = new DiffPattern(std::move(*subpat));
         delete this;
         return pat;
     }
+#endif
     return this;
 }
 
 void FilterPattern::init() {
     subpattern_->init();
+#ifndef CASTOR_NOFILTERS
     if(BasicPattern* subpat = dynamic_cast<BasicPattern*>(subpattern_))
         condition_->post(subpat->sub_);
+#endif
 }
 
 bool FilterPattern::next() {
+#ifndef CASTOR_NOFILTERS
     if(dynamic_cast<BasicPattern*>(subpattern_)) {
         return subpattern_->next();
     } else {
+#endif
         while(subpattern_->next()) {
             for(Variable* x : condition_->variables())
                 x->setFromCP();
@@ -121,7 +128,9 @@ bool FilterPattern::next() {
                 return true;
         }
         return false;
+#ifndef CASTOR_NOFILTERS
     }
+#endif
 }
 
 void FilterPattern::discard() {

@@ -19,6 +19,7 @@
 #define CONFIG_H
 
 #cmakedefine CASTOR_UNITTESTS
+#cmakedefine CASTOR_NOFILTERS
 
 #ifdef CASTOR_UNITTESTS
 #define MOCKABLE virtual
