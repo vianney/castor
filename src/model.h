@@ -25,6 +25,7 @@
 
 #include "util.h"
 #include "xsddecimal.h"
+#include "xsddatetime.h"
 
 namespace castor {
 
@@ -193,7 +194,7 @@ struct Value {
          * Date and time representation of the lexical. Unspecified if type is
          * not TYPE_DATETIME.
          */
-        // TODO  DateTime* datetime;
+        XSDDateTime* datetime;
     };
 
 

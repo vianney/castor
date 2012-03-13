@@ -245,7 +245,8 @@ void Value::clean() {
             decimal = nullptr;
             break;
         case TYPE_DATETIME:
-            // TODO  delete datetime;
+            delete datetime;
+            datetime = nullptr;
             break;
         default:
             // do nothing
@@ -420,8 +421,10 @@ int Value::compare(const Value& o) const {
         else return 0;
     } else if(isBoolean() && o.isBoolean()) {
         return (boolean ? 1 : 0) - (o.boolean ? 1 : 0);
+    } else if(isDateTime() && o.isDateTime()) {
+        return datetime->compare(*o.datetime);
     } else {
-        return -2; // TODO datetime
+        return -2;
     }
 }
 
@@ -448,6 +451,7 @@ bool Value::operator<(const Value& o) const {
             else
                 return !boolean && o.boolean;
         case CAT_NUMERIC:
+        case CAT_DATETIME:
             cmp = compare(o);
             if(cmp == -1)
                 return true;
@@ -457,9 +461,6 @@ bool Value::operator<(const Value& o) const {
                 return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
             else
                 return type < o.type;
-        case CAT_DATETIME:
-            // TODO
-            return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
         case CAT_OTHER:
             if(isPlain() && o.isPlain()) {
                 // plain literals with language tags
@@ -546,9 +547,13 @@ void Value::ensureLexical() {
         lexical = s;
         addCleanFlag(CLEAN_LEXICAL);
     } else if(isDateTime()) {
-        // TODO
-        lexical = "";
-        lexicalLen = 0;
+        std::string str = datetime->getString();
+        lexicalLen = str.size();
+        char* s = new char[lexicalLen + 1];
+        memcpy(s, str.c_str(), lexicalLen);
+        s[lexicalLen] = '\0';
+        lexical = s;
+        addCleanFlag(CLEAN_LEXICAL);
     } else {
         lexical = "";
         lexicalLen = 0;
@@ -569,7 +574,8 @@ void Value::ensureInterpreted() {
         decimal = new XSDDecimal(lexical);
         addCleanFlag(CLEAN_DATA);
     } else if(isDateTime()) {
-        // TODO
+        datetime = new XSDDateTime(lexical);
+        addCleanFlag(CLEAN_DATA);
     }
     isInterpreted = true;
 }
@@ -614,10 +620,10 @@ std::ostream& operator<<(std::ostream& out, const Value& val) {
                 out << val.integer;
             else if(val.isFloating())
                 out << val.floating;
-            else if(val.isDecimal()) {
+            else if(val.isDecimal())
                 out << val.decimal->getString();
-            }
-            // TODO datetime
+            else if(val.isDateTime())
+                out << val.datetime->getString();
         }
         out << "\"^^<";
         out.write(val.typeUri, val.typeUriLen);
