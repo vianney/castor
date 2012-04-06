@@ -401,7 +401,7 @@ int Value::compare(const Value& o) const {
             else if(diff > 0) return 1;
             else return 0;
         } else if(isDecimal() && o.isDecimal()) {
-            // FIXME compare decimal with integer??
+            // FIXME: compare decimal with integer??
             return decimal->compare(*o.decimal);
         } else {
             double d1 = isFloating() ? floating :
@@ -611,7 +611,7 @@ std::ostream& operator<<(std::ostream& out, const Value& val) {
     default:
         out << '"';
         if(val.lexical) {
-            // FIXME escape quotes inside lexical
+            // FIXME: escape quotes inside lexical
             out.write(val.lexical, val.lexicalLen);
         } else {
             if(val.isBoolean())

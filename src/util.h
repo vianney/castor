@@ -107,7 +107,7 @@ public:
  */
 static inline int fls(int i) {
     int result;
-    // TODO make this portable
+    // TODO: make this portable
     asm("bsrl %1,%0" : "=r"(result) : "r"(i));
     return result;
 }

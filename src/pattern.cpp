@@ -83,7 +83,7 @@ FilterPattern::~FilterPattern() {
  *         not in left
  */
 bool isNotBound(Expression* expr, LeftJoinPattern* pat) {
-// TODO recursive check + handle other parts of the condition
+    // TODO: recursive check + handle other parts of the condition
     if(BangExpression* bang = dynamic_cast<BangExpression*>(expr)) {
         if(BoundExpression* bound =
                     dynamic_cast<BoundExpression*>(bang->argument())) {

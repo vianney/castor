@@ -27,7 +27,7 @@ namespace castor {
 
 /**
  * Maximum amount of usable memory.
- * TODO detect at runtime
+ * TODO: detect at runtime
  */
 static const unsigned MEM_LIMIT = sizeof(void*) * (1 << 27);
 

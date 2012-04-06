@@ -393,15 +393,15 @@ bool DiscreteVariable<T>::remove(T v) {
             map_[v2-minVal_] = i;
             map_[v-minVal_] = size_;
         }
-        // FIXME this may break the invariants
+        // FIXME: this may break the invariants
         // e.g.: domain_ = [10 11 12], min_=10, max_=11; remove(10)
         /*if(v == min_) {
-            // TODO is this usefull?
+            // TODO: is this usefull?
             min_++; // not perfect bound
             solver_->enqueue(evMin_);
         }
         if(v == max_) {
-            // TODO is this usefull?
+            // TODO: is this usefull?
             max_--; // not perfect bound
             solver_->enqueue(evMax_);
         }*/

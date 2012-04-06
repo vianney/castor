@@ -199,7 +199,7 @@ void VarDiffConstraint::restore() {
 
 bool VarDiffConstraint::propagate() {
     StatelessConstraint::propagate();
-    // TODO we could start propagating once only equivalent values remain
+    // TODO: we could start propagating once only equivalent values remain
     if(!x1_->isBound() && !x2_->isBound())
         return true;
     cp::RDFVar* x1 = x1_->isBound() ? x1_ : x2_;

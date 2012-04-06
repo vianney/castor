@@ -47,7 +47,7 @@ std::ostream& operator<<(std::ostream& out, const VarVal& v) {
 }
 
 void VariableSet::initialize(unsigned capacity) {
-    // TODO refactor this with C++11
+    // TODO: refactor this with C++11
     capacity_ = capacity;
     vars_ = new Variable*[capacity];
     map_ = new bool[capacity];
