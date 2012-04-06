@@ -150,7 +150,7 @@ std::ostream& operator<<(std::ostream& out, const VarVal& v);
  */
 class VariableSet {
 public:
-    VariableSet(unsigned capacity) { initialize(capacity); }
+    VariableSet(unsigned capacity);
     VariableSet(Query* query);
     VariableSet(const VariableSet& o);
     ~VariableSet();
@@ -190,15 +190,6 @@ private:
     unsigned   capacity_; //!< maximum number of variables
     Variable** vars_;     //!< array of variables
     bool*      map_;      //!< map of ids
-
-    /**
-     * Initialize the set.
-     *
-     * @param capacity maximum number of variables in this set
-     *
-     * @todo this could be refactored using C++11
-     */
-    void initialize(unsigned capacity);
 };
 
 }

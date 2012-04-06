@@ -46,8 +46,7 @@ std::ostream& operator<<(std::ostream& out, const VarVal& v) {
     return out;
 }
 
-void VariableSet::initialize(unsigned capacity) {
-    // TODO: refactor this with C++11
+VariableSet::VariableSet(unsigned capacity) {
     capacity_ = capacity;
     vars_ = new Variable*[capacity];
     map_ = new bool[capacity];
@@ -55,8 +54,7 @@ void VariableSet::initialize(unsigned capacity) {
     size_ = 0;
 }
 
-VariableSet::VariableSet(Query* query) {
-    initialize(query->variables().size());
+VariableSet::VariableSet(Query* query) : VariableSet(query->variables().size()) {
 }
 
 VariableSet::VariableSet(const VariableSet& o) {
