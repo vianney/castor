@@ -50,12 +50,12 @@ public:
     /**
      * @return variables occuring in this pattern
      */
-    const VariableSet& variables() { return vars_; }
+    const VariableSet& variables() const { return vars_; }
 
     /**
      * @return certain variables
      */
-    const VariableSet& certainVars() { return cvars_; }
+    const VariableSet& certainVars() const { return cvars_; }
 
     /**
      * Optimize this pattern and its subpatterns. Beware: the patterns may
