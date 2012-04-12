@@ -280,6 +280,8 @@ static void resolveIds(TempFile& rawTriples, TempFile& triples, TempFile& idMap)
 struct StoreBuilder {
     PageWriter w; //!< store output
 
+    unsigned triplesCount; //!< number of triples
+
     /**
      * Triple indexes (in various orderings)
      */
@@ -287,7 +289,13 @@ struct StoreBuilder {
         unsigned begin; //!< first page of the table
         unsigned end;   //!< last page of the table
         unsigned index; //!< root node of the B+-tree
-    } triples[Store::ORDERS];
+        unsigned aggregated; //!< root node of the B+-tree for aggregated triples
+    } triples[TRIPLE_ORDERS];
+
+    /**
+     * Root nodes of the B+-trees of the fully aggregated triples
+     */
+    unsigned fullyAggregated[Triple::COMPONENTS];
 
     /**
      * Values
@@ -330,13 +338,18 @@ struct WriteTriple : public Triple {
 };
 
 /**
- * Store a particular triples order.
+ * Store full triples of a particular order.
+ *
+ * @param b store builder
+ * @param triples file with triples
+ * @param order order defined by the template parameters
  */
-template<int C1=0, int C2=1, int C3=2>
-static void storeTriplesOrder(StoreBuilder& b, TempFile& triples,
-                              Store::TripleOrder order) {
-    b.triples[order].begin = b.w.page();
+template<int C1, int C2, int C3>
+static void storeFullTriples(StoreBuilder& b, TempFile& triples,
+                             TripleOrder order) {
+    b.triples[static_cast<int>(order)].begin = b.w.page();
 
+    unsigned count = 0;
     BTreeBuilder<WriteTriple> tb(&b.w);
     // Construct leaves
     {
@@ -405,26 +418,260 @@ static void storeTriplesOrder(StoreBuilder& b, TempFile& triples,
             }
 
             last = t;
+            ++count;
         }
 
         tb.endLeaf(last);
     }
 
-    b.triples[order].end = tb.getLastLeaf();
+    b.triples[static_cast<int>(order)].end = tb.getLastLeaf();
+    b.triplesCount = count;
 
     // Construct inner nodes
-    b.triples[order].index = tb.constructTree();
+    b.triples[static_cast<int>(order)].index = tb.constructTree();
+}
+
+struct WriteAggregatedTriple : public AggregatedTriple {
+    WriteAggregatedTriple() {}
+    WriteAggregatedTriple(const BasicTriple<Value::id_t>& o) : AggregatedTriple(o) {}
+
+    /**
+     * Construct a triple with value v for each component.
+     */
+    WriteAggregatedTriple(Value::id_t v) {
+        for(int i = 0; i < COMPONENTS; i++)
+            c[i] = v;
+    }
+
+    WriteAggregatedTriple(const WriteAggregatedTriple&) = default;
+    WriteAggregatedTriple& operator=(const WriteAggregatedTriple&) = default;
+
+    void write(PageWriter& writer) const {
+        // only write the key, without the count
+        for(int i = 0; i < COMPONENTS - 1; i++)
+            writer.writeInt(c[i]);
+    }
+};
+
+/**
+ * Store the aggregated triples of a particular order.
+ *
+ * @param b store builder
+ * @param triples file with triples
+ * @param order order of the triples
+ */
+template<int C1, int C2, int C3>
+static void storeAggregatedTriples(StoreBuilder& b, TempFile& triples,
+                                   TripleOrder order) {
+    BTreeBuilder<WriteAggregatedTriple> tb(&b.w);
+    // Construct leaves
+    {
+        WriteAggregatedTriple last(0);
+        MMapFile in(triples.fileName().c_str());
+        for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
+            // Read triples, reorder and count
+            WriteAggregatedTriple t;
+            for(int i = 0; i < t.COMPONENTS; i++)
+                t[i] = static_cast<Value::id_t>(cur.readBigInt());
+            t = t.reorder<C1,C2,C3>();
+            t[2] = 1;
+            while(cur != end) {
+                Cursor backup = cur;
+                Triple t2;
+                for(int i = 0; i < t2.COMPONENTS; i++)
+                    t2[i] = static_cast<Value::id_t>(cur.readBigInt());
+                t2 = t2.reorder<C1,C2,C3>();
+                if(t2[0] == t[0] && t2[1] == t[1]) {
+                    ++t[2];
+                } else {
+                    cur = backup;
+                    break;
+                }
+            }
+
+            // Compute encoded length
+            unsigned len;
+            if(t[0] == last[0]) {
+                if(t[1] - last[1] < 32 && t.count() < 5)
+                    len = 1;
+                else
+                    len = 1 + PageWriter::lenDelta(t[1] - last[1] - 1)
+                            + PageWriter::lenDelta(t.count()-1);
+            } else {
+                len = 1 + PageWriter::lenDelta(t[0] - last[0])
+                        + PageWriter::lenDelta(t[1] - 1)
+                        + PageWriter::lenDelta(t.count()-1);
+            }
+
+            // Should we start a new leaf? (first element or no more room)
+            if(last[0] == 0 || len > b.w.remaining()) {
+                if(last[0] != 0)
+                    tb.endLeaf(last);
+                tb.beginLeaf();
+                // Write the first element of a page fully
+                for(int i = 0; i < t.COMPONENTS; i++)
+                    b.w.writeInt(t[i]);
+            } else {
+                // Otherwise, pack the triple
+                if(t[0] == last[0]) {
+                    if(t[1] - last[1] < 32 && t.count() < 5) {
+                        b.w.writeByte(((t.count()-1) << 5) | (t[1] - last[1]));
+                    } else {
+                        unsigned delta = t[1] - last[1] - 1;
+                        b.w.writeByte(0x80 + PageWriter::lenDelta(delta) * 5
+                                           + PageWriter::lenDelta(t.count()-1));
+                        b.w.writeDelta(delta);
+                        b.w.writeDelta(t.count()-1);
+                    }
+                } else {
+                    unsigned delta = t[0] - last[0];
+                    b.w.writeByte(0x80 + PageWriter::lenDelta(delta) * 25
+                                       + PageWriter::lenDelta(t[1] - 1) * 5
+                                       + PageWriter::lenDelta(t.count()-1));
+                    b.w.writeDelta(delta);
+                    b.w.writeDelta(t[1] - 1);
+                    b.w.writeDelta(t.count()-1);
+                }
+            }
+
+            last = t;
+        }
+
+        tb.endLeaf(last);
+    }
+
+    // Construct inner nodes
+    b.triples[static_cast<int>(order)].aggregated = tb.constructTree();
+}
+
+struct WriteFullyAggregatedTriple : public FullyAggregatedTriple {
+    WriteFullyAggregatedTriple() {}
+    WriteFullyAggregatedTriple(const BasicTriple<Value::id_t>& o) : FullyAggregatedTriple(o) {}
+
+    /**
+     * Construct a triple with value v for each component.
+     */
+    WriteFullyAggregatedTriple(Value::id_t v) {
+        for(int i = 0; i < COMPONENTS; i++)
+            c[i] = v;
+    }
+
+    WriteFullyAggregatedTriple(const WriteFullyAggregatedTriple&) = default;
+    WriteFullyAggregatedTriple& operator=(const WriteFullyAggregatedTriple&) = default;
+
+    void write(PageWriter& writer) const {
+        // only write the key, without the count
+        for(int i = 0; i < COMPONENTS - 1; i++)
+            writer.writeInt(c[i]);
+    }
+};
+
+/**
+ * Store the fully aggregated triples of a particular order.
+ *
+ * @param b store builder
+ * @param triples file with triples
+ */
+template<int C1, int C2, int C3>
+static void storeFullyAggregatedTriples(StoreBuilder& b, TempFile& triples) {
+    BTreeBuilder<WriteAggregatedTriple> tb(&b.w);
+    // Construct leaves
+    {
+        WriteAggregatedTriple last(0);
+        MMapFile in(triples.fileName().c_str());
+        for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
+            // Read triples, reorder and count
+            WriteFullyAggregatedTriple t;
+            for(int i = 0; i < Triple::COMPONENTS; i++)
+                t[i] = static_cast<Value::id_t>(cur.readBigInt());
+            t = t.reorder<C1,C2,C3>();
+            t[1] = 1;
+            while(cur != end) {
+                Cursor backup = cur;
+                Triple t2;
+                for(int i = 0; i < t2.COMPONENTS; i++)
+                    t2[i] = static_cast<Value::id_t>(cur.readBigInt());
+                t2 = t2.reorder<C1,C2,C3>();
+                if(t2[0] == t[0]) {
+                    ++t[1];
+                } else {
+                    cur = backup;
+                    break;
+                }
+            }
+
+            // Compute encoded length
+            unsigned len;
+            if(t[0] - last[0] < 16 && t.count() < 9)
+                len = 1;
+            else
+                len = 1 + PageWriter::lenDelta(t[0] - last[0] - 1)
+                        + PageWriter::lenDelta(t.count() - 1);
+
+            // Should we start a new leaf? (first element or no more room)
+            if(last[0] == 0 || len > b.w.remaining()) {
+                if(last[0] != 0)
+                    tb.endLeaf(last);
+                tb.beginLeaf();
+                // Write the first element of a page fully
+                for(int i = 0; i < t.COMPONENTS; i++)
+                    b.w.writeInt(t[i]);
+            } else {
+                // Otherwise, pack the triple
+                if(t[0] - last[0] < 16 && t.count() < 9) {
+                    b.w.writeByte(((t.count()-1) << 4) | (t[0] - last[0]));
+                } else {
+                    unsigned delta = t[0] - last[0] - 1;
+                    b.w.writeByte(0x80 + PageWriter::lenDelta(delta) * 5
+                                       + PageWriter::lenDelta(t.count()-1));
+                    b.w.writeDelta(delta);
+                    b.w.writeDelta(t.count()-1);
+                }
+            }
+
+            last = t;
+        }
+
+        tb.endLeaf(last);
+    }
+
+    // Construct inner nodes
+    b.fullyAggregated[C1] = tb.constructTree();
+}
+
+/**
+ * Store triples of a particular order
+ *
+ * @param b store builder
+ * @param triples file with triples (should be sorted according to order)
+ * @param order order defined by the template parameters
+ * @param fullyAggregated if true, also generate fully aggregated triples
+ */
+template<int C1=0, int C2=1, int C3=2>
+static void storeTriplesOrder(StoreBuilder& b, TempFile& triples,
+                              TripleOrder order,
+                              bool fullyAggregated) {
+    storeFullTriples<C1,C2,C3>(b, triples, order);
+    storeAggregatedTriples<C1,C2,C3>(b, triples, order);
+    if(fullyAggregated)
+        storeFullyAggregatedTriples<C1,C2,C3>(b, triples);
 }
 
 /**
  * Sort and reorder the triples file and store that particular order
+ *
+ * @param b store builder
+ * @param triples file with triples
+ * @param order order defined by the template parameters
+ * @param fullyAggregated if true, also generate fully aggregated triples
  */
 template<int C1, int C2, int C3>
 static void storeTriplesOrderSorted(StoreBuilder& b, TempFile& triples,
-                                    Store::TripleOrder order) {
+                                    TripleOrder order,
+                                    bool fullyAggregated) {
     TempFile sorted(triples.baseName());
     FileSorter::sort(triples, sorted, skipTriple, compareTriple<C1,C2,C3>);
-    storeTriplesOrder<C1,C2,C3>(b, sorted, order);
+    storeTriplesOrder<C1,C2,C3>(b, sorted, order, fullyAggregated);
 }
 
 /**
@@ -434,12 +681,12 @@ static void storeTriplesOrderSorted(StoreBuilder& b, TempFile& triples,
  * @param triples file with triples. Will be discarded.
  */
 static void storeTriples(StoreBuilder& b, TempFile& triples) {
-    storeTriplesOrder             (b, triples, Store::SPO);
-    storeTriplesOrderSorted<0,2,1>(b, triples, Store::SOP);
-    storeTriplesOrderSorted<1,0,2>(b, triples, Store::PSO);
-    storeTriplesOrderSorted<1,2,0>(b, triples, Store::POS);
-    storeTriplesOrderSorted<2,0,1>(b, triples, Store::OSP);
-    storeTriplesOrderSorted<2,1,0>(b, triples, Store::OPS);
+    storeTriplesOrder             (b, triples, TripleOrder::SPO, true);
+    storeTriplesOrderSorted<0,2,1>(b, triples, TripleOrder::SOP, false);
+    storeTriplesOrderSorted<1,0,2>(b, triples, TripleOrder::PSO, true);
+    storeTriplesOrderSorted<1,2,0>(b, triples, TripleOrder::POS, false);
+    storeTriplesOrderSorted<2,0,1>(b, triples, TripleOrder::OSP, true);
+    storeTriplesOrderSorted<2,1,0>(b, triples, TripleOrder::OPS, false);
     triples.discard();
 }
 
@@ -685,12 +932,20 @@ static void storeHeader(StoreBuilder& b) {
     // Format version
     b.w.writeInt(Store::VERSION);
 
+    // Triples count
+    b.w.writeInt(b.triplesCount);
+
     // Triples
-    for(int i = 0; i < Store::ORDERS; i++) {
+    for(int i = 0; i < TRIPLE_ORDERS; i++) {
         b.w.writeInt(b.triples[i].begin);
         b.w.writeInt(b.triples[i].end);
         b.w.writeInt(b.triples[i].index);
+        b.w.writeInt(b.triples[i].aggregated);
     }
+
+    // Fully aggregated triples
+    for(int i = 0; i < Triple::COMPONENTS; i++)
+        b.w.writeInt(b.fullyAggregated[i]);
 
     // Values
     b.w.writeInt(b.values.begin);

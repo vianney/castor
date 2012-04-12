@@ -17,6 +17,14 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import sys
+
+
+if len(sys.argv) != 2:
+    print("Usage:", sys.argv[0], "{full|aggregated|fullyaggregated}")
+    sys.exit(1)
+
+
 def printc(*args):
     print(*args, sep='', end='')
 
@@ -33,15 +41,38 @@ def read(component, length, offset=0, add=False):
     printc(";")
     return True
 
+
+what = sys.argv[1]
+
 print("switch(header & 127) {")
-for h in range(128):
-    lengths = [h // 25, (h % 25) // 5, h % 5]
-    if any(l > 4 for l in lengths):
-        continue
-    printc("case ", h, ":")
-    add = not read(0, lengths[0], add=True)
-    add = not read(1, lengths[1], add=add, offset=(0 if add else 1))
-    add = not read(2, lengths[2], add=add, offset=(128 if add else 1))
-    print(" break;")
+if what == 'full':
+    for h in range(128):
+        lengths = [h // 25, (h % 25) // 5, h % 5]
+        if any(l > 4 for l in lengths):
+            continue
+        printc("case ", h, ":")
+        add = not read(0, lengths[0], add=True)
+        add = not read(1, lengths[1], add=add, offset=(0 if add else 1))
+        add = not read(2, lengths[2], add=add, offset=(128 if add else 1))
+        print(" break;")
+elif what == 'aggregated':
+    for h in range(128):
+        lengths = [h // 25, (h % 25) // 5, h % 5]
+        if any(l > 4 for l in lengths):
+            continue
+        printc("case ", h, ":")
+        add = not read(0, lengths[0], add=True)
+        add = not read(1, lengths[1], add=add, offset=1)
+        read(2, lengths[2], offset=1)
+        print(" break;")
+elif what == 'fullyaggregated':
+    for h in range(25):
+        lengths = [h // 5, h % 5]
+        if any(l > 4 for l in lengths):
+            continue
+        printc("case ", h, ":")
+        read(0, lengths[0], add=True, offset=1)
+        read(1, lengths[1], offset=1)
+        print(" break;")
 print("default: assert(false); // should not happen")
 print("}")

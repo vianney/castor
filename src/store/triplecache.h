@@ -20,9 +20,21 @@
 
 #include "../model.h"
 #include "readutils.h"
+#include "btree.h"
 
 namespace castor {
 
+enum class TripleOrder {
+    SPO, SOP, PSO, POS, OSP, OPS
+};
+static constexpr int TRIPLE_ORDERS = 6;
+//! Virtual ordering indicating automatic selection of the order
+static constexpr TripleOrder TRIPLE_ORDER_AUTO = static_cast<TripleOrder>(-1);
+
+
+/**
+ * A real triple from the store
+ */
 struct Triple : public BasicTriple<Value::id_t> {
     Triple() {}
     Triple(const BasicTriple<Value::id_t>& o) : BasicTriple(o) {}
@@ -30,15 +42,127 @@ struct Triple : public BasicTriple<Value::id_t> {
     Triple(const Triple&) = default;
     Triple& operator=(const Triple&) = default;
 
-    // For use as keys in a B+-tree
-    static constexpr unsigned SIZE = 12;
+    /**
+     * Convert this SPO triple to an ordered triple
+     *
+     * @param order ordering of the returned triple
+     * @return the reordered triple
+     */
+    Triple toOrdered(TripleOrder order) const {
+        switch(order) {
+        case TripleOrder::SPO: return *this;
+        case TripleOrder::SOP: return reorder<0,2,1>();
+        case TripleOrder::PSO: return reorder<1,0,2>();
+        case TripleOrder::POS: return reorder<1,2,0>();
+        case TripleOrder::OSP: return reorder<2,0,1>();
+        case TripleOrder::OPS: return reorder<2,1,0>();
+        }
+        // should not happen
+        assert(false);
+        return *this;
+    }
 
+    /**
+     * Convert this triple to a real SPO triple
+     *
+     * @param order the ordering of this triple
+     * @return the SPO triple
+     */
+    Triple toSPO(TripleOrder order) const {
+        switch(order) {
+        case TripleOrder::SPO: return *this;
+        case TripleOrder::SOP: return reorder<0,2,1>();
+        case TripleOrder::PSO: return reorder<1,0,2>();
+        case TripleOrder::POS: return reorder<2,0,1>();
+        case TripleOrder::OSP: return reorder<1,2,0>();
+        case TripleOrder::OPS: return reorder<2,1,0>();
+        }
+        // should not happen
+        assert(false);
+        return *this;
+    }
+
+    static constexpr unsigned SIZE = 12;
     static Triple read(Cursor cur) {
         Triple t;
         for(int i = 0; i < COMPONENTS; i++)
             t[i] = cur.readInt();
         return t;
     }
+
+    /**
+     * Read a leaf page
+     *
+     * @param cur start of the leaf page contents (without header)
+     * @param end end of the page
+     * @param[out] triples array that will contain the triples
+     * @return the number of triples read
+     */
+    static unsigned readPage(Cursor cur, Cursor end, Triple* triples);
+};
+
+/**
+ * An aggregated triple. The last component is the count of the triples with
+ * the first two components.
+ */
+struct AggregatedTriple : public Triple {
+    AggregatedTriple() {}
+    AggregatedTriple(const BasicTriple<Value::id_t>& o) : Triple(o) {}
+
+    AggregatedTriple(const AggregatedTriple&) = default;
+    AggregatedTriple& operator=(const AggregatedTriple&) = default;
+
+    unsigned count() const { return c[COMPONENTS - 1]; }
+
+    /**
+     * The comparator ignores the last component (i.e., the count).
+     */
+    bool operator<(const AggregatedTriple& o) const {
+        return c[0] < o.c[0] ||
+                (c[0] == o.c[0] && c[1] < o.c[1]);
+    }
+
+    static constexpr unsigned SIZE = 8;
+    static AggregatedTriple read(Cursor cur) {
+        AggregatedTriple t;
+        for(int i = 0; i < COMPONENTS - 1; i++)
+            t[i] = cur.readInt();
+        return t;
+    }
+
+    static unsigned readPage(Cursor cur, Cursor end, Triple* triples);
+};
+
+/**
+ * A fully aggregated triple. The second component is the count of the triples
+ * with the first component. The third component is ignored.
+ */
+struct FullyAggregatedTriple : public Triple {
+    FullyAggregatedTriple() {}
+    FullyAggregatedTriple(const BasicTriple<Value::id_t>& o) : Triple(o) {}
+
+    FullyAggregatedTriple(const FullyAggregatedTriple&) = default;
+    FullyAggregatedTriple& operator=(const FullyAggregatedTriple&) = default;
+
+    unsigned count() const { return c[1]; }
+
+    /**
+     * The comparator ignores the second component (i.e., the count).
+     */
+    bool operator<(const FullyAggregatedTriple& o) const {
+        return c[0] < o.c[0];
+    }
+
+    static constexpr int COMPONENTS = 2;
+    static constexpr unsigned SIZE = 4;
+    static FullyAggregatedTriple read(Cursor cur) {
+        FullyAggregatedTriple t;
+        for(int i = 0; i < COMPONENTS - 1; i++)
+            t[i] = cur.readInt();
+        return t;
+    }
+
+    static unsigned readPage(Cursor cur, Cursor end, Triple* triples);
 };
 
 /**
@@ -87,10 +211,12 @@ public:
      * Read and decompress a leaf page in a triples index.
      *
      * @pre initialize() has been called
+     * @param T type of triple to read
      * @param page the page number (should contain triples),
      *             page <= maxPage
      * @return the cache line with the uncompressed page
      */
+    template<class T=Triple>
     const Line* fetch(unsigned page);
 
     /**
@@ -123,6 +249,77 @@ private:
     unsigned statHits_;        //!< number of cache hits
     unsigned statMisses_;      //!< number of cache misses
 };
+
+
+
+// Template implementation
+template<class T>
+const TripleCache::Line* TripleCache::fetch(unsigned page) {
+    assert(page > 0);
+
+    // lookup page in cache
+    Line* line = map_[page];
+    if(line != nullptr) {
+        ++statHits_;
+        // move cache line to head of list
+        if(head_ != line) {
+            line->prev_->next_ = line->next_;
+            if(tail_ == line)
+                tail_ = line->prev_;
+            else
+                line->next_->prev_ = line->prev_;
+            head_->prev_ = line;
+            line->next_ = head_;
+            line->prev_ = nullptr;
+            head_ = line;
+        }
+        return line;
+    }
+
+    ++statMisses_;
+    // find free cache line
+    if(size_ < CAPACITY) {
+        // intialize new line
+        line = &lines_[size_++];
+        line->triples = new Triple[Line::MAX_COUNT];
+        if(head_ == nullptr) {
+            head_ = tail_ = line;
+            line->prev_ = nullptr;
+            line->next_ = nullptr;
+        } else {
+            head_->prev_ = line;
+            line->next_ = head_;
+            line->prev_ = nullptr;
+            head_ = line;
+        }
+    } else {
+        // evict least recently used line
+        line = tail_;
+        tail_ = line->prev_;
+        tail_->next_ = nullptr;
+        head_->prev_ = line;
+        line->next_ = head_;
+        line->prev_ = nullptr;
+        head_ = line;
+        map_[line->page] = nullptr;
+    }
+
+    map_[page] = line;
+
+    // read page and interpret header
+    Cursor cur = db_->page(page);
+    Cursor end = cur + PageReader::PAGE_SIZE;
+    line->page = page;
+    BTreeFlags flags = cur.readInt();
+    assert(!flags.inner());
+    line->first = flags.firstLeaf();
+    line->last = flags.lastLeaf();
+
+    // unpack triples
+    line->count = T::readPage(cur, end, line->triples);
+
+    return line;
+}
 
 }
 

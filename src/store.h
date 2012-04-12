@@ -36,15 +36,8 @@ namespace castor {
  */
 class Store {
 public:
-    static constexpr unsigned VERSION = 7; //!< format version
+    static constexpr unsigned VERSION = 8; //!< format version
     static const     char     MAGIC[10];   //!< magic number
-
-    enum TripleOrder {
-        SPO, SOP, PSO, POS, OSP, OPS
-    };
-    static constexpr int ORDERS = 6;
-    //! Virtual ordering indicating automatic selection of the order
-    static constexpr TripleOrder AUTO = static_cast<TripleOrder>(-1);
 
     /**
      * Open a store.
@@ -129,6 +122,15 @@ public:
      */
     Value::Category category(Value::id_t id);
 
+    /**
+     * Get the number of triples of specified pattern. Components with value
+     * 0 are wildcards. Other components are matched exactly.
+     *
+     * @param pattern the pattern to look for
+     * @return the number of triples matching the pattern
+     */
+    unsigned triplesCount(Triple pattern);
+
     unsigned statTripleCacheHits()   { return cache_.statHits();   }
     unsigned statTripleCacheMisses() { return cache_.statMisses(); }
 
@@ -148,7 +150,7 @@ public:
          * @param order which index to use
          */
         TripleRange(Store* store, Triple from, Triple to,
-                    TripleOrder order=AUTO);
+                    TripleOrder order=TRIPLE_ORDER_AUTO);
 
         //! Non-copyable
         TripleRange(const TripleRange&) = delete;
@@ -180,13 +182,24 @@ private:
     PageReader db_;
 
     /**
+     * Number of triples
+     */
+    unsigned triplesCount_;
+
+    /**
      * Triple indexes. Each index has a different ordering.
      */
     struct {
         unsigned begin;       //!< first page of table
         unsigned end;         //!< last page of table
         BTree<Triple>* index; //!< index
-    } triples_[ORDERS];
+        BTree<AggregatedTriple>* aggregated; //!< index of aggregated triples
+    } triples_[TRIPLE_ORDERS];
+
+    /**
+     * Index of fully aggregated triples
+     */
+    BTree<FullyAggregatedTriple>* fullyAggregated_[Triple::COMPONENTS];
 
     /**
      * Values

@@ -17,7 +17,6 @@
  */
 #include "store.h"
 
-#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <cassert>
@@ -45,13 +44,20 @@ Store::Store(const char* fileName) : db_(fileName) {
     if(cur.readInt() != VERSION)
         throw CastorException() << "Invalid format version";
 
+    // Get triples count
+    triplesCount_ = cur.readInt();
 
     // Get triples pointers
-    for(int i = 0; i < ORDERS; i++) {
+    for(int i = 0; i < TRIPLE_ORDERS; i++) {
         triples_[i].begin = cur.readInt();
         triples_[i].end   = cur.readInt();
         triples_[i].index = new BTree<Triple>(&db_, cur.readInt());
+        triples_[i].aggregated = new BTree<AggregatedTriple>(&db_, cur.readInt());
     }
+
+    // Get fully aggregated triples pointers
+    for(int i = 0; i < Triple::COMPONENTS; i++)
+        fullyAggregated_[i] = new BTree<FullyAggregatedTriple>(&db_, cur.readInt());
 
     // Get values pointers
     values_.begin = cur.readInt();
@@ -67,8 +73,12 @@ Store::Store(const char* fileName) : db_(fileName) {
 }
 
 Store::~Store() {
-    for(int i = 0; i < ORDERS; i++)
+    for(int i = 0; i < TRIPLE_ORDERS; i++) {
         delete triples_[i].index;
+        delete triples_[i].aggregated;
+    }
+    for(int i = 0; i < Triple::COMPONENTS; i++)
+        delete fullyAggregated_[i];
     delete values_.index;
 }
 
@@ -206,10 +216,80 @@ Value::Category Store::category(Value::id_t id) {
     return static_cast<Value::Category>(Value::CATEGORIES);
 }
 
+unsigned Store::triplesCount(Triple pattern) {
+    switch((pattern[0] == 0) + (pattern[1] == 0) + (pattern[2] == 0)) {
+    case 0:
+    {
+        TripleRange q(this, pattern, pattern);
+        return q.next(nullptr) ? 1 : 0;
+    }
+    case 1:
+    {
+        TripleOrder order;
+        if     (pattern[0] == 0) order = TripleOrder::POS;
+        else if(pattern[1] == 0) order = TripleOrder::OSP;
+        else                     order = TripleOrder::SPO;
+        AggregatedTriple key = pattern.toOrdered(order);
+        unsigned page = triples_[static_cast<int>(order)].aggregated->lookupLeaf(key);
+        if(page != 0) {
+            const TripleCache::Line* line = cache_.fetch<AggregatedTriple>(page);
+            const AggregatedTriple* begin = reinterpret_cast<const AggregatedTriple*>(line->triples);
+            const AggregatedTriple* left  = begin;
+            const AggregatedTriple* right = begin + line->count;
+            while(left != right) {
+                const AggregatedTriple* middle = left + (right - left) / 2;
+                if(*middle < key) {
+                    left = middle + 1;
+                } else if(middle == begin || *(middle - 1) < key) {
+                    // found!
+                    return middle->count();
+                } else {
+                    right = middle;
+                }
+            }
+        }
+        return 0;
+    }
+    case 2:
+    {
+        int index;
+        TripleOrder order;
+        if     (pattern[0] != 0) { index = 0; order = TripleOrder::SPO; }
+        else if(pattern[1] != 0) { index = 1; order = TripleOrder::POS; }
+        else                     { index = 2; order = TripleOrder::OSP; }
+        FullyAggregatedTriple key = pattern.toOrdered(order);
+        unsigned page = fullyAggregated_[index]->lookupLeaf(key);
+        if(page != 0) {
+            const TripleCache::Line* line = cache_.fetch<FullyAggregatedTriple>(page);
+            const FullyAggregatedTriple* begin = reinterpret_cast<const FullyAggregatedTriple*>(line->triples);
+            const FullyAggregatedTriple* left  = begin;
+            const FullyAggregatedTriple* right = begin + line->count;
+            while(left != right) {
+                const FullyAggregatedTriple* middle = left + (right - left) / 2;
+                if(*middle < key) {
+                    left = middle + 1;
+                } else if(middle == begin || *(middle - 1) < key) {
+                    // found!
+                    return middle->count();
+                } else {
+                    right = middle;
+                }
+            }
+        }
+        return 0;
+    }
+    case 3:
+        return triplesCount_;
+    }
+    // should not happen
+    assert(false);
+    return 0;
+}
+
 Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
-                                Store::TripleOrder order) :
+                                TripleOrder order) :
         store_(store) {
-    if(order == Store::AUTO) {
+    if(order == TRIPLE_ORDER_AUTO) {
         /* determine index such that non-singleton ranges are the last
          * components
          */
@@ -220,15 +300,15 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
         case 4: // (s,p,*)
         case 6: // (s,*,*)
         case 7: // (*,*,*)
-            order = SPO;
+            order = TripleOrder::SPO;
             break;
         case 1: // (*,p,o)
         case 5: // (*,p,*)
-            order = POS;
+            order = TripleOrder::POS;
             break;
         case 2: // (s,*,o)
         case 3: // (*,*,o)
-            order = OSP;
+            order = TripleOrder::OSP;
             break;
         }
     }
@@ -236,37 +316,12 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
     Triple key;
 
     order_ = order;
-    switch(order) {
-    case SPO:
-        key    = from;
-        limit_ = to;
-        break;
-    case SOP:
-        key    = from.reorder<0,2,1>();
-        limit_ = to  .reorder<0,2,1>();
-        break;
-    case PSO:
-        key    = from.reorder<1,0,2>();
-        limit_ = to  .reorder<1,0,2>();
-        break;
-    case POS:
-        key    = from.reorder<1,2,0>();
-        limit_ = to  .reorder<1,2,0>();
-        break;
-    case OSP:
-        key    = from.reorder<2,0,1>();
-        limit_ = to  .reorder<2,0,1>();
-        break;
-    case OPS:
-        key    = from.reorder<2,1,0>();
-        limit_ = to  .reorder<2,1,0>();
-        break;
-    }
-
-    direction_ = from <= to ? +1 : -1;
+    key    = from.toOrdered(order);
+    limit_ = to.toOrdered(order);
+    direction_ = to < from ? -1 : +1;
 
     // look for the first leaf
-    nextPage_ = store->triples_[order_].index->lookupLeaf(key);
+    nextPage_ = store->triples_[static_cast<int>(order_)].index->lookupLeaf(key);
     if(nextPage_ == 0) {
         it_ = end_ = nullptr;
         return;
@@ -364,19 +419,11 @@ bool Store::TripleRange::next(Triple* t) {
             nextPage_ = line->first ? 0 : nextPage_ - 1;
         }
     }
-    if((direction_ > 0 && *it_ > limit_) ||
+    if((direction_ > 0 && limit_ < *it_) ||
        (direction_ < 0 && *it_ < limit_))
         return false;
-    if(t != nullptr) {
-        switch(order_) {
-        case SPO: *t = *it_;                  break;
-        case SOP: *t = it_->reorder<0,2,1>(); break;
-        case PSO: *t = it_->reorder<1,0,2>(); break;
-        case POS: *t = it_->reorder<2,0,1>(); break;
-        case OSP: *t = it_->reorder<1,2,0>(); break;
-        case OPS: *t = it_->reorder<2,1,0>(); break;
-        }
-    }
+    if(t != nullptr)
+        *t = it_->toSPO(order_);
     it_ += direction_;
     return true;
 }

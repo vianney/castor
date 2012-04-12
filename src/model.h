@@ -532,15 +532,7 @@ struct BasicTriple {
 
     // Reordering
     template<int C1, int C2, int C3>
-    constexpr BasicTriple<T> reorder() { return {c[C1], c[C2], c[C3]}; }
-
-    constexpr BasicTriple<T> operator<<(unsigned s) const {
-        return {c[s % 3], c[(s+1) % 3], c[(s+2) % 3]};
-    }
-
-    constexpr BasicTriple<T> operator>>(unsigned s) const {
-        return *this << (3 - s % 3);
-    }
+    BasicTriple<T> reorder() const { return {c[C1], c[C2], c[C3]}; }
 
     // Accessors
     const T& operator[](unsigned i) const { return c[i]; }
@@ -552,23 +544,12 @@ struct BasicTriple {
     const T* end()   const { return c + COMPONENTS; }
           T* end()         { return c + COMPONENTS; }
 
-    // Comparators
-    bool operator==(const BasicTriple<T>& o) const {
-        return c[0] == o.c[0] && c[1] == o.c[1] && c[2] == o.c[2];
-    }
-    bool operator!=(const BasicTriple<T>& o) const { return !(*this == o); }
+    // Comparator
     bool operator<(const BasicTriple<T>& o) const {
         return c[0] < o.c[0] ||
                 (c[0] == o.c[0] && (c[1] < o.c[1] ||
                                     (c[1] == o.c[1] && c[2] < o.c[2])));
     }
-    bool operator>(const BasicTriple<T>& o) const { return o < *this; }
-    bool operator<=(const BasicTriple<T>& o) const {
-        return c[0] <= o.c[0] ||
-                (c[0] == o.c[0] && (c[1] <= o.c[1] ||
-                                    (c[1] == o.c[1] && c[2] <= o.c[2])));
-    }
-    bool operator>=(const BasicTriple<T>& o) const { return o <= *this; }
 };
 
 template<class T>
