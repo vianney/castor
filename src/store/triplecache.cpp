@@ -385,7 +385,6 @@ unsigned FullyAggregatedTriple::readPage(Cursor cur, Cursor end, Triple *triples
 }
 
 TripleCache::TripleCache() {
-    size_ = 0;
     statHits_ = 0;
     statMisses_ = 0;
 }
@@ -393,16 +392,36 @@ TripleCache::TripleCache() {
 TripleCache::~TripleCache() {
     delete [] map_;
     // Clean used lines
-    for(unsigned i = 0; i < size_; i++)
-        delete [] lines_[i].triples;
+    for(Line* line : lines_)
+        delete line;
 }
 
-void TripleCache::initialize(PageReader* db, unsigned maxPage) {
+void TripleCache::initialize(PageReader* db, unsigned maxPage, unsigned initCapacity) {
     db_ = db;
+    lines_.reserve(initCapacity);
     map_ = new Line*[maxPage + 1];
     memset(map_, 0, (maxPage + 1) * sizeof(Line*));
     head_ = nullptr;
     tail_ = nullptr;
+}
+
+void TripleCache::release(const Line* cline) {
+    Line* line = const_cast<Line*>(cline);
+    assert(line->uses_ > 0);
+    --line->uses_;
+    if(line->uses_ == 0) {
+        // add cache line to head of LRU list
+        if(head_ == nullptr) {
+            head_ = tail_ = line;
+            line->prev_ = nullptr;
+            line->next_ = nullptr;
+        } else {
+            head_->prev_ = line;
+            line->next_ = head_;
+            line->prev_ = nullptr;
+            head_ = line;
+        }
+    }
 }
 
 void TripleCache::peek(unsigned page, bool& first, bool& last, Triple& firstKey) {

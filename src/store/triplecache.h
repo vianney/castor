@@ -22,6 +22,7 @@
 #include "readutils.h"
 #include "btree.h"
 
+#include <vector>
 #include <algorithm>
 
 namespace castor {
@@ -176,7 +177,10 @@ public:
      * A cache line
      */
     struct Line {
-        Triple*  triples;  //!< array of triples
+        //! Maximum number of triples in a page
+        static constexpr unsigned MAX_COUNT = PageReader::PAGE_SIZE;
+
+        Triple   triples[MAX_COUNT]; //!< array of triples
         unsigned count;    //!< number of triples in the line
 
         unsigned page;     //!< page number of this line
@@ -227,8 +231,7 @@ public:
         Line*    prev_;    //!< previous line in the LRU list
         Line*    next_;    //!< next line in the LRU list
 
-        //! Maximum number of triples in a page
-        static constexpr unsigned MAX_COUNT = PageReader::PAGE_SIZE;
+        int      uses_;    //!< reference count
 
         friend class TripleCache;
     };
@@ -246,11 +249,15 @@ public:
      *
      * @param db the database
      * @param maxPage the highest page number we will encounter
+     * @param initCapacity initial capacity of the cache
      */
-    void initialize(PageReader* db_, unsigned maxPage);
+    void initialize(PageReader* db, unsigned maxPage, unsigned initCapacity=100);
 
     /**
-     * Read and decompress a leaf page in a triples index.
+     * Read and decompress a leaf page in a triples index. The returned cache
+     * line is locked to ensure it will not be overwritten by another
+     * concurrent query. You should call release() once the line is no longer
+     * needed.
      *
      * @pre initialize() has been called
      * @param T type of triple to read
@@ -260,6 +267,13 @@ public:
      */
     template<class T=Triple>
     const Line* fetch(unsigned page);
+
+    /**
+     * Release a cache line and put it at the head of the LRU list.
+     *
+     * @param line line to release
+     */
+    void release(const Line* line);
 
     /**
      * Read the header (first or last page) and the first key of a leaf
@@ -279,10 +293,8 @@ public:
 private:
     PageReader* db_;
 
-    static const unsigned CAPACITY = 100; //!< maximum size of the cache
+    std::vector<Line*> lines_; //!< cache lines
 
-    Line     lines_[CAPACITY]; //!< cache lines
-    unsigned size_;            //!< number of pages in cache
     Line*    head_;            //!< head of the LRU list (= most recently used)
     Line*    tail_;            //!< tail of the LRU list (= least recently used)
 
@@ -303,50 +315,44 @@ const TripleCache::Line* TripleCache::fetch(unsigned page) {
     Line* line = map_[page];
     if(line != nullptr) {
         ++statHits_;
-        // move cache line to head of list
-        if(head_ != line) {
-            line->prev_->next_ = line->next_;
-            if(tail_ == line)
+        assert(line->uses_ >= 0);
+        if(line->uses_ == 0) {
+            // remove cache line from LRU list
+            if(line == head_) {
+                head_ = line->next_;
+                if(head_ != nullptr)
+                    head_->prev_ = nullptr;
+            } else if(line == tail_) {
                 tail_ = line->prev_;
-            else
+                tail_->next_ = nullptr;
+            } else {
+                line->prev_->next_ = line->next_;
                 line->next_->prev_ = line->prev_;
-            head_->prev_ = line;
-            line->next_ = head_;
-            line->prev_ = nullptr;
-            head_ = line;
+            }
         }
+        ++line->uses_;
         return line;
     }
 
     ++statMisses_;
     // find free cache line
-    if(size_ < CAPACITY) {
-        // intialize new line
-        line = &lines_[size_++];
-        line->triples = new Triple[Line::MAX_COUNT];
-        if(head_ == nullptr) {
-            head_ = tail_ = line;
-            line->prev_ = nullptr;
-            line->next_ = nullptr;
-        } else {
-            head_->prev_ = line;
-            line->next_ = head_;
-            line->prev_ = nullptr;
-            head_ = line;
-        }
-    } else {
+    if(lines_.size() == lines_.capacity() && tail_ != nullptr) {
         // evict least recently used line
         line = tail_;
         tail_ = line->prev_;
-        tail_->next_ = nullptr;
-        head_->prev_ = line;
-        line->next_ = head_;
-        line->prev_ = nullptr;
-        head_ = line;
+        if(tail_ == nullptr)
+            head_ = nullptr;
+        else
+            tail_->next_ = nullptr;
         map_[line->page] = nullptr;
+    } else {
+        // intialize new line (possibly increasing capacity)
+        line = new Line;
+        lines_.push_back(line);
     }
 
     map_[page] = line;
+    line->uses_ = 1;
 
     // read page and interpret header
     Cursor cur = db_->page(page);

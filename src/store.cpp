@@ -217,11 +217,14 @@ Value::Category Store::category(Value::id_t id) {
 }
 
 unsigned Store::triplesCount(Triple pattern) {
+    unsigned count = 0;
     switch((pattern[0] == 0) + (pattern[1] == 0) + (pattern[2] == 0)) {
     case 0:
     {
         TripleRange q(this, pattern, pattern);
-        return q.next(nullptr) ? 1 : 0;
+        if(q.next(nullptr))
+            count = 1;
+        break;
     }
     case 1:
     {
@@ -235,9 +238,10 @@ unsigned Store::triplesCount(Triple pattern) {
             const TripleCache::Line* line = cache_.fetch<AggregatedTriple>(page);
             const AggregatedTriple* t = line->findLower(key);
             if(t != line->end<AggregatedTriple>() && !(key < *t))
-                return t->count();
+                count = t->count();
+            cache_.release(line);
         }
-        return 0;
+        break;
     }
     case 2:
     {
@@ -252,16 +256,18 @@ unsigned Store::triplesCount(Triple pattern) {
             const TripleCache::Line* line = cache_.fetch<FullyAggregatedTriple>(page);
             const FullyAggregatedTriple* t = line->findLower(key);
             if(t != line->end<FullyAggregatedTriple>() && !(key < *t))
-                return t->count();
+                count = t->count();
+            cache_.release(line);
         }
-        return 0;
+        break;
     }
     case 3:
-        return triplesCount_;
+        count = triplesCount_;
+        break;
+    default:
+        assert(false); // should not happen
     }
-    // should not happen
-    assert(false);
-    return 0;
+    return count;
 }
 
 Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
@@ -301,6 +307,7 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
     // look for the first leaf
     nextPage_ = store->triples_[static_cast<int>(order_)].index->lookupLeaf(key);
     if(nextPage_ == 0) {
+        line_ = nullptr;
         it_ = end_ = nullptr;
         return;
     }
@@ -321,11 +328,12 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
                  * start iterating from the last triple.
                  */
                 nextPage_--;
-                const TripleCache::Line* line = store->cache_.fetch(nextPage_);
-                nextPage_ = line->first ? 0 : nextPage_ - 1;
-                it_       = line->end() - 1;
-                end_      = line->begin() - 1;
+                line_ = store->cache_.fetch(nextPage_);
+                nextPage_ = line_->first ? 0 : nextPage_ - 1;
+                it_       = line_->end() - 1;
+                end_      = line_->begin() - 1;
             } else {
+                line_ = nullptr;
                 it_ = end_ = nullptr;
                 nextPage_  = 0;
             }
@@ -334,34 +342,47 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
     }
 
     // lookup page in cache
-    const TripleCache::Line* line = store->cache_.fetch(nextPage_);
+    line_ = store->cache_.fetch(nextPage_);
     if(direction_ > 0) {
-        nextPage_ = line->last ? 0 : nextPage_ + 1;
-        it_       = line->findLower(key);
-        end_      = line->end();
+        nextPage_ = line_->last ? 0 : nextPage_ + 1;
+        it_       = line_->findLower(key);
+        end_      = line_->end();
     } else {
-        nextPage_ = line->first ? 0 : nextPage_ - 1;
-        it_       = line->findUpper(key) - 1;
-        end_      = line->begin() - 1;
+        nextPage_ = line_->first ? 0 : nextPage_ - 1;
+        it_       = line_->findUpper(key) - 1;
+        end_      = line_->begin() - 1;
     }
 
-    if(it_ == end_) // unsuccessful search
+    if(it_ == end_) {
+        // unsuccessful search
+        store->cache_.release(line_);
+        line_ = nullptr;
         nextPage_ = 0;
+    }
+}
+
+Store::TripleRange::~TripleRange() {
+    if(line_ != nullptr)
+        store_->cache_.release(line_);
 }
 
 bool Store::TripleRange::next(Triple* t) {
     if(it_ == end_) {
+        if(line_ != nullptr) {
+            store_->cache_.release(line_);
+            line_ = nullptr;
+        }
         if(nextPage_ == 0)
             return false;
-        const TripleCache::Line* line = store_->cache_.fetch(nextPage_);
+        line_ = store_->cache_.fetch(nextPage_);
         if(direction_ > 0) {
-            nextPage_ = line->last ? 0 : nextPage_ + 1;
-            it_       = line->begin();
-            end_      = line->end();
+            nextPage_ = line_->last ? 0 : nextPage_ + 1;
+            it_       = line_->begin();
+            end_      = line_->end();
         } else {
-            nextPage_ = line->first ? 0 : nextPage_ - 1;
-            it_       = line->end() - 1;
-            end_      = line->begin() - 1;
+            nextPage_ = line_->first ? 0 : nextPage_ - 1;
+            it_       = line_->end() - 1;
+            end_      = line_->begin() - 1;
         }
     }
     if((direction_ > 0 && limit_ < *it_) ||

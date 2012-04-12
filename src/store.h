@@ -137,8 +137,6 @@ public:
 
     /**
      * Query a range of triples.
-     *
-     * @note concurrent queries result in undefined behaviour
      */
     class TripleRange {
     public:
@@ -151,6 +149,7 @@ public:
          */
         TripleRange(Store* store, Triple from, Triple to,
                     TripleOrder order=TRIPLE_ORDER_AUTO);
+        ~TripleRange();
 
         //! Non-copyable
         TripleRange(const TripleRange&) = delete;
@@ -176,6 +175,8 @@ public:
 
         const Triple* it_;        //!< current triple
         const Triple* end_;       //!< last triple in current cache line
+
+        const TripleCache::Line* line_; //!< current cache line
     };
 
 private:
