@@ -39,7 +39,7 @@ TripleConstraint::TripleConstraint(Query* query, TriplePattern pat) :
 void TripleConstraint::restore() {
     int bound = 0;
     for(int i = 0; i < pat_.COMPONENTS; i++)
-        bound += (x_[i] == nullptr || x_[i]->isBound());
+        bound += (x_[i] == nullptr || x_[i]->bound());
     done_ = (bound >= pat_.COMPONENTS - 1);
 }
 
@@ -54,7 +54,7 @@ bool TripleConstraint::propagate() {
         } else {
             min[i] = x_[i]->min();
             max[i] = x_[i]->max();
-            bound -= x_[i]->isBound() ? 0 : 1;
+            bound -= x_[i]->bound() ? 0 : 1;
         }
     }
 
@@ -101,7 +101,7 @@ void FilterConstraint::restore() {
     int unbound = 0;
     for(Variable* var : expr_->variables()) {
         cp::RDFVar* x = var->cp();
-        if(!x->contains(0) && !x->isBound()) {
+        if(!x->contains(0) && !x->bound()) {
             unbound++;
             if(unbound > 1) {
                 // more than one unbound variable, we are not done
@@ -118,7 +118,7 @@ bool FilterConstraint::propagate() {
     for(Variable* var : expr_->variables()) {
         if(var->cp()->contains(0))
             var->valueId(0);
-        else if(var->cp()->isBound())
+        else if(var->cp()->bound())
             var->valueId(var->cp()->value());
         else if(unbound)
             return true; // too many unbound variables (> 1)
@@ -194,16 +194,16 @@ VarDiffConstraint::VarDiffConstraint(Store* store, cp::RDFVar* x1,
 }
 
 void VarDiffConstraint::restore() {
-    done_ = (x1_->isBound() || x2_->isBound());
+    done_ = (x1_->bound() || x2_->bound());
 }
 
 bool VarDiffConstraint::propagate() {
     StatelessConstraint::propagate();
     // TODO: we could start propagating once only equivalent values remain
-    if(!x1_->isBound() && !x2_->isBound())
+    if(!x1_->bound() && !x2_->bound())
         return true;
-    cp::RDFVar* x1 = x1_->isBound() ? x1_ : x2_;
-    cp::RDFVar* x2 = x1_->isBound() ? x2_ : x1_;
+    cp::RDFVar* x1 = x1_->bound() ? x1_ : x2_;
+    cp::RDFVar* x2 = x1_->bound() ? x2_ : x1_;
     done_ = true;
     for(Value::id_t id : store_->eqClass(x1->value())) {
         if(!x2->remove(id))
@@ -362,15 +362,15 @@ VarDiffTermConstraint::VarDiffTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2) :
 }
 
 void VarDiffTermConstraint::restore() {
-    done_ = (x1_->isBound() || x2_->isBound());
+    done_ = (x1_->bound() || x2_->bound());
 }
 
 bool VarDiffTermConstraint::propagate() {
     StatelessConstraint::propagate();
-    if(x1_->isBound()) {
+    if(x1_->bound()) {
         done_ = true;
         return x2_->remove(x1_->value());
-    } else if(x2_->isBound()) {
+    } else if(x2_->bound()) {
         done_ = true;
         return x1_->remove(x2_->value());
     } else {

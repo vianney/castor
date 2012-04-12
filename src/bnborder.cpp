@@ -86,7 +86,7 @@ bool BnBOrderConstraint::propagate() {
                 if(!x->remove(bval->id))
                     return false;
             }
-            if(!x->isBound() ||
+            if(!x->bound() ||
                     (!desc && x->value() < bval->id) ||
                     (desc && x->value() > bval->id))
                 return true;

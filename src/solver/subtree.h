@@ -51,7 +51,19 @@ public:
     Subtree& operator=(const Subtree&) = delete;
 
     /**
-     * Add a variable. Make sure to add all variables that need to be
+     * Add a trailable object. Make sure to add all trailable objects that need
+     * to be backtracked.
+     *
+     * The subtree does NOT take ownership of the object.
+     *
+     * @note Should not be called once the tree has been activated once.
+     *
+     * @param x the trailable object
+     */
+    void add(Trailable* x);
+
+    /**
+     * Add a decision variable. Make sure to add all variables that need to be
      * backtracked.
      *
      * The subtree does NOT take ownership of the variable.
@@ -59,10 +71,10 @@ public:
      * @note Should not be called once the tree has been activated once.
      *
      * @param x the variable
-     * @param label true if x is a decision variable that should be labeled on
-     *              search, false if x is an auxiliary variable
+     * @param label true if x should be labeled during the search, false if x
+     *              is an auxiliary variable
      */
-    void add(Variable* x, bool label = false);
+    void add(DecisionVariable* x, bool label = false);
 
     /**
      * Add a constraint.
@@ -109,7 +121,7 @@ private:
      *
      * @param x chosen variable
      */
-    void checkpoint(Variable* x);
+    void checkpoint(DecisionVariable* x);
 
     /**
      * Backtrack to the previous checkpoint. Remove the chosen value from the
@@ -119,7 +131,7 @@ private:
      * @return the chosen variable of the last restored checkpoint
      *         or nullptr if the whole search tree has been explored
      */
-    Variable* backtrack();
+    DecisionVariable* backtrack();
 
 private:
     /**
@@ -148,14 +160,13 @@ private:
     bool started_;
 
     /**
-     * Variables.
+     * Trailable objects to backtrack.
      */
-    std::vector<Variable*> vars_;
+    std::vector<Trailable*> trailables_;
     /**
-     * Number of decision variables to label. The decision variables appear
-     * first in the vars array.
+     * Decision variables. Subset of trailables_.
      */
-    int nbDecision_;
+    std::vector<DecisionVariable*> vars_;
 
     /**
      * Posted constraints.

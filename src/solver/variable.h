@@ -19,6 +19,7 @@
 #define CASTOR_CP_VARIABLE_H
 
 #include <cstddef>
+#include <cassert>
 
 namespace castor {
 namespace cp {
@@ -26,28 +27,10 @@ namespace cp {
 class Solver;
 
 /**
- * Base class for a CP variable.
- *
- * This abstract class only contains the interface for backtracking. Operations
- * on a variable are dependent of its domain implementation.
+ * Base class for a trailable object.
  */
-class Variable {
+class Trailable {
 public:
-    /**
-     * Construct a variable.
-     *
-     * @param solver attached solver
-     * @param trailSize size in bytes needed for the trail
-     */
-    Variable(Solver* solver, std::size_t trailSize) :
-        solver_(solver), trailSize_(trailSize) {}
-
-    virtual ~Variable() {}
-
-    //! Non-copyable
-    Variable(const Variable&) = delete;
-    Variable& operator=(const Variable&) = delete;
-
     /**
      * @return the parent solver
      */
@@ -59,17 +42,7 @@ public:
     std::size_t trailSize() const { return trailSize_; }
 
     /**
-     * @return the current size of the domain of this variable
-     */
-    unsigned size() const { return size_; }
-
-    /**
-     * @return whether this variable is bound
-     */
-    bool isBound() const { return size_ == 1; }
-
-    /**
-     * Write a checkpoint of the current domain to the memory pointed to by
+     * Write a checkpoint of the current state to the memory pointed to by
      * trail. The allocated space is of size trailSize.
      *
      * @param trail the target trail memory where the checkpoint must be
@@ -78,48 +51,90 @@ public:
     virtual void checkpoint(void* trail) const = 0;
 
     /**
-     * Restore the domain from the memory pointed to by trail. This memory, of
+     * Restore the state from the memory pointed to by trail. This memory, of
      * size trailSize, had been written to by checkpoint() before.
      *
      * @param trail the source memory where the checkpoint has been written
      */
     virtual void restore(const void* trail) = 0;
 
-    /**
-     * Bind this variable to a value of its domain. This is called during the
-     * labeling phase of the search. Appropriate events should be triggered.
-     *
-     * @pre getSize() > 1
-     * @post isBound()
-     */
-    virtual void select() = 0;
-
-    /**
-     * Remove from the domain the value that would be assigned to this variable
-     * by select(). It is called after backtracking.
-     *
-     * @pre getSize() > 1
-     * @post getSize() := getSize() - 1
-     */
-    virtual void unselect() = 0;
-
 protected:
+    /**
+     * Construct a trailable object.
+     *
+     * @param solver attached solver
+     * @param trailSize size in bytes needed for the trail
+     */
+    Trailable(Solver* solver, std::size_t trailSize) :
+        solver_(solver), trailSize_(trailSize) {
+        assert(solver != nullptr);
+    }
+
+    //! Non-copyable
+    Trailable(const Trailable&) = delete;
+    Trailable& operator=(const Trailable&) = delete;
+
+    virtual ~Trailable() {}
+
+private:
     /**
      * Parent solver class.
      */
     Solver* solver_;
 
     /**
-     * Current size of the domain.
-     */
-    unsigned size_;
-
-private:
-    /**
      * Number of bytes to allocate for the trailing structure. This number does
-     * not change after the construction of the variable.
+     * not change after the construction of the object.
      */
     std::size_t trailSize_;
+};
+
+/**
+ * Base class for a CP decision variable. A decision variable is a trailable
+ * object which can be labeled. Labeling implies that the variable is discrete.
+ */
+class DecisionVariable : public virtual Trailable {
+public:
+    /**
+     * @return the current size of the domain of this variable
+     */
+    unsigned size() const { return size_; }
+
+    /**
+     * @return whether this variable is bound
+     */
+    bool bound() const { return size_ == 1; }
+
+    /**
+     * Bind this variable to a value of its domain. This is called during the
+     * labeling phase of the search. Appropriate events should be triggered.
+     *
+     * @pre !bound()
+     * @post bound()
+     */
+    virtual void label() = 0;
+
+    /**
+     * Remove from the domain the value that would be assigned to this variable
+     * by label(). It is called after backtracking.
+     *
+     * @pre !bound()
+     * @post size() := size() - 1
+     */
+    virtual void unlabel() = 0;
+
+protected:
+    /**
+     * Default constructor with bogus values for Trailable. As Trailable is
+     * a virtual base class, subclasses of DecisionVariable would have to
+     * initialize Trailable by themselves anyway.
+     */
+    DecisionVariable() : Trailable(nullptr, 0) {}
+
+    /**
+     * Current size of the domain. Must be updated by the subclass.
+     */
+    unsigned size_;
 };
 
 }

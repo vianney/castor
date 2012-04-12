@@ -34,10 +34,10 @@ class Constraint;
  * Variable with only bounds representation. Values between the two bounds
  * are assumed to be in the domain.
  *
- * @param T the type of the values (should be an integer type)
+ * @param T the type of the values
  */
 template<class T>
-class BoundsVariable : public Variable {
+class BoundsVariable : public virtual Trailable {
 public:
     /**
      * Construct a variable with domain min..max.
@@ -51,14 +51,6 @@ public:
     // Implementation of virtual functions
     void checkpoint(void* trail) const;
     void restore(const void* trail);
-    void select();
-    void unselect();
-
-    /**
-     * @pre isBound() == true
-     * @return the value bound to this variable
-     */
-    T value() const { return min_; }
 
     /**
      * @param v a value
@@ -129,10 +121,18 @@ public:
      */
     void registerMax(Constraint* c) { evMax_.push_back(c); }
 
-private:
+protected:
+
+    /**
+     * Trail size is defined here to be reused by subclasses using multiple
+     * inheritance
+     */
+    static constexpr std::size_t TRAIL_SIZE = 2 * sizeof(T);
+
     T min_; //!< lower bound
     T max_; //!< upper bound
 
+private:
     /**
      * List of constraints registered to the bind event.
      */
@@ -147,17 +147,93 @@ private:
     std::vector<Constraint*> evMax_;
 };
 
+/**
+ * Extension of BoundsVariable to be a decision variable, i.e., it is labelable.
+ * However, this adds the restriction that T is of integer type (i.e., the
+ * operation +1 is well defined).
+ *
+ * BoundsVariable is a private base class to disallow casting to it.
+ *
+ * @param T the type of the values (should be an integer type)
+ */
+template<class T>
+class BoundsDecisionVariable : private BoundsVariable<T>, public DecisionVariable {
+public:
+    /**
+     * Construct a variable with domain min..max.
+     *
+     * @param solver attached solver
+     * @param min initial lower bound
+     * @param max initial upper bound
+     */
+    BoundsDecisionVariable(Solver* solver, T min, T max);
+
+    /**
+     * @pre bound() == true
+     * @return the value bound to this variable
+     */
+    T value() const { return this->min_; }
+
+    // Implementation of virtual functions
+    void label();
+    void unlabel();
+
+    // Overrides to update size_
+    void restore(const void* trail) {
+        BoundsVariable<T>::restore(trail);
+        updateSize();
+    }
+
+    bool bind(T v) {
+        if(size_ == 1 && this->min_ == v)
+            return true;
+        if(!BoundsVariable<T>::bind(v))
+            return false;
+        updateSize();
+        return true;
+    }
+
+    bool updateMin(T v) {
+        if(!BoundsVariable<T>::updateMin(v))
+            return false;
+        updateSize();
+        return true;
+    }
+
+    bool updateMax(T v) {
+        if(!BoundsVariable<T>::updateMax(v))
+            return false;
+        updateSize();
+        return true;
+    }
+
+    // Passthrough methods
+    void checkpoint(void* trail) const { BoundsVariable<T>::checkpoint(trail); }
+    bool contains(T v) const { return BoundsVariable<T>::contains(v); }
+    T    min     ()    const { return BoundsVariable<T>::min(); }
+    T    max     ()    const { return BoundsVariable<T>::max(); }
+    void registerBind(Constraint* c) { BoundsVariable<T>::registerBind(c); }
+    void registerMin (Constraint* c) { BoundsVariable<T>::registerMin (c); }
+    void registerMax (Constraint* c) { BoundsVariable<T>::registerMax (c); }
+
+private:
+    /**
+     * Update size_ of DecisionVariable.
+     */
+    void updateSize() {
+        size_ = this->max_ - this->min_ + 1;
+    }
+};
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Template implementation
 
 template<class T>
 BoundsVariable<T>::BoundsVariable(Solver* solver, T min, T max) :
-        Variable(solver, 2 * sizeof(T)),
-        min_(min),
-        max_(max) {
-    size_ = max - min + 1;
-}
+    Trailable(solver, TRAIL_SIZE),
+    min_(min),
+    max_(max) {}
 
 template<class T>
 void BoundsVariable<T>::checkpoint(void* trail) const {
@@ -169,40 +245,21 @@ template<class T>
 void BoundsVariable<T>::restore(const void* trail) {
     min_  = *((reinterpret_cast<const T*&>(trail))++);
     max_  = *((reinterpret_cast<const T*&>(trail))++);
-    size_ = max_ - min_ + 1;
-}
-
-template<class T>
-void BoundsVariable<T>::select() {
-    assert(min_ < max_ && size_ > 1);
-    bool ret = bind(min_);
-    assert(ret);
-}
-
-template<class T>
-void BoundsVariable<T>::unselect() {
-    assert(min_ < max_ && size_ > 1);
-    bool ret = updateMin(min_ + 1);
-    assert(ret);
 }
 
 template<class T>
 bool BoundsVariable<T>::bind(T v) {
     if(v < min_ || v > max_)
         return false;
-    if(size_ == 1)
-        return true;
-    size_ = 1;
     if(v != min_) {
         min_ = v;
-        solver_->enqueue(evMin_);
+        solver()->enqueue(evMin_);
     }
     if(v != max_) {
         max_ = v;
-        solver_->enqueue(evMax_);
+        solver()->enqueue(evMax_);
     }
-    solver_->enqueue(evBind_);
-    assert(size_ == max_ - min_ + 1);
+    solver()->enqueue(evBind_);
     return true;
 }
 
@@ -214,8 +271,7 @@ bool BoundsVariable<T>::updateMin(T v) {
         return bind(v);
     } else if(v > min_) {
         min_ = v;
-        size_ = max_ - min_ + 1;
-        solver_->enqueue(evMin_);
+        solver()->enqueue(evMin_);
         return true;
     } else {
         return true;
@@ -230,12 +286,31 @@ bool BoundsVariable<T>::updateMax(T v) {
         return bind(v);
     } else if(v < max_) {
         max_ = v;
-        size_ = max_ - min_ + 1;
-        solver_->enqueue(evMax_);
+        solver()->enqueue(evMax_);
         return true;
     } else {
         return true;
     }
+}
+
+
+template<class T>
+BoundsDecisionVariable<T>::BoundsDecisionVariable(Solver* solver, T min, T max) :
+        Trailable(solver, BoundsVariable<T>::TRAIL_SIZE),
+        BoundsVariable<T>(solver, min, max) {
+    updateSize();
+}
+
+template<class T>
+void BoundsDecisionVariable<T>::label() {
+    assert(this->min_ < this->max_ && size_ > 1);
+    bind(this->min_);
+}
+
+template<class T>
+void BoundsDecisionVariable<T>::unlabel() {
+    assert(this->min_ < this->max_ && size_ > 1);
+    updateMin(this->min_ + 1);
 }
 
 }

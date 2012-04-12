@@ -39,7 +39,7 @@ struct Checkpoint {
     /**
      * Variable that is being labeled.
      */
-    Variable* x;
+    DecisionVariable* x;
 
     ~Checkpoint() {
         delete [] data;
@@ -47,7 +47,6 @@ struct Checkpoint {
 };
 
 Subtree::Subtree(Solver* solver) : solver_(solver) {
-    nbDecision_ = 0;
     trail_ = nullptr;
     active_ = false;
 }
@@ -63,10 +62,13 @@ Subtree::~Subtree() {
     delete [] trail_;
 }
 
-void Subtree::add(Variable* x, bool label) {
+void Subtree::add(Trailable *x) {
+    trailables_.push_back(x);
+}
+
+void Subtree::add(DecisionVariable* x, bool label) {
+    Subtree::add(static_cast<Trailable*>(x));
     if(label)
-        vars_.insert(vars_.begin() + nbDecision_++, x);
-    else
         vars_.push_back(x);
 }
 
@@ -80,11 +82,11 @@ void Subtree::activate() {
     if(isActive())
         throw CastorException() << "Cannot activate active subtree.";
     if(trail_ == nullptr) {
-        // First activiation, allocate trail
+        // First activation, allocate trail
         std::size_t size = 0;
-        for(Variable* x : vars_)
+        for(Trailable* x : trailables_)
             size += x->trailSize();
-        // The depth of the subtree is at most vars.size(), +1 for the root
+        // The depth of the subtree is at most vars_.size(), +1 for the root
         // checkpoint.
         trail_ = new Checkpoint[vars_.size() + 1];
         for(unsigned i = 0; i <= vars_.size(); i++)
@@ -128,7 +130,7 @@ bool Subtree::search() {
         return false;
     }
 
-    Variable* x = nullptr;
+    DecisionVariable* x = nullptr;
     if(started_) { // the search has started, try to backtrack
         x = backtrack();
         if(!x) {
@@ -140,12 +142,11 @@ bool Subtree::search() {
     }
     while(true) {
         // search for a variable to bind if needed
-        if(!x || x->isBound()) {
+        if(!x || x->bound()) {
             // find unbound variable with smallest domain
             x = nullptr;
             unsigned sx;
-            for(int i = 0; i < nbDecision_; i++) {
-                Variable* y = vars_[i];
+            for(DecisionVariable* y : vars_) {
                 unsigned sy = y->size();
                 if(sy > 1 && (!x || sy < sx)) {
                     x = y;
@@ -158,7 +159,7 @@ bool Subtree::search() {
         }
         // Make a checkpoint and assign a value to the selected variable
         checkpoint(x);
-        x->select();
+        x->label();
         if(!solver_->propagate()) {
             x = backtrack();
             if(!x) {
@@ -169,10 +170,10 @@ bool Subtree::search() {
     }
 }
 
-void Subtree::checkpoint(Variable* x) {
+void Subtree::checkpoint(DecisionVariable* x) {
     Checkpoint* chkp = &trail_[++trailIndex_];
     char* data = chkp->data;
-    for(Variable* y : vars_) {
+    for(Trailable* y : trailables_) {
         y->checkpoint(data);
         data += y->trailSize();
     }
@@ -180,14 +181,14 @@ void Subtree::checkpoint(Variable* x) {
     chkp->x = x;
 }
 
-Variable* Subtree::backtrack() {
+DecisionVariable* Subtree::backtrack() {
     solver_->statBacktracks_++;
     if(trailIndex_ < 0)
         return nullptr;
     // restore domains
     Checkpoint* chkp = &trail_[trailIndex_--];
     char* data = chkp->data;
-    for(Variable* x : vars_) {
+    for(Trailable* x : trailables_) {
         x->restore(data);
         data += x->trailSize();
     }
@@ -202,7 +203,7 @@ Variable* Subtree::backtrack() {
                 c->restore();
         }
         // remove old (failed) choice
-        chkp->x->unselect();
+        chkp->x->unlabel();
         if(solver_->tsCurrent_ < solver_->tsLastConstraint_ &&
            !solver_->postStatic())
             return backtrack();

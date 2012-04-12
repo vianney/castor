@@ -69,12 +69,12 @@ protected:
         // check size and bound
         EXPECT_EQ(dom.size(), x.size());
         if(dom.size() == 1) {
-            EXPECT_TRUE(x.isBound());
+            EXPECT_TRUE(x.bound());
             EXPECT_EQ(*dom.begin(), x.value());
             EXPECT_EQ(*dom.begin(), x.min());
             EXPECT_EQ(*dom.begin(), x.max());
         } else {
-            EXPECT_FALSE(x.isBound());
+            EXPECT_FALSE(x.bound());
         }
         // check x.contains()
         for(unsigned v = 0; v <= MAXVAL; v++) {
@@ -185,7 +185,7 @@ TEST_F(SolverDiscreteVarTest, CheckpointRestore) {
 /**
  * Check the select() method
  */
-TEST_F(SolverDiscreteVarTest, Select) {
+TEST_F(SolverDiscreteVarTest, Label) {
     registerConstraints();
     EXPECT_CALL(xBind,   propagate());
     EXPECT_CALL(xChange, propagate());
@@ -196,14 +196,14 @@ TEST_F(SolverDiscreteVarTest, Select) {
     EXPECT_CALL(yMin,    propagate()).Times(AtMost(1));
     EXPECT_CALL(yMax,    propagate()).Times(AtMost(1));
 
-    x.select();
-    EXPECT_TRUE(x.isBound());
+    x.label();
+    EXPECT_TRUE(x.bound());
     EXPECT_LE(0u, x.value());
     EXPECT_GE(9u, x.value());
     expect_domain(x, {x.value()});
 
-    y.select();
-    EXPECT_TRUE(y.isBound());
+    y.label();
+    EXPECT_TRUE(y.bound());
     EXPECT_LE(5u, y.value());
     EXPECT_GE(9u, y.value());
     expect_domain(y, {y.value()});
@@ -212,29 +212,29 @@ TEST_F(SolverDiscreteVarTest, Select) {
 /**
  * Check the unselect() method
  */
-TEST_F(SolverDiscreteVarTest, UnSelect) {
+TEST_F(SolverDiscreteVarTest, UnLabel) {
     char trail[x.trailSize()];
     unsigned val;
 
     x.checkpoint(trail);
-    x.select();
-    EXPECT_TRUE(x.isBound());
+    x.label();
+    EXPECT_TRUE(x.bound());
     val = x.value();
     x.restore(trail);
-    EXPECT_FALSE(x.isBound());
+    EXPECT_FALSE(x.bound());
     EXPECT_TRUE(x.contains(val));
-    x.unselect();
+    x.unlabel();
     EXPECT_FALSE(x.contains(val));
     EXPECT_EQ(9u, x.size());
 
     y.checkpoint(trail);
-    y.select();
-    EXPECT_TRUE(y.isBound());
+    y.label();
+    EXPECT_TRUE(y.bound());
     val = y.value();
     y.restore(trail);
-    EXPECT_FALSE(y.isBound());
+    EXPECT_FALSE(y.bound());
     EXPECT_TRUE(y.contains(val));
-    y.unselect();
+    y.unlabel();
     EXPECT_FALSE(y.contains(val));
     EXPECT_EQ(4u, y.size());
 }

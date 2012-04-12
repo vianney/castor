@@ -79,7 +79,7 @@ bool DistinctConstraint::propagate() {
     int unbound = -1;
     for(unsigned i = 0; i < query_->requested(); i++) {
         cp::RDFVar* x = query_->variable(i)->cp();
-        if(x->isBound())
+        if(x->bound())
             sol[i] = x->value();
         else if(unbound != -1)
             return true; // too many unbound variables (> 1)

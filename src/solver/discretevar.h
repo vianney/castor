@@ -43,7 +43,7 @@ class Constraint;
  * @param T the type of the values (should be an integer type)
  */
 template<class T>
-class DiscreteVariable : public Variable {
+class DiscreteVariable : public DecisionVariable {
 public:
     /**
      * Construct a variable with domain minVal..maxVal.
@@ -62,11 +62,11 @@ public:
     // Implementation of virtual functions
     void checkpoint(void* trail) const;
     void restore(const void* trail);
-    void select();
-    void unselect();
+    void label();
+    void unlabel();
 
     /**
-     * @pre isBound() == true
+     * @pre bound() == true
      * @return the value bound to this variable
      */
     T value() const { return domain_[0]; }
@@ -264,7 +264,7 @@ std::ostream& operator<<(std::ostream& out, const DiscreteVariable<T>& x);
 
 template<class T>
 DiscreteVariable<T>::DiscreteVariable(Solver* solver, T minVal, T maxVal) :
-        Variable(solver, sizeof(unsigned) + 2 * sizeof(T)),
+        Trailable(solver, sizeof(unsigned) + 2 * sizeof(T)),
         minVal_(minVal),
         maxVal_(maxVal) {
     size_ = maxVal - minVal + 1;
@@ -300,17 +300,15 @@ void DiscreteVariable<T>::restore(const void* trail) {
 }
 
 template<class T>
-void DiscreteVariable<T>::select() {
+void DiscreteVariable<T>::label() {
     assert(size_ > 1);
-    bool ret = bind(domain_[0]);
-    assert(ret);
+    bind(domain_[0]);
 }
 
 template<class T>
-void DiscreteVariable<T>::unselect() {
+void DiscreteVariable<T>::unlabel() {
     assert(size_ > 1);
-    bool ret = remove(domain_[0]);
-    assert(ret);
+    remove(domain_[0]);
 }
 
 template<class T>
@@ -359,14 +357,14 @@ bool DiscreteVariable<T>::bind(T v) {
     size_ = 1;
     if(v != min_) {
         min_ = v;
-        solver_->enqueue(evMin_);
+        solver()->enqueue(evMin_);
     }
     if(v != max_) {
         max_ = v;
-        solver_->enqueue(evMax_);
+        solver()->enqueue(evMax_);
     }
-    solver_->enqueue(evChange_);
-    solver_->enqueue(evBind_);
+    solver()->enqueue(evChange_);
+    solver()->enqueue(evBind_);
     assert(min_ == max_ && min_ == value());
     return true;
 }
@@ -398,14 +396,14 @@ bool DiscreteVariable<T>::remove(T v) {
         /*if(v == min_) {
             // TODO: is this usefull?
             min_++; // not perfect bound
-            solver_->enqueue(evMin_);
+            solver()->enqueue(evMin_);
         }
         if(v == max_) {
             // TODO: is this usefull?
             max_--; // not perfect bound
-            solver_->enqueue(evMax_);
+            solver()->enqueue(evMax_);
         }*/
-        solver_->enqueue(evChange_);
+        solver()->enqueue(evChange_);
         assert(size_ > 1 || (min_ == max_ && min_ == value()));
         assert(min_ < max_ || (size_ == 1 && min_ == value()));
         return true;
@@ -424,15 +422,15 @@ bool DiscreteVariable<T>::restrictToMarks() {
             return false;
         if(min_ != mmin) {
             min_ = mmin;
-            solver_->enqueue(evMin_);
+            solver()->enqueue(evMin_);
         }
         if(max_ != mmax) {
             max_ = mmax;
-            solver_->enqueue(evMax_);
+            solver()->enqueue(evMax_);
         }
-        solver_->enqueue(evChange_);
+        solver()->enqueue(evChange_);
         if(m == 1)
-            solver_->enqueue(evBind_);
+            solver()->enqueue(evBind_);
     }
     assert(size_ > 1 || (min_ == max_ && min_ == value()));
     assert(min_ < max_ || (size_ == 1 && min_ == value()));
@@ -448,8 +446,8 @@ bool DiscreteVariable<T>::updateMin(T v) {
         return bind(v);
     } else if(v > min_) {
         min_ = v;
-        solver_->enqueue(evChange_);
-        solver_->enqueue(evMin_);
+        solver()->enqueue(evChange_);
+        solver()->enqueue(evMin_);
         assert(size_ > 1 || (min_ == max_ && min_ == value()));
         assert(min_ < max_ || (size_ == 1 && min_ == value()));
         return true;
@@ -467,8 +465,8 @@ bool DiscreteVariable<T>::updateMax(T v) {
         return bind(v);
     } else if(v < max_) {
         max_ = v;
-        solver_->enqueue(evChange_);
-        solver_->enqueue(evMax_);
+        solver()->enqueue(evChange_);
+        solver()->enqueue(evMax_);
         assert(size_ > 1 || (min_ == max_ && min_ == value()));
         assert(min_ < max_ || (size_ == 1 && min_ == value()));
         return true;
