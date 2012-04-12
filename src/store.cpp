@@ -233,20 +233,9 @@ unsigned Store::triplesCount(Triple pattern) {
         unsigned page = triples_[static_cast<int>(order)].aggregated->lookupLeaf(key);
         if(page != 0) {
             const TripleCache::Line* line = cache_.fetch<AggregatedTriple>(page);
-            const AggregatedTriple* begin = reinterpret_cast<const AggregatedTriple*>(line->triples);
-            const AggregatedTriple* left  = begin;
-            const AggregatedTriple* right = begin + line->count;
-            while(left != right) {
-                const AggregatedTriple* middle = left + (right - left) / 2;
-                if(*middle < key) {
-                    left = middle + 1;
-                } else if(middle == begin || *(middle - 1) < key) {
-                    // found!
-                    return middle->count();
-                } else {
-                    right = middle;
-                }
-            }
+            const AggregatedTriple* t = line->findLower(key);
+            if(t != line->end<AggregatedTriple>() && !(key < *t))
+                return t->count();
         }
         return 0;
     }
@@ -261,20 +250,9 @@ unsigned Store::triplesCount(Triple pattern) {
         unsigned page = fullyAggregated_[index]->lookupLeaf(key);
         if(page != 0) {
             const TripleCache::Line* line = cache_.fetch<FullyAggregatedTriple>(page);
-            const FullyAggregatedTriple* begin = reinterpret_cast<const FullyAggregatedTriple*>(line->triples);
-            const FullyAggregatedTriple* left  = begin;
-            const FullyAggregatedTriple* right = begin + line->count;
-            while(left != right) {
-                const FullyAggregatedTriple* middle = left + (right - left) / 2;
-                if(*middle < key) {
-                    left = middle + 1;
-                } else if(middle == begin || *(middle - 1) < key) {
-                    // found!
-                    return middle->count();
-                } else {
-                    right = middle;
-                }
-            }
+            const FullyAggregatedTriple* t = line->findLower(key);
+            if(t != line->end<FullyAggregatedTriple>() && !(key < *t))
+                return t->count();
         }
         return 0;
     }
@@ -344,9 +322,9 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
                  */
                 nextPage_--;
                 const TripleCache::Line* line = store->cache_.fetch(nextPage_);
-                end_      = line->triples;
-                it_       = end_ + (line->count - 1);
                 nextPage_ = line->first ? 0 : nextPage_ - 1;
+                it_       = line->end() - 1;
+                end_      = line->begin() - 1;
             } else {
                 it_ = end_ = nullptr;
                 nextPage_  = 0;
@@ -358,50 +336,17 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
     // lookup page in cache
     const TripleCache::Line* line = store->cache_.fetch(nextPage_);
     if(direction_ > 0) {
-        it_       = line->triples;
-        end_      = it_ + line->count;
         nextPage_ = line->last ? 0 : nextPage_ + 1;
-
-        // binary search for first triple
-        const Triple* left  = it_;
-        const Triple* right = end_;
-        while(left != right) {
-            const Triple* middle = left + (right - left) / 2;
-            if(*middle < key) {
-                left = middle + 1;
-            } else if(middle == it_ || *(middle - 1) < key) {
-                // found!
-                it_ = middle;
-                return;
-            } else {
-                right = middle;
-            }
-        }
+        it_       = line->findLower(key);
+        end_      = line->end();
     } else {
-        end_      = line->triples - 1;
-        it_       = end_ + line->count;
         nextPage_ = line->first ? 0 : nextPage_ - 1;
-
-        // binary search for last triple
-        const Triple* left  = end_ + 1;
-        const Triple* right = it_ + 1;
-        while(left != right) {
-            const Triple* middle = left + (right - left) / 2;
-            if(key < *middle) {
-                right = middle;
-            } else if(middle == it_ || key < *(middle + 1)) {
-                // found!
-                it_ = middle;
-                return;
-            } else {
-                left = middle + 1;
-            }
-        }
+        it_       = line->findUpper(key) - 1;
+        end_      = line->begin() - 1;
     }
 
-    // unsuccessful search
-    it_ = end_;
-    nextPage_ = 0;
+    if(it_ == end_) // unsuccessful search
+        nextPage_ = 0;
 }
 
 bool Store::TripleRange::next(Triple* t) {
@@ -410,13 +355,13 @@ bool Store::TripleRange::next(Triple* t) {
             return false;
         const TripleCache::Line* line = store_->cache_.fetch(nextPage_);
         if(direction_ > 0) {
-            it_       = line->triples;
-            end_      = it_ + line->count;
             nextPage_ = line->last ? 0 : nextPage_ + 1;
+            it_       = line->begin();
+            end_      = line->end();
         } else {
-            end_      = line->triples - 1;
-            it_       = end_ + line->count;
             nextPage_ = line->first ? 0 : nextPage_ - 1;
+            it_       = line->end() - 1;
+            end_      = line->begin() - 1;
         }
     }
     if((direction_ > 0 && limit_ < *it_) ||

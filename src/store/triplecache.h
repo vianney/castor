@@ -22,6 +22,8 @@
 #include "readutils.h"
 #include "btree.h"
 
+#include <algorithm>
+
 namespace castor {
 
 enum class TripleOrder {
@@ -180,6 +182,46 @@ public:
         unsigned page;     //!< page number of this line
         bool     first;    //!< whether it is the first triples page
         bool     last;     //!< whether it is the last triples page
+
+        /**
+         * @return iterator to the first triple
+         */
+        template<class T=Triple>
+        const T* begin() const {
+            return reinterpret_cast<const T*>(triples);
+        }
+
+        /**
+         * @return iterator to the element following the last triple
+         */
+        template<class T=Triple>
+        const T* end() const {
+            return reinterpret_cast<const T*>(triples + count);
+        }
+
+        /**
+         * Perform a binary search.
+         *
+         * @param key triple to look for
+         * @return pointer to the first triple that is not less than key, or
+         *         end() if not found
+         */
+        template<class T=Triple>
+        const T* findLower(const T& key) const {
+            return std::lower_bound(begin<T>(), end<T>(), key);
+        }
+
+        /**
+         * Perform a binary search.
+         *
+         * @param key triple to look for
+         * @return pointer to the first triple that is greater than key, or
+         *         end() if not found
+         */
+        template<class T=Triple>
+        const T* findUpper(const T& key) const {
+            return std::upper_bound(begin<T>(), end<T>(), key);
+        }
 
     private:
         Line*    prev_;    //!< previous line in the LRU list
