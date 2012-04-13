@@ -84,6 +84,7 @@ Store::~Store() {
 
 void Store::fetch(Value::id_t id, Value& val) {
     assert(id > 0);
+    assert(id <= valuesCount());
     // read mapping
     const unsigned EPP = PageReader::PAGE_SIZE / 8; // entries per page in map
     id--;
