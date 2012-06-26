@@ -50,16 +50,18 @@ public:
         return result;
     }
 
+    // FIXME: handle incomparible results
+
     /**
      * Compare two datetimes
      *
      * @param o second datetime
      * @return <0 if this < o, 0 if this == o and >0 if this > o
      */
-    int compare(const XSDDateTime& o) const { return rasqal_xsd_datetime_compare(val_, o.val_); }
+    int compare(const XSDDateTime& o) const { return rasqal_xsd_datetime_compare2(val_, o.val_, nullptr); }
 
-    bool operator==(const XSDDateTime& o) const { return  rasqal_xsd_datetime_equals(val_, o.val_); }
-    bool operator!=(const XSDDateTime& o) const { return !rasqal_xsd_datetime_equals(val_, o.val_); }
+    bool operator==(const XSDDateTime& o) const { return  rasqal_xsd_datetime_equals2(val_, o.val_, nullptr); }
+    bool operator!=(const XSDDateTime& o) const { return !rasqal_xsd_datetime_equals2(val_, o.val_, nullptr); }
     bool operator< (const XSDDateTime& o) const { return compare(o) <  0; }
     bool operator> (const XSDDateTime& o) const { return compare(o) >  0; }
     bool operator<=(const XSDDateTime& o) const { return compare(o) <= 0; }
