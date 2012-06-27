@@ -517,10 +517,9 @@ void NEqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
     /* In class CUSTOM, either two values are equal (and thus return false) or
      * the comparison produces a type error (making the constraint false).
      */
-    sub.add(new NotInRangeConstraint(x1,
-                    query_->store()->range(Value::CAT_OTHER)));
-    sub.add(new NotInRangeConstraint(x2,
-                    query_->store()->range(Value::CAT_OTHER)));
+    Value::id_t upper = query_->store()->range(Value::CAT_OTHER).from - 1;
+    sub.add(new ConstLEConstraint(x1, upper));
+    sub.add(new ConstLEConstraint(x2, upper));
     sub.add(new VarDiffConstraint(query_->store(), x1, x2));
 }
 void NEqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {

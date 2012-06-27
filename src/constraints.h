@@ -60,10 +60,7 @@ public:
     InRangeConstraint(cp::RDFVar* x, ValueRange rng)
         : Constraint(PRIOR_HIGH), x_(x), rng_(rng) {}
     bool post() {
-        x_->clearMarks();
-        for(Value::id_t id : rng_)
-            x_->mark(id);
-        return x_->restrictToMarks();
+        return x_->updateMin(rng_.from) && x_->updateMax(rng_.to);
     }
 
 private:
