@@ -23,6 +23,10 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+#ifdef CASTOR_CSTR_TIMING
+#include "constraints.h"
+#endif
+
 using namespace std;
 using namespace castor;
 
@@ -117,6 +121,13 @@ int main(int argc, char* argv[]) {
 
     cout << "Cache hit: " << store.statTripleCacheHits() << endl;
     cout << "Cache miss: " << store.statTripleCacheMisses() << endl;
+
+#ifdef CASTOR_CSTR_TIMING
+    cout << "TripleConstraint propagations: "
+         << TripleConstraint::count[0] << " (" << TripleConstraint::time[0] << "ms), "
+         << TripleConstraint::count[1] << " (" << TripleConstraint::time[1] << "ms), "
+         << TripleConstraint::count[2] << " (" << TripleConstraint::time[2] << "ms)" << endl;
+#endif
 
     return 0;
 }

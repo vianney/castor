@@ -26,6 +26,10 @@ option(CASTOR_NOFILTERS
        "Do not post filters as constraints, always perform post-processing"
        OFF)
 
+option(CASTOR_CSTR_TIMING
+       "Perform time measurements on some constraints (may affect performances)"
+       OFF)
+
 find_package(Raptor2 REQUIRED)
 find_package(Rasqal REQUIRED)
 

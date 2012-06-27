@@ -18,10 +18,16 @@
 #ifndef CASTOR_CONSTRAINTS_H
 #define CASTOR_CONSTRAINTS_H
 
+#include "config.h"
 #include "solver/constraint.h"
 #include "query.h"
 #include "expression.h"
 #include "pattern.h"
+
+#ifdef CASTOR_CSTR_TIMING
+#include <sys/time.h>
+#include <sys/resource.h>
+#endif
 
 namespace castor {
 
@@ -154,6 +160,11 @@ public:
     void restore();
     bool propagate();
 
+#ifdef CASTOR_CSTR_TIMING
+    static long time[3];
+    static long count[3];
+#endif
+
 private:
     Store* store_; //!< The store containing the triples
     TriplePattern pat_; //!< The triple pattern
@@ -162,6 +173,10 @@ private:
      * nullptr if the component is a fixed value.
      */
     cp::RDFVar* x_[TriplePattern::COMPONENTS];
+
+#ifdef CASTOR_CSTR_TIMING
+    static void addtime(int index, rusage &start);
+#endif
 };
 
 /**
