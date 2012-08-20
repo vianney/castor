@@ -140,6 +140,16 @@ void Store::lookup(Value& val) {
 
 ValueRange Store::eqClass(Value::id_t id) {
     assert(id > 0);
+    if(id < values_.categories[Value::CAT_BOOLEAN] ||
+       id >= values_.categories[Value::CAT_OTHER]) {
+        /* Categories BLANK, IRI, SIMPLE_LITERAL, TYPED_LITERAL and OTHER
+         * are always compared on lexical value. Their equivalence class is
+         * thus always a singleton.
+         */
+        ValueRange result = {id, id};
+        return result;
+    }
+
     id--;  // page offsets start with 0
     Cursor cur = db_.page(values_.eqClasses);
     ValueRange result;
