@@ -30,6 +30,7 @@ void usage() {
     cout << endl << "Switches:" << endl;
     cout << "  -i            Show general information" << endl;
     cout << "  -v ID         Show value with id ID" << endl;
+    cout << "  -s ID         Show string with id ID" << endl;
     exit(1);
 }
 
@@ -39,6 +40,7 @@ void error(const char* msg) {
 }
 
 void show_info(Store& store) {
+    cout << "Strings count: " << store.stringsCount() << endl;
     cout << "Values count: " << store.valuesCount() << endl;
     cout << "Triples count: " << store.triplesCount(Triple({0,0,0})) << endl;
 }
@@ -46,9 +48,29 @@ void show_info(Store& store) {
 void show_value(Store& store, Value::id_t id) {
     if(id < 1 || id > store.valuesCount())
         error("Invalid id");
-    Value val;
-    store.fetch(id, val);
-    cout << val << endl;
+    Value v = store.lookupValue(id);
+    v.ensureDirectStrings(store);
+    cout << v << endl;
+    cout << "Hash: " << hex << v.hash() << dec << endl;
+    cout << "Category: " << v.category();
+    if(v.isNumeric())
+        cout << " (" << v.numCategory() << ")";
+    cout << endl;
+    cout << "Lexical: " << v.lexical().id() << endl;
+    if(v.isTyped()) {
+        cout << "Datatype: " << v.datatypeId() << endl;
+        cout << "Datatype lex: " << v.datatypeLex().id() << endl;
+    } else if(v.isPlainWithLang()) {
+        cout << "Language tag: " << v.language().id() << endl;
+    }
+}
+
+void show_string(Store& store, String::id_t id) {
+    if(id < 1 || id > store.stringsCount())
+        error("Invalid id");
+    String s = store.lookupString(id);
+    cout << s << endl;
+    cout << "Hash: " << hex << s.hash() << dec << endl;
 }
 
 int main(int argc, char* argv[]) {
@@ -61,10 +83,11 @@ int main(int argc, char* argv[]) {
 
     optind = 2;
     int c;
-    while((c = getopt(argc, argv, "iv:")) != -1) {
+    while((c = getopt(argc, argv, "iv:s:")) != -1) {
         switch(c) {
-        case 'i': show_info (store);                 break;
-        case 'v': show_value(store, atoi(optarg));   break;
+        case 'i': show_info  (store);                break;
+        case 'v': show_value (store, atoi(optarg));  break;
+        case 's': show_string(store, atoi(optarg));  break;
         default: usage();
         }
     }

@@ -28,158 +28,361 @@
 #include "model.h"
 #include "util.h"
 #include "store.h"
-#include "store/readutils.h"
 
 #include "tempfile.h"
 #include "sort.h"
-#include "valuelookup.h"
+#include "lookup.h"
 #include "pagewriter.h"
 #include "btreebuilder.h"
 
 using namespace std;
 using namespace castor;
 
+namespace {
+
 ////////////////////////////////////////////////////////////////////////////////
 // RDF Parsing
 
 class RDFLoader : public librdf::RdfParseHandler {
 public:
-    RDFLoader(TempFile* rawTriples, TempFile* rawValues)
-            : triples(rawTriples), values(rawValues) {}
+    RDFLoader(TempFile* rawTriples, TempFile* rawStrings, TempFile* rawValues)
+        : triples(rawTriples), strings(rawStrings), values(rawValues) {
+        addURI(String("http://www.w3.org/2001/XMLSchema#string"));
+        addURI(String("http://www.w3.org/2001/XMLSchema#boolean"));
+        addURI(String("http://www.w3.org/2001/XMLSchema#integer"));
+        addURI(String("http://www.w3.org/2001/XMLSchema#double"));
+        addURI(String("http://www.w3.org/2001/XMLSchema#decimal"));
+        addURI(String("http://www.w3.org/2001/XMLSchema#dateTime"));
+    }
+
+    /**
+     * Add a URI to the set of values.
+     * @param iri lexical form
+     * @return a pair (early id of the IRI, early id of the lexical form)
+     */
+    std::pair<unsigned long, unsigned long> addURI(String uri) {
+        EarlyValue val;
+        val.fillURI(std::move(uri));
+        val.earlyLexical = strings.lookup(val.lexical());
+        return {values.lookup(val), val.earlyLexical};
+    }
+
+    /**
+     * Convert a raptor term to a raw value and write the resulting id.
+     * @param term
+     */
+    void writeValue(raptor_term* term) {
+        EarlyValue val(term);
+        if(val.isPlainWithLang()) {
+            val.earlyTag = strings.lookup(val.language());
+        } else if(val.isTyped()) {
+            std::pair<unsigned long, unsigned long> ids = addURI(val.datatypeLex());
+            val.earlyDatatype = ids.first;
+            val.earlyTag = ids.second;
+        }
+        val.earlyLexical = strings.lookup(val.lexical());
+        triples->writeVarInt(values.lookup(val));
+    }
 
     void parseTriple(raptor_statement* triple) {
-        Value subject  (triple->subject);
-        Value predicate(triple->predicate);
-        Value object   (triple->object);
-
-        uint64_t subjectId   = values.lookup(subject);
-        uint64_t predicateId = values.lookup(predicate);
-        uint64_t objectId    = values.lookup(object);
-
-        triples->writeBigInt(subjectId);
-        triples->writeBigInt(predicateId);
-        triples->writeBigInt(objectId);
+        writeValue(triple->subject);
+        writeValue(triple->predicate);
+        writeValue(triple->object);
     }
 
 private:
-    TempFile*   triples;
-    ValueLookup values;
+    TempFile*         triples;
+    Lookup<String>    strings;
+    Lookup<EarlyValue> values;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 // Dictionary building
 
-/**
- * Skip a (Value, int) pair
- */
-static void skipValueInt(Cursor& cur) {
-    cur.skipValue();
-    cur.skipBigInt();
-}
-
-/**
- * Skip a (int, int) pair
- */
-static void skipIntInt(Cursor& cur) {
-    cur.skipBigInt();
-    cur.skipBigInt();
-}
-
-/**
- * Compare function for values using SPARQL order
- */
-static int compareValue(Cursor a, Cursor b) {
-    Value va;  a.readValue(va);  va.ensureInterpreted();
-    Value vb;  b.readValue(vb);  vb.ensureInterpreted();
-    if(va == vb) {
-        return 0;
-    } else if(va < vb) {
-        return -1;
-    } else {
-        return 1;
-    }
-}
-
-/**
- * Compare two integers
- */
-static inline int cmpInt(uint64_t a, uint64_t b) {
+//! Compare two integers
+inline int cmpInt(unsigned long a, unsigned long b) {
     return a < b ? -1 : (a > b ? 1 : 0);
 }
 
+//! Compare function for big integers
+int compareVarInt(Cursor a, Cursor b) {
+    return cmpInt(a.readVarInt(), b.readVarInt());
+}
+
 /**
- * Compare function for integers
+ * Build the strings dictionary
+ *
+ * @param rawStrings (string, early id) mapping. Will be discarded
+ * @param strings will contain the sorted strings
+ * @param earlyMap will contain the (early id, id) mapping ordered by early id
+ * @param map will contain the sequence of offsets ordered by string id
+ *            (usable by StringResolver)
+ * @param hashes will contain a sequence of (hash, offset) pairs ordered by hash
+ * @param[out] count number of strings
  */
-static int compareBigInt(Cursor a, Cursor b) {
-    return cmpInt(a.readBigInt(), b.readBigInt());
+void buildStrings(TempFile& rawStrings, TempFile& strings, TempFile& earlyMap,
+                  TempFile& map, TempFile& hashes, unsigned& count) {
+    // sort strings
+    TempFile sortedStrings(rawStrings.baseName());
+    FileSorter::sort(rawStrings, sortedStrings,
+                     [](Cursor& cur) { String::skip(cur); cur.skipVarInt(); },
+                     [](Cursor a, Cursor b) { return String(a).compare(String(b)); });
+    rawStrings.discard();
+
+    // construct string list without duplicates, assign ids and remember mapping
+    TempFile rawEarlyMap(rawStrings.baseName());
+    TempFile rawHashes(rawStrings.baseName());
+    {
+        MMapFile in(sortedStrings.fileName().c_str());
+        String last;
+        unsigned long offset = 0;
+        for(Cursor cur = in.begin(); cur != in.end();) {
+            String s(cur);
+            unsigned long id = cur.readVarInt();
+            if(last.id() == 0 || s != last) {
+                s.id(last.id() + 1);
+                map.writeLong(offset);
+                rawHashes.writeInt(s.hash());
+                rawHashes.writeLong(offset);
+                offset += strings.writeBuffer(s.serialize());
+                last = s;
+            }
+            rawEarlyMap.writeVarInt(id);
+            rawEarlyMap.writeVarInt(last.id());
+        }
+        count = last.id();
+    }
+    rawEarlyMap.close();
+    sortedStrings.discard();
+
+    // sort the early map
+    FileSorter::sort(rawEarlyMap, earlyMap,
+                     [](Cursor& cur) { cur.skipVarInt(); cur.skipVarInt(); },
+                     compareVarInt);
+    rawEarlyMap.discard();
+
+    // sort the hashes map
+    FileSorter::sort(rawHashes, hashes,
+                     [](Cursor& cur) { cur.skipInt(); cur.skipLong(); },
+                     [](Cursor a, Cursor b) { return cmpInt(a.readInt(), b.readInt()); });
+    rawHashes.discard();
+}
+
+/**
+ * Resolve the ids of the strings of the values.
+ *
+ * @param rawValues early (TempValue, early id) mapping. Will be discarded.
+ * @param resolvedValues will contain the resolved (Value, type, id) mapping,
+ *                       but still with the early mapping for value ids
+ * @param stringMap file with (early id, id) mappings for strings
+ */
+void resolveStringIds(TempFile& rawValues, TempFile& resolvedValues,
+                      TempFile& stringMap) {
+    MMapFile map(stringMap.fileName().c_str());
+
+    // sort by lexical
+    TempFile sortedLexical(rawValues.baseName());
+    FileSorter::sort(rawValues, sortedLexical,
+                     [](Cursor& cur) { EarlyValue::skip(cur); cur.skipVarInt(); },
+                     [](Cursor a, Cursor b) { return cmpInt(EarlyValue(a).earlyLexical,
+                                                            EarlyValue(b).earlyLexical); });
+    rawValues.discard();
+
+    // resolve lexical
+    TempFile lexicalResolved(rawValues.baseName());
+    {
+        MMapFile f(sortedLexical.fileName().c_str());
+        unsigned long from = 0;
+        String::id_t  to   = 0;
+        Cursor mapCursor = map.begin();
+        for(Cursor cur = f.begin(); cur != f.end();) {
+            EarlyValue val(cur);
+            unsigned long id = cur.readVarInt();
+            while(from < val.earlyLexical) {
+                from = mapCursor.readVarInt();
+                to   = mapCursor.readVarInt();
+            }
+            val.lexical(String(to));
+            lexicalResolved.writeBuffer(val.serialize());
+            lexicalResolved.writeVarInt(id);
+        }
+    }
+    lexicalResolved.close();
+    sortedLexical.discard();
+
+    // sort by tag
+    TempFile sortedType(rawValues.baseName());
+    FileSorter::sort(lexicalResolved, sortedType,
+                     [](Cursor& cur) { EarlyValue::skip(cur); cur.skipVarInt(); },
+                     [](Cursor a, Cursor b) { return cmpInt(EarlyValue(a).earlyTag,
+                                                            EarlyValue(b).earlyTag); });
+    lexicalResolved.discard();
+
+    // resolve tag and write out Value structures
+    {
+        MMapFile f(sortedType.fileName().c_str());
+        unsigned long from = 0;
+        String::id_t  to   = 0;
+        Cursor mapCursor = map.begin();
+        for(Cursor cur = f.begin(); cur != f.end();) {
+            EarlyValue val(cur);
+            unsigned long id = cur.readVarInt();
+            while(from < val.earlyTag) {
+                from = mapCursor.readVarInt();
+                to   = mapCursor.readVarInt();
+            }
+            if(val.isPlainWithLang())
+                val.language(String(to));
+            else if(val.isTyped())
+                val.datatypeLex(String(to));
+            resolvedValues.writeBuffer(reinterpret_cast<Value*>(&val)->serialize());
+            resolvedValues.writeVarInt(val.earlyDatatype);
+            resolvedValues.writeVarInt(id);
+        }
+    }
+    sortedType.discard();
 }
 
 /**
  * Build the dictionary
  *
- * @param rawValues early (value, id) mapping. Will be discarded.
+ * @param rawValues early (value, type, id) mapping. Will be discarded.
  * @param values will contain the sorted values
- * @param valueIdMap will contain the (old id, new id) mapping ordered by
- *                   old id
+ * @param earlyMap will contain the (early id, id) mapping ordered by early id
+ * @param hashes will contain (hash, id) pairs ordered by hash
  * @param valueEqClasses will contain the equivalence classes boundaries
  * @param categories array that will contain the start ids for each category
  *                   (including virtual last class)
+ * @param resolver string resolver
  */
-static void buildDictionary(TempFile& rawValues, TempFile& values,
-                            TempFile& valueIdMap, TempFile& valueEqClasses,
-                            Value::id_t* categories) {
+void buildValues(TempFile& rawValues, TempFile& values, TempFile& earlyMap,
+                 TempFile& hashes, TempFile& valueEqClasses,
+                 Value::id_t* categories, StringMapper& resolver) {
     // sort values using SPARQL order
     TempFile sortedValues(rawValues.baseName());
-    FileSorter::sort(rawValues, sortedValues, skipValueInt, compareValue);
+    FileSorter::sort(rawValues, sortedValues,
+                     [](Cursor& cur) { Value::skip(cur); cur.skipVarInt(); cur.skipVarInt(); },
+                     [&resolver](Cursor a, Cursor b) {
+                         Value va(a);  va.ensureInterpreted(resolver);
+                         Value vb(b);  vb.ensureInterpreted(resolver);
+                         if(va == vb) return 0;
+                         else if(va < vb) return -1;
+                         else return 1;
+                     });
     rawValues.discard();
 
     for(Value::Category cat = Value::CAT_BLANK; cat <= Value::CATEGORIES; ++cat)
         categories[cat] = 0;
 
     // construct values list without duplicates and remember mappings
+    // outputs (type, Value) pairs
+    TempFile valuesType(rawValues.baseName());
     TempFile rawMap(rawValues.baseName());
     {
         MMapFile in(sortedValues.fileName().c_str());
         Value last;
+        last.id(0);
         unsigned eqBuf = 0, eqShift = 0;
-        for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
-            Value val;
-            cur.readValue(val);
-            uint64_t id = cur.readBigInt();
-            val.ensureInterpreted();
-            if(last.id == 0 || last != val) {
-                val.id = last.id + 1;
-                values.writeValue(val);
-                eqBuf |= (last.id != 0 && last.compare(val) == 0 ? 0 : 1) << (eqShift++);
+        for(Cursor cur = in.begin(); cur != in.end();) {
+            Value val(cur);
+            unsigned long type = cur.readVarInt();
+            unsigned long id = cur.readVarInt();
+            val.ensureInterpreted(resolver);
+            if(!last.validId() || last != val) {
+                val.id(last.id() + 1);
+                assert(val.validId());
+                valuesType.writeVarInt(type);
+                valuesType.writeBuffer(val.serialize());
+                eqBuf |= (last.validId() && last.compare(val) == 0 ? 0 : 1) << (eqShift++);
                 if(eqShift == 32) {
                     valueEqClasses.writeInt(eqBuf);
                     eqBuf = 0;
                     eqShift = 0;
                 }
-                if(last.id == 0 || last.category() != val.category())
-                    categories[val.category()] = val.id;
+                if(!last.validId() || last.category() != val.category())
+                    categories[val.category()] = val.id();
                 last = std::move(val);
             }
-            rawMap.writeBigInt(id);
-            rawMap.writeBigInt(last.id);
+            rawMap.writeVarInt(id);
+            rawMap.writeVarInt(last.id());
         }
         // terminate equivalence classes boundaries
         eqBuf |= 1 << eqShift;
         valueEqClasses.writeInt(eqBuf);
         // terminate class starts
-        categories[Value::CATEGORIES] = last.id + 1;
+        categories[Value::CATEGORIES] = last.id() + 1;
         for(Value::Category cat = static_cast<Value::Category>(Value::CATEGORIES);
             cat >= Value::CAT_BLANK; --cat) {
             if(categories[cat] == 0)
                 categories[cat] = categories[cat + 1];
         }
     }
+    valuesType.close();
     rawMap.close();
     sortedValues.discard();
 
     // sort the id map
-    FileSorter::sort(rawMap, valueIdMap, skipIntInt, compareBigInt);
+    FileSorter::sort(rawMap, earlyMap,
+                     [](Cursor& cur) { cur.skipVarInt(); cur.skipVarInt(); },
+                     compareVarInt);
     rawMap.discard();
+
+    // sort values by type
+    TempFile sortedValuesType(rawValues.baseName());
+    FileSorter::sort(valuesType, sortedValuesType,
+                     [](Cursor& cur) { cur.skipVarInt(); Value::skip(cur); },
+                     compareVarInt);
+    valuesType.discard();
+
+    // resolve datatypes and write hashes
+    TempFile resolvedValues(rawValues.baseName());
+    TempFile rawHashes(rawValues.baseName());
+    {
+        MMapFile in(sortedValuesType.fileName().c_str());
+        MMapFile map(earlyMap.fileName().c_str());
+        unsigned long from = 0;
+        Value::id_t   to   = 0;
+        Cursor mapCursor = map.begin();
+        for(Cursor cur = in.begin(); cur != in.end();) {
+            unsigned long type = cur.readVarInt();
+            Value val(cur);
+            assert(val.validId());
+            val.ensureDirectStrings(resolver);
+            while(from < type) {
+                from = mapCursor.readVarInt();
+                to   = mapCursor.readVarInt();
+            }
+            assert(from == type);
+            if(type != 0) {
+                assert(to > 0);
+                val.datatypeId(to);
+            }
+            resolvedValues.writeBuffer(val.serialize());
+            // TODO: check hash function, lookup strings?
+            rawHashes.writeInt(val.hash());
+            rawHashes.writeInt(val.id());
+        }
+    }
+    sortedValuesType.discard();
+
+    // final sort of the values
+    // There is no need here to interpret the values, as they all have valid ids.
+    FileSorter::sort(resolvedValues, values,
+                     [](Cursor& cur) { Value::skip(cur); },
+                     [](Cursor a, Cursor b) {
+                         Value va(a);
+                         Value vb(b);
+                         if(va == vb) return 0;
+                         else if(va < vb) return -1;
+                         else return 1;
+                     });
+    resolvedValues.discard();
+
+    // sort hashes
+    FileSorter::sort(rawHashes, hashes,
+                     [](Cursor& cur) { cur.skipInt(); cur.skipInt(); },
+                     [](Cursor a, Cursor b) { return cmpInt(a.readInt(), b.readInt()); });
+    rawHashes.discard();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -188,22 +391,22 @@ static void buildDictionary(TempFile& rawValues, TempFile& values,
 /**
  * Skip a (int, int, int) triple
  */
-static void skipTriple(Cursor& cur) {
-    cur.skipBigInt();
-    cur.skipBigInt();
-    cur.skipBigInt();
+void skipTriple(Cursor& cur) {
+    cur.skipVarInt();
+    cur.skipVarInt();
+    cur.skipVarInt();
 }
 
 /**
  * Compare function for triples using the specified component order
  */
 template <int C1=0, int C2=1, int C3=2>
-static int compareTriple(Cursor a, Cursor b) {
-    BasicTriple<uint64_t> ta, tb;
+int compareTriple(Cursor a, Cursor b) {
+    BasicTriple<unsigned long> ta, tb;
     for(int i = 0; i < ta.COMPONENTS; i++)
-        ta[i] = a.readBigInt();
+        ta[i] = a.readVarInt();
     for(int i = 0; i < tb.COMPONENTS; i++)
-        tb[i] = b.readBigInt();
+        tb[i] = b.readVarInt();
     int c = cmpInt(ta[C1], tb[C1]);
     if(c)
         return c;
@@ -218,31 +421,32 @@ static int compareTriple(Cursor a, Cursor b) {
  *
  * @param in the triples with old ids for the first component. Will be discarded.
  * @param out will contain the triples with the new ids and components shifted
- * @param map file with (old id, new id) mappings
+ * @param map file with (early id, id) value mappings
  */
-static void resolveIdsComponent(TempFile& in, TempFile& out, MMapFile& map) {
+void resolveIdsComponent(TempFile& in, TempFile& out, MMapFile& map) {
     // sort by first component
     TempFile sorted(in.baseName());
-    FileSorter::sort(in, sorted, skipTriple, compareBigInt);
+    FileSorter::sort(in, sorted, skipTriple, compareVarInt);
     in.discard();
 
     // resolve first component and shift components
     {
         MMapFile f(sorted.fileName().c_str());
-        uint64_t from = 0;
-        uint64_t to   = 0;
+        unsigned long from = 0;
+        Value::id_t   to   = 0;
         Cursor mapCursor = map.begin();
         for(Cursor cur = f.begin(), end = f.end(); cur != end;) {
-            BasicTriple<uint64_t> t;
+            BasicTriple<unsigned long> t;
             for(int i = 0; i < t.COMPONENTS; i++)
-                t[i] = cur.readBigInt();
+                t[i] = cur.readVarInt();
             while(from < t[0]) {
-                from = mapCursor.readBigInt();
-                to   = mapCursor.readBigInt();
+                from = mapCursor.readVarInt();
+                to   = mapCursor.readVarInt();
             }
+            assert(to > 0);
             for(int i = 1; i < t.COMPONENTS; i++)
-                out.writeBigInt(t[i]);
-            out.writeBigInt(to);
+                out.writeVarInt(t[i]);
+            out.writeVarInt(to);
         }
     }
     sorted.discard();
@@ -253,10 +457,10 @@ static void resolveIdsComponent(TempFile& in, TempFile& out, MMapFile& map) {
  *
  * @param rawTriples the triples with old ids. Will be discarded.
  * @param triples will contain the triples with the new ids
- * @param idMap file with (old id, new id) mappings
+ * @param valueMap file with (early id, id) value mappings
  */
-static void resolveIds(TempFile& rawTriples, TempFile& triples, TempFile& idMap) {
-    MMapFile map(idMap.fileName().c_str());
+void resolveIds(TempFile& rawTriples, TempFile& triples, TempFile& valueMap) {
+    MMapFile map(valueMap.fileName().c_str());
 
     // resolve subjects
     TempFile subjectResolved(rawTriples.baseName());
@@ -298,12 +502,21 @@ struct StoreBuilder {
     unsigned fullyAggregated[Triple::COMPONENTS];
 
     /**
+     * Strings
+     */
+    struct {
+        unsigned count;      //!< number of strings
+        unsigned begin;      //!< first page of table
+        unsigned mapping;    //!< first page of mapping
+        unsigned index;      //!< index (hash->offset mapping)
+    } strings;
+
+    /**
      * Values
      */
     struct {
         unsigned begin;     //!< first page of table
-        unsigned mapping;   //!< first page of mapping
-        unsigned index;     //!< index (hash->page mapping)
+        unsigned index;     //!< index (hash->id mapping)
         unsigned eqClasses; //!< first page of equivalence classes boundaries
 
         //! first id of each category
@@ -345,8 +558,8 @@ struct WriteTriple : public Triple {
  * @param order order defined by the template parameters
  */
 template<int C1, int C2, int C3>
-static void storeFullTriples(StoreBuilder& b, TempFile& triples,
-                             TripleOrder order) {
+void storeFullTriples(StoreBuilder& b, TempFile& triples,
+                      TripleOrder order) {
     b.triples[static_cast<int>(order)].begin = b.w.page();
 
     unsigned count = 0;
@@ -358,8 +571,10 @@ static void storeFullTriples(StoreBuilder& b, TempFile& triples,
         for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
             // Read triple and reorder
             WriteTriple t;
-            for(int i = 0; i < t.COMPONENTS; i++)
-                t[i] = static_cast<Value::id_t>(cur.readBigInt());
+            for(int i = 0; i < t.COMPONENTS; i++) {
+                t[i] = static_cast<Value::id_t>(cur.readVarInt());
+                assert(t[i] > 0);
+            }
             t = t.reorder<C1,C2,C3>();
 
             // Compute encoded length
@@ -461,8 +676,8 @@ struct WriteAggregatedTriple : public AggregatedTriple {
  * @param order order of the triples
  */
 template<int C1, int C2, int C3>
-static void storeAggregatedTriples(StoreBuilder& b, TempFile& triples,
-                                   TripleOrder order) {
+void storeAggregatedTriples(StoreBuilder& b, TempFile& triples,
+                            TripleOrder order) {
     BTreeBuilder<WriteAggregatedTriple> tb(&b.w);
     // Construct leaves
     {
@@ -472,14 +687,14 @@ static void storeAggregatedTriples(StoreBuilder& b, TempFile& triples,
             // Read triples, reorder and count
             WriteAggregatedTriple t;
             for(int i = 0; i < t.COMPONENTS; i++)
-                t[i] = static_cast<Value::id_t>(cur.readBigInt());
+                t[i] = static_cast<Value::id_t>(cur.readVarInt());
             t = t.reorder<C1,C2,C3>();
             t[2] = 1;
             while(cur != end) {
                 Cursor backup = cur;
                 Triple t2;
                 for(int i = 0; i < t2.COMPONENTS; i++)
-                    t2[i] = static_cast<Value::id_t>(cur.readBigInt());
+                    t2[i] = static_cast<Value::id_t>(cur.readVarInt());
                 t2 = t2.reorder<C1,C2,C3>();
                 if(t2[0] == t[0] && t2[1] == t[1]) {
                     ++t[2];
@@ -573,7 +788,7 @@ struct WriteFullyAggregatedTriple : public FullyAggregatedTriple {
  * @param triples file with triples
  */
 template<int C1, int C2, int C3>
-static void storeFullyAggregatedTriples(StoreBuilder& b, TempFile& triples) {
+void storeFullyAggregatedTriples(StoreBuilder& b, TempFile& triples) {
     BTreeBuilder<WriteAggregatedTriple> tb(&b.w);
     // Construct leaves
     {
@@ -583,14 +798,14 @@ static void storeFullyAggregatedTriples(StoreBuilder& b, TempFile& triples) {
             // Read triples, reorder and count
             WriteFullyAggregatedTriple t;
             for(int i = 0; i < Triple::COMPONENTS; i++)
-                t[i] = static_cast<Value::id_t>(cur.readBigInt());
+                t[i] = static_cast<Value::id_t>(cur.readVarInt());
             t = t.reorder<C1,C2,C3>();
             t[1] = 1;
             while(cur != end) {
                 Cursor backup = cur;
                 Triple t2;
                 for(int i = 0; i < t2.COMPONENTS; i++)
-                    t2[i] = static_cast<Value::id_t>(cur.readBigInt());
+                    t2[i] = static_cast<Value::id_t>(cur.readVarInt());
                 t2 = t2.reorder<C1,C2,C3>();
                 if(t2[0] == t[0]) {
                     ++t[1];
@@ -648,9 +863,9 @@ static void storeFullyAggregatedTriples(StoreBuilder& b, TempFile& triples) {
  * @param fullyAggregated if true, also generate fully aggregated triples
  */
 template<int C1=0, int C2=1, int C3=2>
-static void storeTriplesOrder(StoreBuilder& b, TempFile& triples,
-                              TripleOrder order,
-                              bool fullyAggregated) {
+void storeTriplesOrder(StoreBuilder& b, TempFile& triples,
+                       TripleOrder order,
+                       bool fullyAggregated) {
     storeFullTriples<C1,C2,C3>(b, triples, order);
     storeAggregatedTriples<C1,C2,C3>(b, triples, order);
     if(fullyAggregated)
@@ -666,9 +881,9 @@ static void storeTriplesOrder(StoreBuilder& b, TempFile& triples,
  * @param fullyAggregated if true, also generate fully aggregated triples
  */
 template<int C1, int C2, int C3>
-static void storeTriplesOrderSorted(StoreBuilder& b, TempFile& triples,
-                                    TripleOrder order,
-                                    bool fullyAggregated) {
+void storeTriplesOrderSorted(StoreBuilder& b, TempFile& triples,
+                             TripleOrder order,
+                             bool fullyAggregated) {
     TempFile sorted(triples.baseName());
     FileSorter::sort(triples, sorted, skipTriple, compareTriple<C1,C2,C3>);
     storeTriplesOrder<C1,C2,C3>(b, sorted, order, fullyAggregated);
@@ -680,7 +895,7 @@ static void storeTriplesOrderSorted(StoreBuilder& b, TempFile& triples,
  * @param b store builder
  * @param triples file with triples. Will be discarded.
  */
-static void storeTriples(StoreBuilder& b, TempFile& triples) {
+void storeTriples(StoreBuilder& b, TempFile& triples) {
     storeTriplesOrder             (b, triples, TripleOrder::SPO, true);
     storeTriplesOrderSorted<0,2,1>(b, triples, TripleOrder::SOP, false);
     storeTriplesOrderSorted<1,0,2>(b, triples, TripleOrder::PSO, true);
@@ -691,164 +906,74 @@ static void storeTriples(StoreBuilder& b, TempFile& triples) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Storing values
+// Storing strings
 
-/**
- * Store the raw values
- *
- * @param b store builder
- * @param values file with ordered values. Will be discarded.
- * @param loc will contain (hash, page, offset) triple for each value
- */
-static void storeValuesRaw(StoreBuilder& b, TempFile& values, TempFile& loc) {
-    const unsigned HEADER_SIZE = 8;
-    b.values.begin = b.w.page();
+struct WriteHashKey : public HashKey {
+    WriteHashKey() = default;
+    WriteHashKey(Hash::hash_t hash) : HashKey(hash) {}
 
-    MMapFile in(values.fileName().c_str());
-    b.w.skip(HEADER_SIZE); // skip header (next page, count)
-    unsigned count = 0;
-    for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
-        Hash::hash_t hash = cur.peekValueHash();
-        unsigned len = cur.peekValueSize();
-        Cursor data = cur;
-        cur += len;
-
-        // full page?
-        if(len > b.w.remaining()) {
-            b.w.writeInt(b.w.page()+1, 0);
-            b.w.writeInt(count, 4);
-            b.w.flush();
-            count = 0;
-            b.w.skip(HEADER_SIZE);
-        }
-
-        if(len > b.w.remaining()) {
-            // overlong value
-            unsigned pages = (HEADER_SIZE + len + PageWriter::PAGE_SIZE - 1)
-                             / PageWriter::PAGE_SIZE;
-
-            // write location
-            loc.writeBigInt(hash);
-            loc.writeBigInt(b.w.page());
-            loc.writeBigInt(b.w.offset());
-
-            // first page
-            b.w.writeInt(b.w.page() + pages, 0);
-            b.w.writeInt(1, 4);
-            data += b.w.remaining();
-            len -= b.w.remaining();
-            b.w.write(data.get() - b.w.remaining(), b.w.remaining());
-            b.w.flush();
-
-            // intermediate pages
-            while(len > PageWriter::PAGE_SIZE) {
-                b.w.directWrite(data.get());
-                data += PageWriter::PAGE_SIZE;
-                len -= PageWriter::PAGE_SIZE;
-            }
-
-            // last page
-            if(len > 0) {
-                b.w.write(data.get(), len);
-                b.w.flush(); // needed to pad with zeros
-            }
-        } else {
-            // normal case
-
-            // write location
-            loc.writeBigInt(hash);
-            loc.writeBigInt(b.w.page());
-            loc.writeBigInt(b.w.offset());
-
-            // write value
-            b.w.write(data.get(), len);
-
-            count++;
-        }
-    }
-
-    // last page
-    b.w.writeInt(0, 0);
-    b.w.writeInt(count, 4);
-    b.w.flush();
-
-    values.discard();
-}
-
-/**
- * Store the value mappings
- *
- * @param b store builder
- * @param loc file with (hash, page, offset) triple of each value
- */
-static void storeValuesMapping(StoreBuilder& b, TempFile& loc) {
-    b.values.mapping = b.w.page();
-
-    MMapFile in(loc.fileName().c_str());
-    for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
-        cur.skipBigInt(); // skip hash
-        unsigned page = cur.readBigInt();
-        unsigned offset = cur.readBigInt();
-
-        if(b.w.remaining() < 8)
-            b.w.flush();
-
-        b.w.writeInt(page);
-        b.w.writeInt(offset);
-    }
-
-    b.w.flush();
-}
-
-struct WriteValueHashKey : public ValueHashKey {
     void write(PageWriter& writer) const { writer.writeInt(hash); }
 };
 
 /**
- * Store the values index
+ * Store the strings
  *
  * @param b store builder
- * @param loc file with (hash, page, offset) triple of each value.
- *            Will be discarded.
+ * @param strings sequence of Strings ordered by id. Will be discarded.
+ * @param map sequence of offsets ordered by id. Will be discarded.
+ * @param hashes sequence of (hash, offset) pairs ordered by hash. Will be
+ *               discarded.
+ * @param stringsCount the number of strings
  */
-static void storeValuesIndex(StoreBuilder& b, TempFile& loc) {
-    TempFile sorted(loc.baseName());
-    FileSorter::sort(loc, sorted, skipTriple, compareBigInt);
-    loc.discard();
+void storeStrings(StoreBuilder& b, TempFile& strings, TempFile& map,
+                  TempFile& hashes, unsigned stringsCount) {
+    b.strings.count = stringsCount;
 
-    const unsigned SUBHEADER_SIZE = 4; // additional header size
-    const unsigned ENTRY_SIZE = 8; // size of an entry
+    // Store table
+    b.strings.begin = b.w.page();
+    {
+        MMapFile f(strings.fileName().c_str());
+        b.w.directWrite(f.begin().get(), f.size());
+    }
+    strings.discard();
 
-    BTreeBuilder<WriteValueHashKey> tb(&b.w);
-    std::vector<unsigned> pages;
-    MMapFile in(sorted.fileName().c_str());
-    WriteValueHashKey last;
+    // Store mapping
+    b.strings.mapping = b.w.page();
+    {
+        MMapFile f(map.fileName().c_str());
+        b.w.directWrite(f.begin().get(), f.size());
+    }
+    map.discard();
+
+    // Store hashmap
+    const std::size_t SUBHEADER_SIZE = 4; // additional header size
+    const std::size_t ENTRY_SIZE = 12; // size of an entry
+
+    BTreeBuilder<WriteHashKey> tb(&b.w);
+    std::vector<std::size_t> offsets;
+    MMapFile in(hashes.fileName().c_str());
+    WriteHashKey last;
     unsigned count = 0;
     tb.beginLeaf();
-    unsigned countOffset = b.w.offset(); // offset of count header
+    std::size_t countOffset = b.w.offset(); // offset of count header
     b.w.skip(SUBHEADER_SIZE); // keep room for count
-    unsigned headerSize = b.w.offset(); // full header size
-    for(Cursor cur = in.begin(), end = in.end(); cur != end;) {
+    std::size_t headerSize = b.w.offset(); // full header size
+    for(Cursor cur = in.begin(); cur != in.end();) {
         // collect identical hash values
-        Hash::hash_t hash = cur.readBigInt();
-        pages.push_back(cur.readBigInt());
-        cur.skipBigInt(); // skip offset
-        while(cur != end) {
-            Cursor oldcur = cur;
-            if(cur.readBigInt() == hash) {
-                pages.push_back(cur.readBigInt());
-                cur.skipBigInt(); // skip offset
-            } else {
-                cur = oldcur;
+        Hash::hash_t hash = cur.readInt();
+        offsets.push_back(cur.readLong());
+        while(cur != in.end()) {
+            if(cur.peekInt() != hash)
                 break;
-            }
+            cur.skipInt();
+            offsets.push_back(cur.readLong());
         }
 
         // start new page?
-        if(ENTRY_SIZE * pages.size() > b.w.remaining()) {
-            if(headerSize + ENTRY_SIZE * pages.size() > PageWriter::PAGE_SIZE) {
+        if(ENTRY_SIZE * offsets.size() > b.w.remaining()) {
+            if(headerSize + ENTRY_SIZE * offsets.size() > PageWriter::PAGE_SIZE) {
                 // too big for any page
-                throw CastorException() << "Too many collisions in hash table";
+                throw CastorException() << "Too many collisions in strings hash table";
             }
             // flush page
             b.w.writeInt(count, countOffset);
@@ -858,14 +983,98 @@ static void storeValuesIndex(StoreBuilder& b, TempFile& loc) {
             b.w.skip(SUBHEADER_SIZE);
         }
 
-        for(unsigned page : pages) {
+        for(unsigned long offset : offsets) {
             b.w.writeInt(hash);
-            b.w.writeInt(page);
+            b.w.writeLong(offset);
             count++;
         }
 
-        last.hash = hash;
-        pages.clear();
+        last = hash;
+        offsets.clear();
+    }
+
+    // flush last page
+    b.w.writeInt(count, countOffset);
+    tb.endLeaf(last);
+
+    b.strings.index = tb.constructTree();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Storing values
+
+/**
+ * Store the values
+ *
+ * @param b store builder
+ * @param values file with ordered values. Will be discarded.
+ * @param hashes file with (hash, id) pairs ordered by hash. Will be discarded.
+ * @param eqClasses value equivalence classes boundaries. Will be discarded.
+ */
+void storeValues(StoreBuilder& b, TempFile& values, TempFile& hashes,
+                 TempFile& eqClasses) {
+    // Store table
+    b.values.begin = b.w.page();
+    {
+        MMapFile f(values.fileName().c_str());
+        b.w.directWrite(f.begin().get(), f.size());
+    }
+    values.discard();
+
+    // Store eqClasses
+    b.values.eqClasses = b.w.page();
+    {
+        MMapFile f(eqClasses.fileName().c_str());
+        b.w.directWrite(f.begin().get(), f.size());
+    }
+    eqClasses.discard();
+
+    // Store hashmap
+    const unsigned SUBHEADER_SIZE = 4; // additional header size
+    const unsigned ENTRY_SIZE = 8; // size of an entry
+
+    BTreeBuilder<WriteHashKey> tb(&b.w);
+    std::vector<Value::id_t> ids;
+    MMapFile in(hashes.fileName().c_str());
+    WriteHashKey last;
+    unsigned count = 0;
+    tb.beginLeaf();
+    std::size_t countOffset = b.w.offset(); // offset of count header
+    b.w.skip(SUBHEADER_SIZE); // keep room for count
+    std::size_t headerSize = b.w.offset(); // full header size
+    for(Cursor cur = in.begin(); cur != in.end();) {
+        // collect identical hash values
+        Hash::hash_t hash = cur.readInt();
+        ids.push_back(cur.readInt());
+        while(cur != in.end()) {
+            if(cur.peekInt() != hash)
+                break;
+            cur.skipInt();
+            ids.push_back(cur.readInt());
+        }
+
+        // start new page?
+        if(ENTRY_SIZE * ids.size() > b.w.remaining()) {
+            if(headerSize + ENTRY_SIZE * ids.size() > PageWriter::PAGE_SIZE) {
+                // too big for any page
+                throw CastorException() << "Too many collisions in value hash table";
+            }
+            // flush page
+            b.w.writeInt(count, countOffset);
+            tb.endLeaf(last);
+            count = 0;
+            tb.beginLeaf();
+            b.w.skip(SUBHEADER_SIZE);
+        }
+
+        for(unsigned id : ids) {
+            b.w.writeInt(hash);
+            b.w.writeInt(id);
+            count++;
+        }
+
+        last = hash;
+        ids.clear();
     }
 
     // flush last page
@@ -873,47 +1082,6 @@ static void storeValuesIndex(StoreBuilder& b, TempFile& loc) {
     tb.endLeaf(last);
 
     b.values.index = tb.constructTree();
-}
-
-/**
- * Store the values equivalence classes boundaries
- *
- * @param b store builder
- * @param valueEqClasses file with the boundaries
- */
-static void storeValuesEqClasses(StoreBuilder& b, TempFile& valueEqClasses) {
-    b.values.eqClasses = b.w.page();
-
-    MMapFile in(valueEqClasses.fileName().c_str());
-    Cursor cur = in.begin();
-    unsigned len = in.end() - cur;
-    while(len > PageWriter::PAGE_SIZE) {
-        b.w.directWrite(cur.get());
-        cur += PageWriter::PAGE_SIZE;
-        len -= PageWriter::PAGE_SIZE;
-    }
-
-    if(len > 0) {
-        b.w.write(cur.get(), len);
-        b.w.flush();
-    }
-}
-
-/**
- * Store the values
- *
- * @param b store builder
- * @param values file with ordered values. Will be discarded.
- * @param valueEqClasses value equivalence classes boundaries
- */
-static void storeValues(StoreBuilder& b, TempFile& values,
-                        TempFile& valueEqClasses) {
-    TempFile loc(values.baseName());
-    storeValuesRaw(b, values, loc);
-    loc.close();
-    storeValuesMapping(b, loc);
-    storeValuesIndex(b, loc);
-    storeValuesEqClasses(b, valueEqClasses);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -924,7 +1092,7 @@ static void storeValues(StoreBuilder& b, TempFile& values,
  *
  * @param b store builder
  */
-static void storeHeader(StoreBuilder& b) {
+void storeHeader(StoreBuilder& b) {
     b.w.seek(0);
 
     // Magic number
@@ -947,9 +1115,14 @@ static void storeHeader(StoreBuilder& b) {
     for(int i = 0; i < Triple::COMPONENTS; i++)
         b.w.writeInt(b.fullyAggregated[i]);
 
+    // Strings
+    b.w.writeInt(b.strings.count);
+    b.w.writeInt(b.strings.begin);
+    b.w.writeInt(b.strings.mapping);
+    b.w.writeInt(b.strings.index);
+
     // Values
     b.w.writeInt(b.values.begin);
-    b.w.writeInt(b.values.mapping);
     b.w.writeInt(b.values.index);
     b.w.writeInt(b.values.eqClasses);
     for(Value::Category cat = Value::CAT_BLANK; cat <= Value::CATEGORIES; ++cat)
@@ -957,6 +1130,8 @@ static void storeHeader(StoreBuilder& b) {
 
     b.w.flush();
 }
+
+} // end of anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 // Program entry point
@@ -998,27 +1173,53 @@ int main(int argc, char* argv[]) {
 
 
     cout << "Parsing RDF..." << endl;
-    TempFile rawTriples(dbpath), rawValues(dbpath);
+    TempFile rawTriples(dbpath), rawStrings(dbpath), rawValues(dbpath);
     {
         librdf::RdfParser parser(syntax, rdfpath);
-        RDFLoader loader(&rawTriples, &rawValues);
+        RDFLoader loader(&rawTriples, &rawStrings, &rawValues);
         parser.parse(&loader);
     }
     rawTriples.close();
+    rawStrings.close();
     rawValues.close();
 
-    cout << "Building value dictionary..." << endl;
-    TempFile values(dbpath), valueIdMap(dbpath), valueEqClasses(dbpath);
-    Value::id_t categories[Value::CATEGORIES + 1];
-    buildDictionary(rawValues, values, valueIdMap, valueEqClasses, categories);
-    values.close();
-    valueIdMap.close();
-    valueEqClasses.close();
+    cout << "Building strings..." << endl;
+    unsigned stringsCount;
+    TempFile strings(dbpath), stringsEarlyMap(dbpath),
+             stringsMap(dbpath), stringsHashes(dbpath);
+    buildStrings(rawStrings, strings, stringsEarlyMap,
+                 stringsMap, stringsHashes, stringsCount);
+    strings.close();
+    stringsEarlyMap.close();
+    stringsMap.close();
+    stringsHashes.close();
 
-    cout << "Resolving ids..." << endl;
+    cout << "Resolving string ids in values..." << endl;
+    TempFile resolvedValues(dbpath);
+    resolveStringIds(rawValues, resolvedValues, stringsEarlyMap);
+    stringsEarlyMap.discard();
+    resolvedValues.close();
+
+    cout << "Building values..." << endl;
+    TempFile values(dbpath), valuesEarlyMap(dbpath), valuesHashes(dbpath),
+             valuesEqClasses(dbpath);
+    Value::id_t categories[Value::CATEGORIES + 1];
+    {
+        MMapFile fStrings(strings.fileName().c_str()),
+                 fMap(stringsMap.fileName().c_str());
+        StringMapper resolver(fStrings.begin(), fMap.begin());
+        buildValues(resolvedValues, values, valuesEarlyMap, valuesHashes,
+                    valuesEqClasses, categories, resolver);
+    }
+    values.close();
+    valuesEarlyMap.close();
+    valuesHashes.close();
+    valuesEqClasses.close();
+
+    cout << "Resolving value ids in triples..." << endl;
     TempFile triples(dbpath);
-    resolveIds(rawTriples, triples, valueIdMap);
-    valueIdMap.discard();
+    resolveIds(rawTriples, triples, valuesEarlyMap);
+    valuesEarlyMap.discard();
     triples.close();
 
 
@@ -1029,8 +1230,11 @@ int main(int argc, char* argv[]) {
     cout << "Storing triples..." << endl;
     storeTriples(b, triples);
 
+    cout << "Storing strings..." << endl;
+    storeStrings(b, strings, stringsMap, stringsHashes, stringsCount);
+
     cout << "Storing values..." << endl;
-    storeValues(b, values, valueEqClasses);
+    storeValues(b, values, valuesHashes, valuesEqClasses);
 
     cout << "Storing header..." << endl;
     storeHeader(b);

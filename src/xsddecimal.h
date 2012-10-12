@@ -69,7 +69,7 @@ public:
     /**
      * @return lexical form of the decimal
      */
-    std::string getString() {
+    std::string getString() const {
         size_t n;
         char* str = rasqal_xsd_decimal_as_counted_string(val_, &n);
         return std::string(str, n);
@@ -78,12 +78,12 @@ public:
     /**
      * @return value as floating point number (may loose precision)
      */
-    double getFloat() { return rasqal_xsd_decimal_get_double(val_); }
+    double getFloat() const { return rasqal_xsd_decimal_get_double(val_); }
 
     /**
      * @return whether this value is zero
      */
-    bool isZero() { return rasqal_xsd_decimal_is_zero(val_); }
+    bool isZero() const { return rasqal_xsd_decimal_is_zero(val_); }
 
     /**
      * Compare two decimal numbers
@@ -91,40 +91,40 @@ public:
      * @param o second decimal
      * @return <0 if this < o, 0 if this == o and >0 if this > o
      */
-    int compare(const XSDDecimal& o) { return rasqal_xsd_decimal_compare(val_, o.val_); }
+    int compare(const XSDDecimal& o) const { return rasqal_xsd_decimal_compare(val_, o.val_); }
 
-    bool operator==(const XSDDecimal& o) { return rasqal_xsd_decimal_equals(val_, o.val_); }
-    bool operator!=(const XSDDecimal& o) { return !rasqal_xsd_decimal_equals(val_, o.val_); }
-    bool operator<(const XSDDecimal& o) { return compare(o) < 0; }
-    bool operator>(const XSDDecimal& o) { return compare(o) > 0; }
-    bool operator<=(const XSDDecimal& o) { return compare(o) <= 0; }
-    bool operator>=(const XSDDecimal& o) { return compare(o) >= 0; }
+    bool operator==(const XSDDecimal& o) const { return rasqal_xsd_decimal_equals(val_, o.val_); }
+    bool operator!=(const XSDDecimal& o) const { return !rasqal_xsd_decimal_equals(val_, o.val_); }
+    bool operator<(const XSDDecimal& o) const { return compare(o) < 0; }
+    bool operator>(const XSDDecimal& o) const { return compare(o) > 0; }
+    bool operator<=(const XSDDecimal& o) const { return compare(o) <= 0; }
+    bool operator>=(const XSDDecimal& o) const { return compare(o) >= 0; }
 
-    XSDDecimal* negate() {
+    XSDDecimal* negate() const {
         XSDDecimal* result = new XSDDecimal();
         rasqal_xsd_decimal_negate(result->val_, val_);
         return result;
     }
 
-    XSDDecimal* add(const XSDDecimal& o) {
+    XSDDecimal* add(const XSDDecimal& o) const {
         XSDDecimal* result = new XSDDecimal();
         rasqal_xsd_decimal_add(result->val_, val_, o.val_);
         return result;
     }
 
-    XSDDecimal* substract(const XSDDecimal& o) {
+    XSDDecimal* substract(const XSDDecimal& o) const {
         XSDDecimal* result = new XSDDecimal();
         rasqal_xsd_decimal_subtract(result->val_, val_, o.val_);
         return result;
     }
 
-    XSDDecimal* multiply(const XSDDecimal& o) {
+    XSDDecimal* multiply(const XSDDecimal& o) const {
         XSDDecimal* result = new XSDDecimal();
         rasqal_xsd_decimal_multiply(result->val_, val_, o.val_);
         return result;
     }
 
-    XSDDecimal* divide(const XSDDecimal& o) {
+    XSDDecimal* divide(const XSDDecimal& o) const {
         XSDDecimal* result = new XSDDecimal();
         rasqal_xsd_decimal_divide(result->val_, val_, o.val_);
         return result;

@@ -18,135 +18,258 @@
 #include "model.h"
 
 #include <cstdio>
+#include <cstdarg>
 #include <cassert>
 #include <sstream>
 #include <algorithm>
 
+#include "store.h"
+
 namespace castor {
 
 ////////////////////////////////////////////////////////////////////////////////
-// Static definitions
+// String utils
 
-const char* Value::TYPE_URIS[] = {
-    nullptr,
-    nullptr,
-    nullptr,
-    "http://www.w3.org/2001/XMLSchema#string",
-    "http://www.w3.org/2001/XMLSchema#boolean",
-    "http://www.w3.org/2001/XMLSchema#integer",
-    "http://www.w3.org/2001/XMLSchema#positiveInteger",
-    "http://www.w3.org/2001/XMLSchema#nonPositiveInteger",
-    "http://www.w3.org/2001/XMLSchema#negativeInteger",
-    "http://www.w3.org/2001/XMLSchema#nonNegativeInteger",
-    "http://www.w3.org/2001/XMLSchema#byte",
-    "http://www.w3.org/2001/XMLSchema#short",
-    "http://www.w3.org/2001/XMLSchema#int",
-    "http://www.w3.org/2001/XMLSchema#long",
-    "http://www.w3.org/2001/XMLSchema#unsignedByte",
-    "http://www.w3.org/2001/XMLSchema#unsignedShort",
-    "http://www.w3.org/2001/XMLSchema#unsignedInt",
-    "http://www.w3.org/2001/XMLSchema#unsignedLong",
-    "http://www.w3.org/2001/XMLSchema#float",
-    "http://www.w3.org/2001/XMLSchema#double",
-    "http://www.w3.org/2001/XMLSchema#decimal",
-    "http://www.w3.org/2001/XMLSchema#dateTime"
-};
+String::String(const char *s, unsigned len, bool copy) {
+    assert(s != nullptr);
+    id_ = UNKNOWN_ID;
+    length_ = (len > 0 ? len : strlen(s));
+    if(copy) {
+        char* ns = new char[length_ + 1];
+        memcpy(ns, s, length_ + 1);
+        str_ = ns;
+        clean_ = true;
+    } else {
+        str_ = s;
+        clean_ = false;
+    }
+}
 
-unsigned Value::TYPE_URIS_LEN[] = {
-    0,
-    0,
-    0,
-    sizeof("http://www.w3.org/2001/XMLSchema#string") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#boolean") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#integer") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#positiveInteger") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#nonPositiveInteger") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#negativeInteger") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#nonNegativeInteger") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#byte") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#short") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#int") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#long") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#unsignedByte") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#unsignedShort") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#unsignedInt") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#unsignedLong") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#float") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#double") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#decimal") - 1,
-    sizeof("http://www.w3.org/2001/XMLSchema#dateTime") - 1
-};
+String String::sprintf(const char *fmt, ...) {
+    String result;
+    result.id_ = UNKNOWN_ID;
+    va_list ap;
+    va_start(ap, fmt);
+    result.length_ = vsnprintf(nullptr, 0, fmt, ap);
+    va_end(ap);
+    char* s = new char[result.length_ + 1];
+    va_start(ap, fmt);
+    vsprintf(s, fmt, ap);
+    va_end(ap);
+    result.str_ = s;
+    result.clean_ = true;
+    return result;
+}
 
-static constexpr char XSD_PREFIX[] = "http://www.w3.org/2001/XMLSchema#";
+String::String(const String &o, bool deep) {
+    if(deep) {
+        clean_ = false;
+        *this = o;
+    } else {
+        id_ = o.id_;
+        length_ = o.length_;
+        str_ = o.str_;
+        clean_ = false;
+    }
+}
 
+String& String::operator=(const String& o) {
+    clean();
+    id_ = o.id_;
+    length_ = o.length_;
+    if(o.clean_) {
+        assert(o.str_ != nullptr);
+        char* s = new char[length_ + 1];
+        memcpy(s, o.str_, length_ + 1);
+        str_ = s;
+        clean_ = true;
+    } else {
+        str_ = o.str_;
+        clean_ = false;
+    }
+    return *this;
+}
+
+String& String::operator=(String&& o) {
+    clean();
+    id_ = o.id_;
+    str_ = o.str_;
+    length_ = o.length_;
+    clean_ = o.clean_;
+    o.clean_ = false;
+    return *this;
+}
+
+void String::clean() {
+    if(clean_)
+        delete [] str_;
+}
+
+void String::skip(Cursor &cur) {
+    cur += cur.peekInt(8) + 13;
+}
+
+String::String(Cursor &cur) {
+    id_ = cur.readInt();
+    cur.skipInt(); // skip hash
+    length_ = cur.readInt();
+    str_ = reinterpret_cast<const char*>(cur.get());
+    clean_ = false;
+    cur += length_ + 1;
+}
+
+Buffer String::serialize() const {
+    assert(direct() && !null());
+    Buffer buf(length_ + 13);
+    buf.writeInt(id_);
+    buf.writeInt(hash());
+    buf.writeInt(length_);
+    buf.write(reinterpret_cast<const unsigned char*>(str_), length_ + 1);
+    return buf;
+}
+
+
+int String::compare(const String &o) const  {
+    if(null() && o.null()) {
+        return 0;
+    } else if(null()) {
+        return -1;
+    } else if(o.null()) {
+        return 1;
+    } else if(resolved() && o.resolved() && (validId() || o.validId())) {
+        if(id() == o.id()) return 0;
+        else if(id() < o.id()) return -1;
+        else return 1;
+    } else {
+        assert(direct());
+        assert(o.direct());
+        int cmp = memcmp(str(), o.str(), std::min(length(), o.length()));
+        if(cmp) return cmp;
+        else if(length() < o.length()) return -1;
+        else if(length() > o.length()) return 1;
+        else return 0;
+    }
+}
+
+bool String::operator ==(const String &o) const {
+    if(null() || o.null()) {
+        return null() && o.null();
+    } else if(resolved() && o.resolved() && (validId() || o.validId())) {
+        return id() == o.id();
+    } else {
+        assert(o.direct());
+        return equals(o.str(), o.length());
+    }
+}
+
+void String::copy(const String &o) {
+    assert(o.str_ != nullptr);
+    id_ = o.id_;
+    length_ = o.length_;
+    char* s = new char[length_ + 1];
+    memcpy(s, o.str_, o.length_ + 1);
+    str_ = s;
+}
+
+std::ostream& operator<<(std::ostream& out, const String& s) {
+    if(!s.null()) {
+        assert(s.direct());
+        out.write(s.str(), s.length());
+    }
+    return out;
+}
 
 
 ////////////////////////////////////////////////////////////////////////////
 // Constructors
 
-/**
- * @param uri a URI from raptor
- * @param[out] str a new string containing a copy of the URI
- * @param[out] len the length of the URI
- */
-static void convertURI(raptor_uri* uri, const char*& str, unsigned& len) {
-    char* uristr = reinterpret_cast<char*>(raptor_uri_as_string(uri));
-    len = strlen(uristr);
-    char* s = new char[len + 1];
-    memcpy(s, uristr, len + 1);
-    str = s;
+namespace {
+
+constexpr char XSD_PREFIX[] = "http://www.w3.org/2001/XMLSchema#";
+constexpr unsigned XSD_PREFIX_LEN = sizeof(XSD_PREFIX) - 1;
+
+struct XSDSuffix {
+    const char* str;
+    unsigned len;
+    Value::Category category;
+    Value::NumCategory numCategory;
+};
+
+static const XSDSuffix XSD_SUFFIXES[] = {
+    { "string",             sizeof("string")-1,             Value::CAT_TYPED_STRING, Value::NUM_NONE },
+    { "boolean",            sizeof("boolean")-1,            Value::CAT_BOOLEAN,      Value::NUM_NONE },
+    { "integer",            sizeof("integer")-1,            Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "positiveInteger",    sizeof("positiveInteger")-1,    Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "nonPositiveInteger", sizeof("nonPositiveInteger")-1, Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "negativeInteger",    sizeof("negativeInteger")-1,    Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "nonNegativeInteger", sizeof("nonNegativeInteger")-1, Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "byte",               sizeof("byte")-1,               Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "short",              sizeof("short")-1,              Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "int",                sizeof("int")-1,                Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "long",               sizeof("long")-1,               Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "unsignedByte",       sizeof("unsignedByte")-1,       Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "unsignedShort",      sizeof("unsignedShort")-1,      Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "unsignedInt",        sizeof("unsignedInt")-1,        Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "unsignedLong",       sizeof("unsignedLong")-1,       Value::CAT_NUMERIC,      Value::NUM_INTEGER },
+    { "float",              sizeof("float")-1,              Value::CAT_NUMERIC,      Value::NUM_FLOATING },
+    { "double",             sizeof("double")-1,             Value::CAT_NUMERIC,      Value::NUM_FLOATING },
+    { "decimal",            sizeof("decimal")-1,            Value::CAT_NUMERIC,      Value::NUM_DECIMAL },
+    { "dateTime",           sizeof("dateTime")-1,           Value::CAT_DATETIME,     Value::NUM_NONE }
+};
+
+constexpr unsigned XSD_SUFFIX_MINLENGTH = 3;
+
 }
 
 Value::Value(const raptor_term* term) {
-    char* s;
-    id = 0;
-    cleanup = CLEAN_NOTHING;
+    id_ = UNKNOWN_ID;
+    numCategory_ = NUM_NONE;
+    interpreted_ = INTERPRETED_NONE;
     switch(term->type) {
     case RAPTOR_TERM_TYPE_BLANK:
-        type = TYPE_BLANK;
-        typeUri = nullptr;
-        typeUriLen = 0;
-        lexicalLen = term->value.blank.string_len;
-        s = new char[lexicalLen + 1];
-        memcpy(s, reinterpret_cast<char*>(term->value.blank.string),
-               lexicalLen + 1);
-        lexical = s;
-        addCleanFlag(CLEAN_LEXICAL);
+        category_ = CAT_BLANK;
+        lexical_ = String(term->value.blank.string,
+                          term->value.blank.string_len, true);
+        datatype_ = 0;
+        assert(tag_.null());
         break;
     case RAPTOR_TERM_TYPE_URI:
-        type = TYPE_IRI;
-        typeUri = nullptr;
-        typeUriLen = 0;
-        convertURI(term->value.uri, lexical, lexicalLen);
-        addCleanFlag(CLEAN_LEXICAL);
+        category_ = CAT_URI;
+        lexical_ = String(term->value.uri);
+        datatype_ = 0;
+        assert(tag_.null());
         break;
     case RAPTOR_TERM_TYPE_LITERAL:
-        lexicalLen = term->value.literal.string_len;
-        s = new char[lexicalLen + 1];
-        memcpy(s, reinterpret_cast<char*>(term->value.literal.string),
-               lexicalLen + 1);
-        lexical = s;
-        addCleanFlag(CLEAN_LEXICAL);
+        lexical_ = String(term->value.literal.string,
+                          term->value.literal.string_len, true);
         if(term->value.literal.datatype == nullptr) {
-            type = TYPE_PLAIN_STRING;
-            typeUri = nullptr;
+            datatype_ = 0;
             if(term->value.literal.language == nullptr ||
                term->value.literal.language_len == 0) {
-                language = nullptr;
-                languageLen = 0;
+                category_ = CAT_SIMPLE_LITERAL;
+                assert(tag_.null());
             } else {
-                languageLen = term->value.literal.language_len;
-                s = new char[languageLen + 1];
-                memcpy(s, reinterpret_cast<char*>(term->value.literal.language),
-                       languageLen + 1);
-                language = s;
-                addCleanFlag(CLEAN_DATA);
+                category_ = CAT_PLAIN_LANG;
+                tag_ = String(term->value.literal.language,
+                              term->value.literal.language_len, true);
             }
         } else {
-            type = TYPE_CUSTOM;
-            convertURI(term->value.literal.datatype, typeUri, typeUriLen);
-            addCleanFlag(CLEAN_TYPE_URI);
-            interpretDatatype();
+            category_ = CAT_OTHER;
+            datatype_ = UNKNOWN_ID;
+            tag_ = String(term->value.literal.datatype);
+            if(tag_.length() >= XSD_PREFIX_LEN + XSD_SUFFIX_MINLENGTH &&
+                    memcmp(tag_.str(), XSD_PREFIX, XSD_PREFIX_LEN) == 0) {
+                const char* fragment = tag_.str() + XSD_PREFIX_LEN;
+                unsigned fragmentLen = tag_.length() - XSD_PREFIX_LEN;
+                for(const XSDSuffix& suffix : XSD_SUFFIXES) {
+                    if(fragmentLen == suffix.len &&
+                            memcmp(fragment, suffix.str, fragmentLen) == 0) {
+                        category_ = suffix.category;
+                        numCategory_ = suffix.numCategory;
+                        break;
+                    }
+                }
+            }
         }
         break;
     default:
@@ -155,66 +278,114 @@ Value::Value(const raptor_term* term) {
 }
 
 Value::Value(const rasqal_literal* literal) {
-    char* s;
-    id = 0;
-    cleanup = CLEAN_NOTHING;
+    id_ = UNKNOWN_ID;
+    numCategory_ = NUM_NONE;
+    interpreted_ = INTERPRETED_NONE;
     if(literal->type == RASQAL_LITERAL_URI) {
-        convertURI(literal->value.uri, lexical, lexicalLen);
+        lexical_ = String(literal->value.uri);
     } else {
-        lexicalLen = literal->string_len;
-        s = new char[lexicalLen + 1];
-        memcpy(s, reinterpret_cast<const char*>(literal->string),
-               lexicalLen + 1);
-        lexical = s;
+        lexical_ = String(literal->string, literal->string_len, true);
     }
-    addCleanFlag(CLEAN_LEXICAL);
     switch(literal->type) {
     case RASQAL_LITERAL_BLANK:
-        type = TYPE_BLANK;
+        category_ = CAT_BLANK;
+        datatype_ = 0;
+        assert(tag_.null());
         break;
     case RASQAL_LITERAL_URI:
-        type = TYPE_IRI;
+        category_ = CAT_URI;
+        datatype_ = 0;
+        assert(tag_.null());
         break;
     case RASQAL_LITERAL_STRING:
-        type = TYPE_PLAIN_STRING;
+        datatype_ = 0;
         if(literal->language != nullptr && literal->language[0] != '\0') {
-            languageLen = strlen(literal->language);
-            s = new char[languageLen + 1];
-            memcpy(s, literal->language, languageLen + 1);
-            language = s;
-            addCleanFlag(CLEAN_DATA);
+            category_ = CAT_PLAIN_LANG;
+            tag_ = String(literal->language, 0, true);
         } else {
-            language = nullptr;
+            category_ = CAT_SIMPLE_LITERAL;
+            assert(tag_.null());
         }
         break;
     case RASQAL_LITERAL_XSD_STRING:
-        type = TYPE_TYPED_STRING;
+        category_ = CAT_TYPED_STRING;
+        datatype_ = UNKNOWN_ID;
+        tag_ = String(       "http://www.w3.org/2001/XMLSchema#string",
+                      sizeof("http://www.w3.org/2001/XMLSchema#string") - 1);
         break;
     case RASQAL_LITERAL_BOOLEAN:
-        type = TYPE_BOOLEAN;
+        category_ = CAT_BOOLEAN;
+        datatype_ = UNKNOWN_ID;
+        tag_ = String(       "http://www.w3.org/2001/XMLSchema#boolean",
+                      sizeof("http://www.w3.org/2001/XMLSchema#boolean") - 1);
+        break;
+    case RASQAL_LITERAL_INTEGER:
+        category_ = CAT_NUMERIC;
+        numCategory_ = NUM_INTEGER;
+        datatype_ = UNKNOWN_ID;
+        tag_ = String(literal->datatype); // we do not know which integer type
         break;
     case RASQAL_LITERAL_FLOAT:
-        type = TYPE_FLOAT;
+        category_ = CAT_NUMERIC;
+        numCategory_ = NUM_FLOATING;
+        datatype_ = UNKNOWN_ID;
+        tag_ = String(       "http://www.w3.org/2001/XMLSchema#float",
+                      sizeof("http://www.w3.org/2001/XMLSchema#float") - 1);
         break;
     case RASQAL_LITERAL_DOUBLE:
-        type = TYPE_DOUBLE;
+        category_ = CAT_NUMERIC;
+        numCategory_ = NUM_FLOATING;
+        datatype_ = UNKNOWN_ID;
+        tag_ = String(       "http://www.w3.org/2001/XMLSchema#double",
+                      sizeof("http://www.w3.org/2001/XMLSchema#double") - 1);
         break;
     case RASQAL_LITERAL_DECIMAL:
-        type = TYPE_DECIMAL;
+        category_ = CAT_NUMERIC;
+        numCategory_ = NUM_DECIMAL;
+        datatype_ = UNKNOWN_ID;
+        tag_ = String(       "http://www.w3.org/2001/XMLSchema#decimal",
+                      sizeof("http://www.w3.org/2001/XMLSchema#decimal") - 1);
         break;
     case RASQAL_LITERAL_DATETIME:
-        type = TYPE_DATETIME;
+        category_ = CAT_DATETIME;
+        datatype_ = UNKNOWN_ID;
+        tag_ = String(       "http://www.w3.org/2001/XMLSchema#dateTime",
+                      sizeof("http://www.w3.org/2001/XMLSchema#dateTime") - 1);
         break;
-    case RASQAL_LITERAL_INTEGER: // what kind of integer precisely?
     case RASQAL_LITERAL_UDT:
-        type = TYPE_CUSTOM;
-        convertURI(literal->datatype, typeUri, typeUriLen);
-        addCleanFlag(CLEAN_TYPE_URI);
-        interpretDatatype();
+        category_ = CAT_OTHER;
+        datatype_ = UNKNOWN_ID;
+        tag_ = String(literal->datatype);
         break;
     default:
         assert(false);
     }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// Serialization
+
+Value::Value(Cursor& cur) {
+    id_ = cur.readInt();
+    category_ = static_cast<Category>(cur.readShort());
+    numCategory_ = static_cast<NumCategory>(cur.readShort());
+    datatype_ = cur.readInt();
+    tag_ = String(cur.readInt());
+    assert(isTyped() || isPlainWithLang() || tag_.null());
+    lexical_ = String(cur.readInt());
+    interpreted_ = INTERPRETED_NONE;
+}
+
+Buffer Value::serialize() const {
+    Buffer buf(SERIALIZED_SIZE);
+    buf.writeInt(id_);
+    buf.writeShort(category_);
+    buf.writeShort(numCategory_);
+    buf.writeInt(datatype_);
+    buf.writeInt(tag_.id());
+    buf.writeInt(lexical_.id());
+    return buf;
 }
 
 
@@ -223,37 +394,13 @@ Value::Value(const rasqal_literal* literal) {
 // Cleanup
 
 void Value::clean() {
-    if(hasCleanFlag(CLEAN_TYPE_URI)) {
-        delete [] typeUri;
-        typeUri = nullptr;
-        typeUriLen = 0;
+    if(interpreted_ == INTERPRETED_OWNED) {
+        if(isDecimal())
+            delete decimal_;
+        if(isDateTime())
+            delete datetime_;
+        interpreted_ = INTERPRETED_NONE;
     }
-    if(hasCleanFlag(CLEAN_LEXICAL)) {
-        delete [] lexical;
-        lexical = nullptr;
-        lexicalLen = 0;
-    }
-    if(hasCleanFlag(CLEAN_DATA)) {
-        switch(type) {
-        case TYPE_PLAIN_STRING:
-            delete [] language;
-            language = nullptr;
-            languageLen = 0;
-            break;
-        case TYPE_DECIMAL:
-            delete decimal;
-            decimal = nullptr;
-            break;
-        case TYPE_DATETIME:
-            delete datetime;
-            datetime = nullptr;
-            break;
-        default:
-            // do nothing
-            break;
-        }
-    }
-    cleanup = CLEAN_NOTHING;
 }
 
 
@@ -263,129 +410,131 @@ void Value::clean() {
 
 void Value::fillCopy(const Value& value, bool deep)  {
     clean();
-    memcpy(this, &value, sizeof(Value));
-    cleanup = CLEAN_NOTHING;
-    if(deep) {
-        if(lexical && value.hasCleanFlag(CLEAN_LEXICAL)) {
-            char* s = new char[lexicalLen + 1];
-            memcpy(s, value.lexical, lexicalLen + 1);
-            s[lexicalLen] = '\0';
-            lexical = s;
-            addCleanFlag(CLEAN_LEXICAL);
-        }
-        if(type == TYPE_CUSTOM && value.hasCleanFlag(CLEAN_TYPE_URI)) {
-            char* s = new char[typeUriLen + 1];
-            memcpy(s, value.typeUri, typeUriLen + 1);
-            s[typeUriLen] = '\0';
-            typeUri = s;
-            addCleanFlag(CLEAN_TYPE_URI);
-        }
-        if(type == TYPE_PLAIN_STRING && language && value.hasCleanFlag(CLEAN_DATA)) {
-            char* s = new char[languageLen + 1];
-            memcpy(s, value.language, languageLen + 1);
-            s[languageLen] = '\0';
-            language = s;
-            addCleanFlag(CLEAN_DATA);
-        }
-        if(type == TYPE_DECIMAL && isInterpreted && value.hasCleanFlag(CLEAN_DATA)) {
-            decimal = new XSDDecimal(*value.decimal);
-            addCleanFlag(CLEAN_DATA);
+    id_ = value.id_;
+    category_ = value.category_;
+    numCategory_ = value.numCategory_;
+    lexical_ = String(value.lexical_, deep);
+    datatype_ = value.datatype_;
+    tag_ = String(value.tag_, deep);
+    interpreted_ = value.interpreted_;
+    if(interpreted()) {
+        if(isBoolean()) {
+            boolean_ = value.boolean_;
+        } else if(isInteger()) {
+            integer_ = value.integer_;
+        } else if(isFloating()) {
+            floating_ = value.floating_;
+        } else if(isDecimal()) {
+            if(deep && interpreted_ == INTERPRETED_OWNED) {
+                decimal_ = new XSDDecimal(*value.decimal_);
+                interpreted_ = INTERPRETED_UNOWNED;
+            } else {
+                decimal_ = value.decimal_;
+                interpreted_ = INTERPRETED_UNOWNED;
+            }
+        } else if(isDateTime()) {
+            // FIXME: copy datetime
+            abort();
         }
     }
 }
 
 void Value::fillMove(Value& value)  {
     clean();
-    memcpy(this, &value, sizeof(Value));
-    value.cleanup = CLEAN_NOTHING;
+    id_ = value.id_;
+    category_ = value.category_;
+    numCategory_ = value.numCategory_;
+    lexical_ = std::move(value.lexical_);
+    datatype_ = value.datatype_;
+    tag_ = std::move(value.tag_);
+    interpreted_ = value.interpreted_;
+    if(interpreted()) {
+        if(isBoolean())
+            boolean_ = value.boolean_;
+        else if(isInteger())
+            integer_ = value.integer_;
+        else if(isFloating())
+            floating_ = value.floating_;
+        else if(isDecimal())
+            decimal_ = value.decimal_;
+        else if(isDateTime())
+            datetime_ = value.datetime_;
+        value.interpreted_ = INTERPRETED_UNOWNED;
+    }
 }
 
 void Value::fillBoolean(bool value) {
     clean();
-    id = 0;
-    type = TYPE_BOOLEAN;
-    typeUri = TYPE_URIS[TYPE_BOOLEAN];
-    typeUriLen = TYPE_URIS_LEN[TYPE_BOOLEAN];
-    lexical = nullptr;
-    lexicalLen = 0;
-    isInterpreted = true;
-    boolean = value;
+    id_ = UNKNOWN_ID;
+    category_ = CAT_BOOLEAN;
+    numCategory_ = NUM_NONE;
+    lexical_ = String();
+    datatype_ = UNKNOWN_ID;
+    tag_ = String(       "http://www.w3.org/2001/XMLSchema#boolean",
+                  sizeof("http://www.w3.org/2001/XMLSchema#boolean") - 1);
+    interpreted_ = INTERPRETED_UNOWNED;
+    boolean_ = value;
 }
 
 void Value::fillInteger(long value) {
     clean();
-    id = 0;
-    type = TYPE_INTEGER;
-    typeUri = TYPE_URIS[TYPE_INTEGER];
-    typeUriLen = TYPE_URIS_LEN[TYPE_INTEGER];
-    lexical = nullptr;
-    lexicalLen = 0;
-    isInterpreted = true;
-    integer = value;
+    id_ = UNKNOWN_ID;
+    category_ = CAT_NUMERIC;
+    numCategory_ = NUM_INTEGER;
+    lexical_ = String();
+    datatype_ = UNKNOWN_ID;
+    tag_ = String(       "http://www.w3.org/2001/XMLSchema#integer",
+                  sizeof("http://www.w3.org/2001/XMLSchema#integer") - 1);
+    interpreted_ = INTERPRETED_UNOWNED;
+    integer_ = value;
 }
 
 void Value::fillFloating(double value) {
     clean();
-    id = 0;
-    type = TYPE_DOUBLE;
-    typeUri = TYPE_URIS[TYPE_DOUBLE];
-    typeUriLen = TYPE_URIS_LEN[TYPE_DOUBLE];
-    lexical = nullptr;
-    lexicalLen = 0;
-    isInterpreted = true;
-    floating = value;
+    id_ = UNKNOWN_ID;
+    category_ = CAT_NUMERIC;
+    numCategory_ = NUM_FLOATING;
+    lexical_ = String();
+    datatype_ = UNKNOWN_ID;
+    tag_ = String(       "http://www.w3.org/2001/XMLSchema#double",
+                  sizeof("http://www.w3.org/2001/XMLSchema#double") - 1);
+    interpreted_ = INTERPRETED_UNOWNED;
+    floating_ = value;
 }
 
 void Value::fillDecimal(XSDDecimal* value) {
     clean();
-    id = 0;
-    type = TYPE_DECIMAL;
-    typeUri = TYPE_URIS[TYPE_DECIMAL];
-    typeUriLen = TYPE_URIS_LEN[TYPE_DECIMAL];
-    lexical = nullptr;
-    lexicalLen = 0;
-    isInterpreted = true;
-    decimal = value;
-    cleanup = CLEAN_DATA;
+    id_ = UNKNOWN_ID;
+    category_ = CAT_NUMERIC;
+    numCategory_ = NUM_DECIMAL;
+    lexical_ = String();
+    datatype_ = UNKNOWN_ID;
+    tag_ = String(       "http://www.w3.org/2001/XMLSchema#decimal",
+                  sizeof("http://www.w3.org/2001/XMLSchema#decimal") - 1);
+    interpreted_ = INTERPRETED_OWNED;
+    decimal_ = value;
 }
 
-void Value::fillSimpleLiteral(const char* lexical, unsigned len, bool freeLexical) {
+void Value::fillSimpleLiteral(String&& lex) {
     clean();
-    id = 0;
-    type = TYPE_PLAIN_STRING;
-    typeUri = nullptr;
-    typeUriLen = 0;
-    this->lexical = lexical;
-    lexicalLen = len;
-    if(freeLexical)
-        cleanup = CLEAN_LEXICAL;
-    isInterpreted = true;
+    id_ = UNKNOWN_ID;
+    category_ = CAT_SIMPLE_LITERAL;
+    numCategory_ = NUM_NONE;
+    lexical_ = std::move(lex);
+    datatype_ = 0;
+    tag_ = String();
+    interpreted_ = INTERPRETED_UNOWNED;
 }
 
-void Value::fillIRI(const char* lexical, unsigned len, bool freeLexical) {
+void Value::fillURI(String&& lex) {
     clean();
-    id = 0;
-    type = TYPE_IRI;
-    typeUri = nullptr;
-    typeUriLen = 0;
-    this->lexical = lexical;
-    lexicalLen = len;
-    if(freeLexical)
-        cleanup = CLEAN_LEXICAL;
-    isInterpreted = true;
-}
-
-void Value::fillBlank(const char* lexical, unsigned len, bool freeLexical) {
-    clean();
-    id = 0;
-    type = TYPE_BLANK;
-    typeUri = nullptr;
-    typeUriLen = 0;
-    this->lexical = lexical;
-    lexicalLen = len;
-    if(freeLexical)
-        cleanup = CLEAN_LEXICAL;
-    isInterpreted = true;
+    id_ = UNKNOWN_ID;
+    category_ = CAT_URI;
+    numCategory_ = NUM_NONE;
+    lexical_ = std::move(lex);
+    datatype_ = 0;
+    tag_ = String();
+    interpreted_ = INTERPRETED_UNOWNED;
 }
 
 
@@ -396,18 +545,18 @@ void Value::fillBlank(const char* lexical, unsigned len, bool freeLexical) {
 int Value::compare(const Value& o) const {
     if(isNumeric() && o.isNumeric()) {
         if(isInteger() && o.isInteger()) {
-            int diff = integer - o.integer;
+            long diff = integer() - o.integer();
             if(diff < 0) return -1;
             else if(diff > 0) return 1;
             else return 0;
         } else if(isDecimal() && o.isDecimal()) {
             // FIXME: compare decimal with integer??
-            return decimal->compare(*o.decimal);
+            return decimal().compare(o.decimal());
         } else {
-            double d1 = isFloating() ? floating :
-                        (isDecimal() ? decimal->getFloat() : integer);
-            double d2 = o.isFloating() ? o.floating :
-                        (o.isDecimal() ? o.decimal->getFloat() : o.integer);
+            double d1 = isFloating() ? floating() :
+                        (isDecimal() ? decimal().getFloat() : integer());
+            double d2 = o.isFloating() ? o.floating() :
+                        (o.isDecimal() ? o.decimal().getFloat() : o.integer());
             double diff = d1 - d2;
             if(diff < .0) return -1;
             else if(diff > .0) return 1;
@@ -415,66 +564,123 @@ int Value::compare(const Value& o) const {
         }
     } else if((isSimple() && o.isSimple()) ||
               (isXSDString() && o.isXSDString())) {
-        int i = cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen);
+        int i = lexical().compare(o.lexical());
         if(i < 0) return -1;
         else if(i > 0) return 1;
         else return 0;
     } else if(isBoolean() && o.isBoolean()) {
-        return (boolean ? 1 : 0) - (o.boolean ? 1 : 0);
+        return (boolean() ? 1 : 0) - (o.boolean() ? 1 : 0);
     } else if(isDateTime() && o.isDateTime()) {
-        return datetime->compare(*o.datetime);
+        return datetime().compare(o.datetime());
     } else {
         return -2;
     }
 }
 
+int Value::equals(const Value& o) const {
+    if(isNumeric() && o.isNumeric()) {
+        if(validId() && o.validId())
+            return id() == o.id() ? 0 : 1;
+        if(isInteger() && o.isInteger()) {
+            return integer() == o.integer() ? 0 : 1;
+        } else if(isDecimal() && o.isDecimal()) {
+            // FIXME: compare decimal with integer??
+            return decimal() == o.decimal() ? 0 : 1;
+        } else {
+            double d1 = isFloating() ? floating() :
+                        (isDecimal() ? decimal().getFloat() : integer());
+            double d2 = o.isFloating() ? o.floating() :
+                        (o.isDecimal() ? o.decimal().getFloat() : o.integer());
+            return d1 == d2 ? 0 : 1;
+        }
+    } else if((isSimple() && o.isSimple()) ||
+              (isXSDString() && o.isXSDString())) {
+        if(validId() && o.validId())
+            return id() == o.id() ? 0 : 1;
+        return lexical() == o.lexical() ? 0 : 1;
+    } else if(isBoolean() && o.isBoolean()) {
+        if(validId() && o.validId())
+            return id() == o.id() ? 0 : 1;
+        return boolean() == o.boolean() ? 0 : 1;
+    } else if(isDateTime() && o.isDateTime()) {
+        if(validId() && o.validId())
+            return id() == o.id() ? 0 : 1;
+        return datetime() == o.datetime() ? 0 : 1;
+    } else {
+        // fallback to RDFterm equality, which is sameTerm with type error
+        if(*this == o)
+            return 0;
+        else if(isLiteral() && o.isLiteral())
+            return -1;
+        else
+            return 1;
+    }
+}
+
 bool Value::operator<(const Value& o) const {
-    if(id > 0 && o.id > 0)
-        return id < o.id;
-    Category cat = category();
-    Category ocat = o.category();
+    if(validId() && o.validId())
+        return id() < o.id();
     int cmp;
-    if(cat < ocat) {
+    if(category() < o.category()) {
         return true;
-    } else if(cat > ocat) {
+    } else if(category() > o.category()) {
         return false;
     } else {
-        switch(cat) {
+        switch(category()) {
         case CAT_BLANK:
-        case CAT_IRI:
+        case CAT_URI:
         case CAT_SIMPLE_LITERAL:
         case CAT_TYPED_STRING:
-            return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
+            return lexical() < o.lexical();
         case CAT_BOOLEAN:
-            if(boolean == o.boolean)
-                return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
+            if(boolean() == o.boolean())
+                return lexical() < o.lexical();
             else
-                return !boolean && o.boolean;
+                return !boolean() && o.boolean();
         case CAT_NUMERIC:
+            cmp = compare(o);
+            if(cmp == -1) {
+                return true;
+            } else if(cmp == 1) {
+                return false;
+            } else if(validId(datatypeId()) && validId(o.datatypeId())) {
+                if(datatypeId() == o.datatypeId())
+                    return lexical() < o.lexical();
+                else
+                    return datatypeId() < o.datatypeId();
+            } else {
+                assert(!datatypeLex().null() && !o.datatypeLex().null());
+                cmp = datatypeLex().compare(o.datatypeLex());
+                if(cmp == 0)
+                    return lexical() < o.lexical();
+                else
+                    return cmp < 0;
+            }
         case CAT_DATETIME:
             cmp = compare(o);
             if(cmp == -1)
                 return true;
             else if(cmp == 1)
                 return false;
-            else if(type == o.type)
-                return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
             else
-                return type < o.type;
+                return lexical() < o.lexical();
+        case CAT_PLAIN_LANG:
+            cmp = language() < o.language();
+            if(cmp == 0)
+                return lexical() < o.lexical();
+            else
+                return cmp < 0;
         case CAT_OTHER:
-            if(isPlain() && o.isPlain()) {
-                // plain literals with language tags
-                cmp = cmpstr(language, languageLen, o.language, o.languageLen);
-                if(cmp == 0)
-                    return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
+            if(validId(datatypeId()) && validId(o.datatypeId())) {
+                if(datatypeId() == o.datatypeId())
+                    return lexical() < o.lexical();
                 else
-                    return cmp < 0;
+                    return datatypeId() < o.datatypeId();
             } else {
-                const char* uri1 = typeUri == nullptr ? "" : typeUri;
-                const char* uri2 = o.typeUri == nullptr ? "" : o.typeUri;
-                cmp = cmpstr(uri1, typeUriLen, uri2, o.typeUriLen);
+                assert(!datatypeLex().null() && !o.datatypeLex().null());
+                cmp = datatypeLex().compare(o.datatypeLex());
                 if(cmp == 0)
-                    return cmpstr(lexical, lexicalLen, o.lexical, o.lexicalLen) < 0;
+                    return lexical() < o.lexical();
                 else
                     return cmp < 0;
             }
@@ -486,27 +692,27 @@ bool Value::operator<(const Value& o) const {
     return false;
 }
 
-int Value::rdfequals(const Value& o) const {
-    if(id > 0 && id == o.id)
-        return 0;
-    int falseret = isLiteral() && o.isLiteral() ? -1 : 1;
-    if(type == TYPE_CUSTOM || o.type == TYPE_CUSTOM) {
-        if(!eqstr(typeUri, typeUriLen, o.typeUri, o.typeUriLen))
-            return falseret;
-    } else if(type != o.type) {
-        return falseret;
-    }
-    if(isPlain()) {
-        if(language != nullptr && o.language != nullptr) {
-            if(!eqstr(language, languageLen, o.language, o.languageLen))
-                return falseret;
-        } else if(language != nullptr || o.language != nullptr) {
-            return falseret;
+bool Value::operator ==(const Value &o) const {
+    if(validId() && o.validId())
+        return id() == o.id();
+    if(category() != o.category())
+        return false;
+    if(isNumeric() && numCategory() != o.numCategory())
+        return false;
+    if(isOtherLiteral() || isInteger() || isFloating()) {
+        if(validId(datatypeId()) && validId(o.datatypeId())) {
+            if(datatypeId() != o.datatypeId())
+                return false;
+        } else {
+            assert(!datatypeLex().null() && !o.datatypeLex().null());
+            if(datatypeLex() != o.datatypeLex())
+                return false;
         }
     }
-    if(!eqstr(lexical, lexicalLen, o.lexical, o.lexicalLen))
-        return falseret;
-    return 0;
+    if(isPlainWithLang() && language() != o.language())
+        return false;
+    assert(!lexical().null() && !o.lexical().null());
+    return lexical() == o.lexical();
 }
 
 
@@ -514,120 +720,119 @@ int Value::rdfequals(const Value& o) const {
 ////////////////////////////////////////////////////////////////////////////////
 // Utility functions
 
-void Value::ensureLexical() {
-    if(lexical)
-        return;
+Value& Value::ensureLexical() {
+    if(!lexical_.null())
+        return *this;
 
+    assert(interpreted());
     if(isBoolean()) {
-        if(boolean) {
-            lexical = "true";
-            lexicalLen = 4;
-        } else {
-            lexical = "false";
-            lexicalLen = 5;
-        }
+        if(boolean())
+            lexical_ = String("true", sizeof("true") - 1);
+        else
+            lexical_ = String("false", sizeof("false") - 1);
     } else if(isInteger()) {
-        lexicalLen = snprintf(nullptr, 0, "%ld", integer);
-        char* s = new char[lexicalLen + 1];
-        sprintf(s, "%ld", integer);
-        lexical = s;
-        addCleanFlag(CLEAN_LEXICAL);
+        lexical_ = String::sprintf("%ld", integer());
     } else if(isFloating()) {
-        lexicalLen = snprintf(nullptr, 0, "%f", floating);
-        char* s = new char[lexicalLen + 1];
-        sprintf(s, "%f", floating);
-        lexical = s;
-        addCleanFlag(CLEAN_LEXICAL);
+        lexical_ = String::sprintf("%f", floating());
     } else if(isDecimal()) {
-        std::string str = decimal->getString();
-        lexicalLen = str.size();
-        char* s = new char[lexicalLen + 1];
-        memcpy(s, str.c_str(), lexicalLen);
-        s[lexicalLen] = '\0';
-        lexical = s;
-        addCleanFlag(CLEAN_LEXICAL);
+        std::string str = decimal().getString();
+        lexical_ = String(str.c_str(), str.size(), true);
     } else if(isDateTime()) {
-        std::string str = datetime->getString();
-        lexicalLen = str.size();
-        char* s = new char[lexicalLen + 1];
-        memcpy(s, str.c_str(), lexicalLen);
-        s[lexicalLen] = '\0';
-        lexical = s;
-        addCleanFlag(CLEAN_LEXICAL);
+        std::string str = datetime().getString();
+        lexical_ = String(str.c_str(), str.size(), true);
     } else {
-        lexical = "";
-        lexicalLen = 0;
+        // FIXME: shouldn't this be an error?
+        lexical_ = String("");
     }
+    return *this;
 }
 
-void Value::ensureInterpreted() {
-    if(isInterpreted)
-        return;
+Value& Value::ensureInterpreted(const StringMapper& mapper) {
+    if(interpreted())
+        return *this;
+    if(!lexical_.direct())
+        lexical_ = mapper.lookupString(lexical_.id());
+    interpreted_ = INTERPRETED_UNOWNED;
     if(isBoolean()) {
-        boolean = (lexicalLen == 1 && memcmp(lexical, "1", 1) == 0) ||
-                  (lexicalLen == 4 && memcmp(lexical, "true", 4) == 0);
+        boolean_ = lexical_.equals("1", sizeof("1")-1) ||
+                   lexical_.equals("true", sizeof("true")-1);
     } else if(isInteger()) {
-        integer = atoi(lexical);
+        integer_ = atoi(lexical_.str());
     } else if(isFloating()) {
-        floating = atof(lexical);
+        floating_ = atof(lexical_.str());
     } else if(isDecimal()) {
-        decimal = new XSDDecimal(lexical);
-        addCleanFlag(CLEAN_DATA);
+        decimal_ = new XSDDecimal(lexical_.str());
+        interpreted_ = INTERPRETED_OWNED;
     } else if(isDateTime()) {
-        datetime = new XSDDateTime(lexical);
-        addCleanFlag(CLEAN_DATA);
+        datetime_ = new XSDDateTime(lexical_.str());
+        interpreted_ = INTERPRETED_OWNED;
     }
-    isInterpreted = true;
+    return *this;
+}
+
+Value& Value::ensureDirectStrings(const StringMapper &mapper) {
+    if(!lexical_.direct())
+        lexical_ = mapper.lookupString(lexical_.id());
+    if(!tag_.direct())
+        tag_ = mapper.lookupString(tag_.id());
+    return *this;
+}
+
+Value& Value::ensureResolvedStrings(const Store &store) {
+    store.resolve(lexical_);
+    store.resolve(tag_);
+    return *this;
 }
 
 Hash::hash_t Value::hash() const {
-    Hash::hash_t hash = type;
-    if(type == TYPE_CUSTOM)
-        hash = Hash::hash(typeUri, typeUriLen, hash);
-    return Hash::hash(lexical, lexicalLen, hash);
+    Hash::hash_t hash = category() << 16;
+    if(isNumeric()) {
+        hash |= numCategory();
+    } else if(isPlainWithLang()) {
+        assert(!language().null() && language().direct());
+        hash = Hash::hash(language().str(), language().length(), hash);
+    } else if(isTyped()) {
+        assert(!datatypeLex().null() && datatypeLex().direct());
+        hash = Hash::hash(datatypeLex().str(), datatypeLex().length(), hash);
+    }
+    assert(!lexical().null() && lexical().direct());
+    return Hash::hash(lexical().str(), lexical().length(), hash);
 }
 
 std::ostream& operator<<(std::ostream& out, const Value& val) {
-    switch(val.type) {
-    case Value::TYPE_BLANK:
-        out << "_:";
-        if(val.lexical)
-            out.write(val.lexical, val.lexicalLen);
+    // FIXME: escape quotes inside lexical
+    switch(val.category()) {
+    case Value::CAT_BLANK:
+        out << "_:" << val.lexical();
         break;
-    case Value::TYPE_IRI:
-        out << '<';
-        out.write(val.lexical, val.lexicalLen);
-        out << '>';
+    case Value::CAT_URI:
+        out << '<' << val.lexical() << '>';
         break;
-    case Value::TYPE_PLAIN_STRING:
-        out << '"';
-        out.write(val.lexical, val.lexicalLen);
-        out << '"';
-        if(val.language != nullptr) {
-            out << '@';
-            out.write(val.language, val.languageLen);
-        }
+    case Value::CAT_SIMPLE_LITERAL:
+        out << '"' << val.lexical() << '"';
+        break;
+    case Value::CAT_PLAIN_LANG:
+        out << '"' << val.lexical() << "\"@" << val.language();
         break;
     default:
         out << '"';
-        if(val.lexical) {
-            // FIXME: escape quotes inside lexical
-            out.write(val.lexical, val.lexicalLen);
+        if(!val.lexical().null()) {
+            out << val.lexical();
         } else {
+            assert(val.interpreted());
             if(val.isBoolean())
-                out << (val.boolean ? "true" : "false");
+                out << (val.boolean() ? "true" : "false");
             else if(val.isInteger())
-                out << val.integer;
+                out << val.integer();
             else if(val.isFloating())
-                out << val.floating;
+                out << val.floating();
             else if(val.isDecimal())
-                out << val.decimal->getString();
+                out << val.decimal().getString();
             else if(val.isDateTime())
-                out << val.datetime->getString();
+                out << val.datetime().getString();
         }
-        out << "\"^^<";
-        out.write(val.typeUri, val.typeUriLen);
-        out << '>';
+        assert(!val.datatypeLex().null());
+        out << "\"^^<" << val.datatypeLex() << '>';
     }
     return out;
 }
@@ -640,54 +845,23 @@ std::ostream& operator<<(std::ostream& out, const Value* val) {
 }
 
 void Value::promoteNumericType(Value& v1, Value& v2) {
-    v1.ensureInterpreted();
-    v2.ensureInterpreted();
     if(v1.isDecimal() && v2.isInteger())
         // convert v2 to xsd:decimal
-        v2.fillDecimal(new XSDDecimal(v2.integer));
+        v2.fillDecimal(new XSDDecimal(v2.integer()));
     else if(v2.isDecimal() && v1.isInteger())
         // convert v1 to xsd:decimal
-        v1.fillDecimal(new XSDDecimal(v1.integer));
+        v1.fillDecimal(new XSDDecimal(v1.integer()));
     else if(v1.isFloating() && v2.isInteger())
         // convert v2 to xsd:double
-        v2.fillFloating(v2.integer);
+        v2.fillFloating(v2.integer());
     else if(v1.isFloating() && v2.isDecimal())
         // convert v2 to xsd:double
-        v2.fillFloating(v2.decimal->getFloat());
+        v2.fillFloating(v2.decimal().getFloat());
     else if(v2.isFloating() && v1.isInteger())
         // convert v1 to xsd:double
-        v1.fillFloating(v1.integer);
+        v1.fillFloating(v1.integer());
     else if(v2.isFloating() && v1.isDecimal())
-        v1.fillFloating(v1.decimal->getFloat());
-}
-
-void Value::interpretDatatype() {
-    if(type != TYPE_CUSTOM)
-        return;
-
-    constexpr unsigned PREFIXLEN = sizeof(XSD_PREFIX) - 1;
-    if(typeUriLen < PREFIXLEN + 1)
-        return;
-
-    if(memcmp(typeUri, XSD_PREFIX, PREFIXLEN) != 0)
-        return;
-
-    const char* fragment = &typeUri[PREFIXLEN];
-    unsigned fragmentLen = typeUriLen - PREFIXLEN;
-    for(Type t = TYPE_FIRST_XSD; t <= TYPE_LAST_XSD;
-        t = static_cast<Type>(t+1)) {
-        if(typeUriLen == TYPE_URIS_LEN[t] &&
-           memcmp(fragment, &TYPE_URIS[t][PREFIXLEN], fragmentLen) == 0) {
-            type = t;
-            if(hasCleanFlag(CLEAN_TYPE_URI)) {
-                delete [] typeUri;
-                removeCleanFlag(CLEAN_TYPE_URI);
-            }
-            typeUri = TYPE_URIS[type];
-            typeUriLen = TYPE_URIS_LEN[type];
-            return;
-        }
-    }
+        v1.fillFloating(v1.decimal().getFloat());
 }
 
 }

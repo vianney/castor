@@ -59,7 +59,7 @@ BinaryExpression::~BinaryExpression() {
 
 ValueExpression::ValueExpression(Query* query, Value* value) :
         Expression(query), value_(value) {
-    value->ensureInterpreted();
+    value->ensureInterpreted(*query->store());
 }
 ValueExpression::~ValueExpression() {
     delete value_;
@@ -87,13 +87,13 @@ RegExExpression::~RegExExpression() {
     delete arg3_;
 }
 
-CastExpression::CastExpression(Value::Type target, Expression* arg) :
-        Expression(arg->query()), target_(target), arg_(arg) {
-    vars_ = arg->variables();
-}
-CastExpression::~CastExpression() {
-    delete arg_;
-}
+//CastExpression::CastExpression(Value::Type target, Expression* arg) :
+//        Expression(arg->query()), target_(target), arg_(arg) {
+//    vars_ = arg->variables();
+//}
+//CastExpression::~CastExpression() {
+//    delete arg_;
+//}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Optimzing expressions
@@ -120,19 +120,22 @@ Expression* BangExpression::optimize() {
 int Expression::evaluateEBV(Value& buffer) {
     if(!evaluate(buffer))
         return -1;
-    buffer.ensureInterpreted();
-    if(buffer.isBoolean())
-        return buffer.boolean ? 1 : 0;
-    else if(buffer.isInteger())
-        return buffer.integer ? 1 : 0;
-    else if(buffer.isFloating())
-        return std::isnan(buffer.floating) || buffer.floating == .0 ? 0 : 1;
-    else if(buffer.isDecimal())
-        return buffer.decimal->isZero() ? 0 : 1;
-    else if(buffer.isPlain() || buffer.isXSDString())
-        return buffer.lexicalLen == 0 ? 0 : 1;
-    else
+    buffer.ensureInterpreted(*query_->store());
+    if(buffer.isBoolean()) {
+        return buffer.boolean() ? 1 : 0;
+    } else if(buffer.isInteger()) {
+        return buffer.integer() ? 1 : 0;
+    } else if(buffer.isFloating()) {
+        return std::isnan(buffer.floating()) || buffer.floating() == .0 ? 0 : 1;
+    } else if(buffer.isDecimal()) {
+        return buffer.decimal().isZero() ? 0 : 1;
+    } else if(buffer.isPlain() || buffer.isXSDString()) {
+        // TODO: we only need lexical to be direct
+        buffer.ensureDirectStrings(*query_->store());
+        return buffer.lexical().length() == 0 ? 0 : 1;
+    } else {
         return -1;
+    }
 }
 
 bool ValueExpression::evaluate(Value& result) {
@@ -141,10 +144,10 @@ bool ValueExpression::evaluate(Value& result) {
 }
 
 bool VariableExpression::evaluate(Value& result) {
-    Value::id_t valid = variable_->valueId();
-    if(valid == 0)
+    Value::id_t id = variable_->valueId();
+    if(id == 0)
         return false;
-    query_->store()->fetch(valid, result);
+    result = query_->store()->lookupValue(id);
     return true;
 }
 
@@ -165,13 +168,13 @@ bool UPlusExpression::evaluate(Value& result) {
 bool UMinusExpression::evaluate(Value& result) {
     if(!arg_->evaluate(result))
         return false;
-    result.ensureInterpreted();
+    result.ensureInterpreted(*query_->store());
     if(result.isInteger())
-        result.fillInteger(-result.integer);
+        result.fillInteger(-result.integer());
     else if(result.isDecimal())
-        result.fillDecimal(result.decimal->negate());
+        result.fillDecimal(result.decimal().negate());
     else if(result.isFloating())
-        result.fillFloating(-result.floating);
+        result.fillFloating(-result.floating());
     else
         return false;
     return true;
@@ -185,7 +188,7 @@ bool BoundExpression::evaluate(Value& result) {
 bool IsIriExpression::evaluate(Value& result) {
     if(!arg_->evaluate(result))
         return false;
-    result.fillBoolean(result.isIRI());
+    result.fillBoolean(result.isURI());
     return true;
 }
 
@@ -207,40 +210,31 @@ bool StrExpression::evaluate(Value& result) {
     if(!arg_->evaluate(result) || result.isBlank())
         return false;
     result.ensureLexical();
-    bool freeLex = result.hasCleanFlag(Value::CLEAN_LEXICAL);
-    result.removeCleanFlag(Value::CLEAN_LEXICAL);
-    result.fillSimpleLiteral(result.lexical, result.lexicalLen, freeLex);
+    result.fillSimpleLiteral(std::move(result.lexical()));
     return true;
 }
 
 bool LangExpression::evaluate(Value& result) {
     if(!arg_->evaluate(result) || !result.isPlain())
         return false;
-    const char* lang = result.language;
-    if(lang == nullptr)
-        lang = "";
-    bool freeLex = result.hasCleanFlag(Value::CLEAN_DATA);
-    result.removeCleanFlag(Value::CLEAN_DATA);
-    result.fillSimpleLiteral(lang, result.languageLen, freeLex);
+    if(result.isSimple())
+        result.fillSimpleLiteral(String(""));
+    else
+        result.fillSimpleLiteral(std::move(result.language()));
     return true;
 }
 
 bool DatatypeExpression::evaluate(Value& result) {
-    if(!arg_->evaluate(result) || !result.isLiteral())
+    if(!arg_->evaluate(result) || !result.isLiteral() || result.isPlainWithLang())
         return false;
-    if(result.isPlain()) {
-        if(result.language != 0)
-            return false;
-        result.fillSimpleLiteral(Value::TYPE_URIS[Value::TYPE_PLAIN_STRING],
-                                 sizeof(Value::TYPE_URIS[Value::TYPE_PLAIN_STRING]) - 1,
-                                 false);
-        return true;
+    if(result.isSimple()) {
+        result.fillURI(String(       "http://www.w3.org/2001/XMLSchema#string",
+                              sizeof("http://www.w3.org/2001/XMLSchema#string") - 1));
     } else {
-        bool freeLex = result.hasCleanFlag(Value::CLEAN_TYPE_URI);
-        result.removeCleanFlag(Value::CLEAN_TYPE_URI);
-        result.fillSimpleLiteral(result.typeUri, result.typeUriLen, freeLex);
-        return true;
+        // FIXME: ensure there is a datatype lexical
+        result.fillURI(std::move(result.datatypeLex()));
     }
+    return true;
 }
 
 bool OrExpression::evaluate(Value& result) {
@@ -271,46 +265,50 @@ bool EqExpression::evaluate(Value& result) {
     Value right;
     if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
-    result.ensureInterpreted();
-    right.ensureInterpreted();
-    int cmp = result.compare(right);
-    if(cmp == -2) {
-        cmp = result.rdfequals(right);
-        if(cmp == -1)
-            return false;
-    }
-    if(cmp == 0)
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
+    switch(result.equals(right)) {
+    case -1:
+        return false;
+    case 0:
         result.fillBoolean(true);
-    else
+        return true;
+    case 1:
         result.fillBoolean(false);
-    return true;
+        return true;
+    default:
+        assert(false); // should not happen
+        return false;
+    }
 }
 
 bool NEqExpression::evaluate(Value& result) {
     Value right;
     if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
-    result.ensureInterpreted();
-    right.ensureInterpreted();
-    int cmp = result.compare(right);
-    if(cmp == -2) {
-        cmp = result.rdfequals(right);
-        if(cmp == -1)
-            return false;
-    }
-    if(cmp != 0)
-        result.fillBoolean(true);
-    else
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
+    switch(result.equals(right)) {
+    case -1:
+        return false;
+    case 0:
         result.fillBoolean(false);
-    return true;
+        return true;
+    case 1:
+        result.fillBoolean(true);
+        return true;
+    default:
+        assert(false); // should not happen
+        return false;
+    }
 }
 
 bool LTExpression::evaluate(Value& result) {
     Value right;
     if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
-    result.ensureInterpreted();
-    right.ensureInterpreted();
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
     int cmp = result.compare(right);
     if(cmp == -2)
         return false;
@@ -325,8 +323,8 @@ bool GTExpression::evaluate(Value& result) {
     Value right;
     if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
-    result.ensureInterpreted();
-    right.ensureInterpreted();
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
     int cmp = result.compare(right);
     if(cmp == -2)
         return false;
@@ -341,8 +339,8 @@ bool LEExpression::evaluate(Value& result) {
     Value right;
     if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
-    result.ensureInterpreted();
-    right.ensureInterpreted();
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
     int cmp = result.compare(right);
     if(cmp == -2)
         return false;
@@ -357,8 +355,8 @@ bool GEExpression::evaluate(Value& result) {
     Value right;
     if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
         return false;
-    result.ensureInterpreted();
-    right.ensureInterpreted();
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
     int cmp = result.compare(right);
     if(cmp == -2)
         return false;
@@ -374,13 +372,15 @@ bool StarExpression::evaluate(Value& result) {
     if(!arg1_->evaluate(result) || !result.isNumeric() ||
        !arg2_->evaluate(right) || !right.isNumeric())
         return false;
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
     Value::promoteNumericType(result, right);
     if(right.isInteger())
-        result.fillInteger(result.integer * right.integer);
+        result.fillInteger(result.integer() * right.integer());
     else if(right.isDecimal())
-        result.fillDecimal(result.decimal->multiply(*right.decimal));
+        result.fillDecimal(result.decimal().multiply(right.decimal()));
     else
-        result.fillFloating(result.floating * right.floating);
+        result.fillFloating(result.floating() * right.floating());
     return true;
 }
 
@@ -389,14 +389,16 @@ bool SlashExpression::evaluate(Value& result) {
     if(!arg1_->evaluate(result) || !result.isNumeric() ||
        !arg2_->evaluate(right) || !right.isNumeric())
         return false;
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
     Value::promoteNumericType(result, right);
     if(right.isInteger()) {
-        XSDDecimal d1(result.integer), d2(result.integer);
+        XSDDecimal d1(result.integer()), d2(result.integer());
         result.fillDecimal(d1.divide(d2));
     } else if(right.isDecimal()) {
-        result.fillDecimal(result.decimal->divide(*right.decimal));
+        result.fillDecimal(result.decimal().divide(right.decimal()));
     } else {
-        result.fillFloating(result.floating / right.floating);
+        result.fillFloating(result.floating() / right.floating());
     }
     return true;
 }
@@ -406,13 +408,15 @@ bool PlusExpression::evaluate(Value& result) {
     if(!arg1_->evaluate(result) || !result.isNumeric() ||
        !arg2_->evaluate(right) || !right.isNumeric())
         return false;
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
     Value::promoteNumericType(result, right);
     if(right.isInteger())
-        result.fillInteger(result.integer + right.integer);
+        result.fillInteger(result.integer() + right.integer());
     else if(right.isDecimal())
-        result.fillDecimal(result.decimal->add(*right.decimal));
+        result.fillDecimal(result.decimal().add(right.decimal()));
     else
-        result.fillFloating(result.floating + right.floating);
+        result.fillFloating(result.floating() + right.floating());
     return true;
 }
 
@@ -421,13 +425,15 @@ bool MinusExpression::evaluate(Value& result) {
     if(!arg1_->evaluate(result) || !result.isNumeric() ||
        !arg2_->evaluate(right) || !right.isNumeric())
         return false;
+    result.ensureInterpreted(*query_->store());
+    right.ensureInterpreted(*query_->store());
     Value::promoteNumericType(result, right);
     if(right.isInteger())
-        result.fillInteger(result.integer - right.integer);
+        result.fillInteger(result.integer() - right.integer());
     else if(right.isDecimal())
-        result.fillDecimal(result.decimal->substract(*right.decimal));
+        result.fillDecimal(result.decimal().substract(right.decimal()));
     else
-        result.fillFloating(result.floating - right.floating);
+        result.fillFloating(result.floating() - right.floating());
     return true;
 }
 
@@ -437,7 +443,7 @@ bool SameTermExpression::evaluate(Value& result) {
         return false;
     result.ensureLexical();
     right.ensureLexical();
-    result.fillBoolean(result.rdfequals(right) == 0);
+    result.fillBoolean(result == right);
     return true;
 }
 
@@ -447,24 +453,21 @@ bool DiffTermExpression::evaluate(Value& result) {
         return false;
     result.ensureLexical();
     right.ensureLexical();
-    result.fillBoolean(result.rdfequals(right) != 0);
+    result.fillBoolean(result != right);
     return true;
 }
 
 bool LangMatchesExpression::evaluate(Value& result) {
-    result.clean();
     throw CastorException() << "Unsupported operator: LANGMATCHES";
 }
 
 bool RegExExpression::evaluate(Value& result) {
-    result.clean();
     throw CastorException() << "Unsupported operator: REGEX";
 }
 
-bool CastExpression::evaluate(Value& result) {
-    result.clean();
-    throw CastorException() << "Unsupported operator: casting";
-}
+//bool CastExpression::evaluate(Value& result) {
+//    throw CastorException() << "Unsupported operator: casting";
+//}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Posting constraints
@@ -489,7 +492,7 @@ void EqualityExpression::post(cp::Subtree& sub) {
         Value val;
         if(arg2_->evaluate(val)) {
             cp::RDFVar* x = var1->variable()->cp();
-            query_->store()->lookup(val);
+            query_->store()->resolve(val);
             postConst(sub, x, val);
         } else {
             sub.add(new FalseConstraint());
@@ -498,7 +501,7 @@ void EqualityExpression::post(cp::Subtree& sub) {
         Value val;
         if(arg1_->evaluate(val)) {
             cp::RDFVar* x = var2->variable()->cp();
-            query_->store()->lookup(val);
+            query_->store()->resolve(val);
             postConst(sub, x, val);
         } else {
             sub.add(new FalseConstraint());
@@ -523,14 +526,14 @@ void NEqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
     sub.add(new VarDiffConstraint(query_->store(), x1, x2));
 }
 void NEqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
-    if(v.isLiteral() && v.type != Value::TYPE_CUSTOM) {
+    if(v.isLiteral() && v.isComparable()) {
         sub.add(new InRangesConstraint(x,
-            { query_->store()->range(Value::CAT_BLANK, Value::CAT_IRI),
+            { query_->store()->range(Value::CAT_BLANK, Value::CAT_URI),
               query_->store()->range(v.category()) }));
     } else {
         sub.add(new InRangeConstraint(x,
                         query_->store()->range(Value::CAT_BLANK,
-                                                          Value::CAT_IRI)));
+                                               Value::CAT_URI)));
     }
     sub.add(new NotInRangeConstraint(x, query_->store()->eqClass(v)));
 }
@@ -538,10 +541,10 @@ void SameTermExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* 
     sub.add(new VarSameTermConstraint(x1, x2));
 }
 void SameTermExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
-    if(v.id == 0) {
+    if(v.id() == 0) {
         sub.add(new FalseConstraint());
     } else {
-        ValueRange rng = {v.id, v.id};
+        ValueRange rng = {v.id(), v.id()};
         sub.add(new InRangeConstraint(x, rng));
     }
 }
@@ -549,8 +552,8 @@ void DiffTermExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* 
     sub.add(new VarDiffTermConstraint(x1, x2));
 }
 void DiffTermExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
-    if(v.id != 0) {
-        ValueRange rng = {v.id, v.id};
+    if(v.id() != 0) {
+        ValueRange rng = {v.id(), v.id()};
         sub.add(new NotInRangeConstraint(x, rng));
     }
 }
@@ -569,7 +572,7 @@ void InequalityExpression::post(cp::Subtree& sub) {
         Value val;
         if(arg2_->evaluate(val) && val.isComparable()) {
             cp::RDFVar* x = var1->variable()->cp();
-            query_->store()->lookup(val);
+            query_->store()->resolve(val);
             sub.add(new InRangeConstraint(x,
                         query_->store()->range(val.category())));
             postConst(sub, x, val);
@@ -580,7 +583,7 @@ void InequalityExpression::post(cp::Subtree& sub) {
         Value val;
         if(arg1_->evaluate(val) && val.isComparable()) {
             cp::RDFVar* x = var2->variable()->cp();
-            query_->store()->lookup(val);
+            query_->store()->resolve(val);
             sub.add(new InRangeConstraint(x,
                         query_->store()->range(val.category())));
             postConst(sub, val, x);

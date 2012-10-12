@@ -21,11 +21,10 @@
 
 namespace castor {
 
-PageWriter::PageWriter(const char* fileName)
-        : out_(fileName, std::ios::out | std::ios::binary | std::ios::trunc),
-          page_(0) {
-    iter_ = buffer_;
-    end_ = iter_ + PAGE_SIZE;
+PageWriter::PageWriter(const char* fileName) :
+        Buffer(PAGE_SIZE),
+        out_(fileName, std::ios::out | std::ios::binary | std::ios::trunc),
+        page_(0) {
 }
 
 PageWriter::~PageWriter() {
@@ -42,60 +41,28 @@ void PageWriter::seek(unsigned p) {
     page_ = p;
 }
 
-void PageWriter::directWrite(const void* data) {
-    out_.write(static_cast<const char*>(data), PAGE_SIZE);
-    page_++;
-}
-
-void PageWriter::flush() {
-    memset(iter_, 0, remaining() * sizeof(char));
-    directWrite(buffer_);
-    iter_ = buffer_;
-}
-
-void PageWriter::write(const void* data, unsigned len) {
-    memcpy(iter_, data, len);
-    iter_ += len;
-}
-
-void PageWriter::writeByte(unsigned char byte) {
-    *(iter_++) = byte;
-}
-
-void PageWriter::writeInt(unsigned char*& it, unsigned value) {
-    *(it++) = value >> 24;
-    *(it++) = (value >> 16) & 0xff;
-    *(it++) = (value >> 8) & 0xff;
-    *(it++) = value & 0xff;
-}
-
-unsigned PageWriter::lenDelta(unsigned value) {
-    if(value >= 1 << 24)
-        return 4;
-    else if(value >= 1 << 16)
-        return 3;
-    else if(value >= 1 << 8)
-        return 2;
-    else if(value > 0)
-        return 1;
-    else
-        return 0;
-}
-
-void PageWriter::writeDelta(unsigned value) {
-    if(value >= 1 << 24) {
-        writeInt(value);
-    } else if(value >= 1 << 16) {
-        *(iter_++) = value >> 16;
-        *(iter_++) = (value >> 8) & 0xff;
-        *(iter_++) = value & 0xff;
-    } else if(value >= 1 << 8) {
-        *(iter_++) = value >> 8;
-        *(iter_++) = value & 0xff;
-    } else if(value > 0) {
-        *(iter_++) = value;
+void PageWriter::directWrite(const unsigned char *data, std::size_t len) {
+    assert(offset() == 0);
+    out_.write(reinterpret_cast<const char*>(data), len);
+    page_ += len / PAGE_SIZE;
+    std::size_t overflow = len % PAGE_SIZE;
+    if(overflow > 0) {
+        std::size_t padding = PAGE_SIZE - overflow;
+        unsigned char blank[padding];
+        memset(blank, 0, padding);
+        out_.write(reinterpret_cast<const char*>(blank), padding);
+        ++page_;
     }
 }
 
+void PageWriter::flush() {
+    if(remaining() > 0) {
+        unsigned char blank[remaining()];
+        memset(blank, 0, remaining() * sizeof(unsigned char));
+        write(blank, remaining());
+    }
+    clear(); // reset pointer
+    directWrite(get());
+}
 
 }

@@ -110,8 +110,8 @@ public:
     explicit VarVal(Value::id_t valid) : valid_(valid), varid_(0) {}
     VarVal(const Variable& variable) : valid_(0), varid_(variable.id()+1) {}
     VarVal(const Variable* variable) : valid_(0), varid_(variable->id()+1) {}
-    VarVal(const Value& value) : valid_(value.id), varid_(0) {}
-    VarVal(const Value* value) : valid_(value->id), varid_(0) {}
+    VarVal(const Value& value) : valid_(value.id()), varid_(0) {}
+    VarVal(const Value* value) : valid_(value->id()), varid_(0) {}
 
     VarVal(const VarVal&) = default;
     VarVal& operator=(const VarVal&) = default;

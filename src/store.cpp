@@ -31,8 +31,22 @@
 
 namespace castor {
 
-const char Store::MAGIC[] = {'\xd0', '\xd4', '\xc5', '\xd8',
-                             'C', 'a', 's', 't', 'o', 'r'};
+String StringMapper::lookupString(String::id_t id) const {
+    assert(String::validId(id));
+    Cursor cur;
+    // read map
+    cur = map_ + 8 * (std::size_t)(id - 1);
+    std::size_t offset = cur.readLong();
+    // read string
+    cur = strings_ + offset;
+    String s(cur);
+    assert(s.id() == id);
+    return s;
+}
+
+
+const unsigned char Store::MAGIC[] = {0xd0, 0xd4, 0xc5, 0xd8,
+                                      'C', 'a', 's', 't', 'o', 'r'};
 
 Store::Store(const char* fileName) : db_(fileName) {
     Cursor cur = db_.page(0);
@@ -59,10 +73,17 @@ Store::Store(const char* fileName) : db_(fileName) {
     for(int i = 0; i < Triple::COMPONENTS; i++)
         fullyAggregated_[i] = new BTree<FullyAggregatedTriple>(&db_, cur.readInt());
 
+    // Get strings pointers
+    strings_.count = cur.readInt();
+    strings_.begin = cur.readInt();
+    strings_.map = cur.readInt();
+    strings_.index = new HashTree<8>(&db_, cur.readInt());
+    StringMapper::strings_ = db_.page(strings_.begin);
+    StringMapper::map_ = db_.page(strings_.map);
+
     // Get values pointers
     values_.begin = cur.readInt();
-    values_.mapping = cur.readInt();
-    values_.index = new ValueHashTree(&db_, cur.readInt());
+    values_.index = new HashTree<4>(&db_, cur.readInt());
     values_.eqClasses = cur.readInt();
     for(Value::Category cat = Value::CAT_BLANK; cat <= Value::CATEGORIES; ++cat)
         values_.categories[cat] = cur.readInt();
@@ -79,66 +100,83 @@ Store::~Store() {
     }
     for(int i = 0; i < Triple::COMPONENTS; i++)
         delete fullyAggregated_[i];
+    delete strings_.index;
     delete values_.index;
 }
 
-void Store::fetch(Value::id_t id, Value& val) {
-    assert(id > 0);
-    assert(id <= valuesCount());
-    // read mapping
-    const unsigned EPP = PageReader::PAGE_SIZE / 8; // entries per page in map
-    id--;
-    Cursor cur = db_.page(values_.mapping + id / EPP) + 8*(id % EPP);
-    unsigned page = cur.readInt();
-    unsigned offset = cur.readInt();
-
-    // read value
-    cur = db_.page(page) + offset;
-    cur.readValue(val);
+Value Store::lookupValue(Value::id_t id) const {
+    assert(id > 0 && id <= valuesCount());
+    Cursor cur = db_.page(values_.begin) + (id - 1) * Value::SERIALIZED_SIZE;
+    return Value(cur);
 }
 
-void Store::lookup(Value& val) {
-    if(val.id > 0)
+void Store::resolve(String& str) const {
+    if(str.resolved())
         return;
+    assert(str.direct());
 
     // look for pages containing the hash
-    val.ensureLexical();
-    Hash::hash_t hash = val.hash();
-    Cursor listCur = values_.index->lookup(hash);
-    if(!listCur.valid())
+    Hash::hash_t hash = str.hash();
+    Cursor cur = strings_.index->lookup(hash);
+    if(!cur.valid()) {
+        str.id(0);
         return;
+    }
 
     // scan all candidates in the collision list
-    Cursor listEnd = db_.pageEnd(listCur);
-    while(listCur != listEnd) {
-        if(listCur.readInt() != hash)
+    Cursor end = db_.pageEnd(cur);
+    while(cur != end) {
+        if(cur.readInt() != hash)
             break;
-
-        // scan page
-        Cursor cur = db_.page(listCur.readInt());
-        cur.skipInt(); // skip next page header
-        unsigned count = cur.readInt();
-        unsigned idx = 0;
-        for(; idx < count; ++idx) { // skip hashes before
-            if(hash == cur.peekValueHash())
-                break;
-            cur.skipValue();
-        }
-        for(; idx < count; ++idx) {
-            if(hash != cur.peekValueHash())
-                break;
-            Value v;
-            cur.readValue(v);
-            if(v == val) {
-                val.id = v.id;
-                return;
-            }
+        std::size_t offset = cur.readLong();
+        Cursor stringCur = db_.page(strings_.begin) + offset;
+        String s(stringCur);
+        if(s == str) {
+            str.id(s.id());
+            return;
         }
     }
+    str.id(0);
+}
+
+void Store::resolve(Value& val) const {
+    if(val.id() != Value::UNKNOWN_ID)
+        return;
+
+    // lookup strings
+    val.ensureLexical();
+    if(val.isTyped() && val.datatypeLex().null()) {
+        Value v = lookupValue(val.datatypeId());
+        val.datatypeLex(String(v.lexical()));
+    }
+    val.ensureDirectStrings(*this);
+    val.ensureResolvedStrings(*this);
+
+    // look for pages containing the hash
+    Hash::hash_t hash = val.hash();
+    Cursor cur = values_.index->lookup(hash);
+    if(!cur.valid()) {
+        val.id(0);
+        return;
+    }
+
+    // scan all candidates in the collision list
+    Cursor end = db_.pageEnd(cur);
+    while(cur != end) {
+        if(cur.readInt() != hash)
+            break;
+        Value::id_t id = cur.readInt();
+        Value v = lookupValue(id);
+        if(v == val) {
+            val.id(id);
+            return;
+        }
+    }
+    val.id(0);
 }
 
 
-ValueRange Store::eqClass(Value::id_t id) {
+ValueRange Store::eqClass(Value::id_t id) const {
     assert(id > 0);
     if(id < values_.categories[Value::CAT_BOOLEAN] ||
        id >= values_.categories[Value::CAT_OTHER]) {
@@ -193,19 +231,18 @@ ValueRange Store::eqClass(Value::id_t id) {
     return result;
 }
 
-ValueRange Store::eqClass(const Value& val) {
-    if(val.id > 0)
-        return eqClass(val.id);
-    assert(val.isInterpreted);
+ValueRange Store::eqClass(const Value& val) const {
+    if(val.id() > 0)
+        return eqClass(val.id());
+    assert(val.interpreted());
 
     // costly binary search for equivalent value
     Value::id_t left  = 1;
     Value::id_t right = values_.count + 1;
     while(left != right) {
         Value::id_t middle = left + (right - left) / 2;
-        Value mVal;
-        fetch(middle, mVal);
-        mVal.ensureInterpreted();
+        Value mVal = lookupValue(middle);
+        mVal.ensureInterpreted(*this);
         if(mVal.compare(val) == 0)
             return eqClass(middle);
         if(mVal < val)
@@ -217,7 +254,7 @@ ValueRange Store::eqClass(const Value& val) {
     return result;
 }
 
-Value::Category Store::category(Value::id_t id) {
+Value::Category Store::category(Value::id_t id) const {
     for(Value::Category cat = Value::CAT_BLANK; cat <= Value::CATEGORIES; ++cat) {
         if(values_.categories[cat] > id)
             return --cat;

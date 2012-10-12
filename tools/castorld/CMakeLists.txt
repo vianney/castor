@@ -20,8 +20,7 @@ set(CASTORLD_SRCS
     tempfile.cpp
     sort.h
     sort.cpp
-    valuelookup.h
-    valuelookup.cpp
+    lookup.h
     pagewriter.h
     pagewriter.cpp
     btreebuilder.h

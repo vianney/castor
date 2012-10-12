@@ -24,10 +24,7 @@ set(CASTOR_SRCS
     solver/constraint.h
     solver/subtree.h
     solver/subtree.cpp
-    store/readutils.h
-    store/readutils.cpp
     store/btree.h
-    store/btree.cpp
     store/triplecache.h
     store/triplecache.cpp
     util.h

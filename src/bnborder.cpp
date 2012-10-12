@@ -46,12 +46,12 @@ void BnBOrderConstraint::updateBound(Solution* sol) {
     unsigned i = 0;
     for(Order order : query_->orders()) {
         if(VariableExpression* varexpr = dynamic_cast<VariableExpression*>(order.expression())) {
-            boundOrderVals_[i].id = varexpr->variable()->valueId();
-            boundOrderError_[i] = (boundOrderVals_[i].id > 0);
+            boundOrderVals_[i].id(varexpr->variable()->valueId());
+            boundOrderError_[i] = (boundOrderVals_[i].id() > 0);
         } else {
             boundOrderError_[i] = !order.expression()->evaluate(boundOrderVals_[i]);
             if(!boundOrderError_[i])
-                boundOrderVals_[i].ensureInterpreted();
+                boundOrderVals_[i].ensureInterpreted(*query_->store());
         }
         ++i;
     }
@@ -74,21 +74,21 @@ bool BnBOrderConstraint::propagate() {
         Value* bval = &boundOrderVals_[i];
         if(VariableExpression* varexpr = dynamic_cast<VariableExpression*>(expr)) {
             cp::RDFVar* x = varexpr->variable()->cp();
-            assert(bval->id > 0);
+            assert(bval->id() > 0);
             if(desc) {
-                if(!x->updateMin(bval->id))
+                if(!x->updateMin(bval->id()))
                     return false;
             } else {
-                if(!x->updateMax(bval->id))
+                if(!x->updateMax(bval->id()))
                     return false;
             }
             if(i == query_->orders().size() - 1) {
-                if(!x->remove(bval->id))
+                if(!x->remove(bval->id()))
                     return false;
             }
             if(!x->bound() ||
-                    (!desc && x->value() < bval->id) ||
-                    (desc && x->value() > bval->id))
+                    (!desc && x->value() < bval->id()) ||
+                    (desc && x->value() > bval->id()))
                 return true;
         } else {
             for(Variable* var : expr->variables()) {
@@ -100,7 +100,7 @@ bool BnBOrderConstraint::propagate() {
             Value val;
             if(!expr->evaluate(val))
                 return true;
-            val.ensureInterpreted();
+            val.ensureInterpreted(*query_->store());
             if(desc) {
                 if(val < *bval)
                     return false;

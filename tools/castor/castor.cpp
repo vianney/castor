@@ -89,9 +89,8 @@ int main(int argc, char* argv[]) {
                 if(id == 0) {
                     *fsol << " ";
                 } else {
-                    Value val;
-                    store.fetch(id, val);
-                    *fsol << val << " ";
+                    *fsol << store.lookupValue(id).ensureDirectStrings(store)
+                          << " ";
                 }
             }
             *fsol << endl;

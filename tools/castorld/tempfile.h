@@ -20,17 +20,89 @@
 
 #include <string>
 #include <fstream>
+#include <cstring>
 #include <cstdint>
 
+#include "util.h"
 #include "model.h"
-#include "store/readutils.h"
 
 namespace castor {
 
 /**
+ * A value complemented with early identifiers as VarInts.
+ *
+ * The serialized format of an early value is
+ * +----------------------+--------------+---------------+----------+
+ * |        Value         | earlyLexical | earlyDatatype | earlyTag |
+ * +----------------------+--------------+---------------+----------+
+ *  Value::SERIALIZED_SIZE     varint         varint        varint
+ */
+class EarlyValue : public Value {
+public:
+    unsigned long earlyLexical;
+    unsigned long earlyDatatype;
+    unsigned long earlyTag;
+
+    EarlyValue() : earlyLexical(0), earlyDatatype(0), earlyTag(0) {}
+    EarlyValue(raptor_term* term) :
+        Value(term), earlyLexical(0), earlyDatatype(0), earlyTag(0) {}
+
+    /**
+     * Deserialize a temporary value and advance cursor.
+     */
+    explicit EarlyValue(Cursor& cur) : Value(cur) {
+        earlyLexical = cur.readVarInt();
+        earlyDatatype = cur.readVarInt();
+        earlyTag = cur.readVarInt();
+    }
+
+    /**
+     * @return the serialized raw value
+     */
+    Buffer serialize() const {
+        Buffer buf(Value::SERIALIZED_SIZE + 3 * Buffer::MAX_VARINT_SIZE);
+        buf.writeBuffer(Value::serialize());
+        buf.writeVarInt(earlyLexical);
+        buf.writeVarInt(earlyDatatype);
+        buf.writeVarInt(earlyTag);
+        return buf;
+    }
+
+    /**
+     * Advance cursor to skip a raw value.
+     */
+    static void skip(Cursor& cur) {
+        Value::skip(cur);
+        cur.skipVarInt();
+        cur.skipVarInt();
+        cur.skipVarInt();
+    }
+
+
+    bool operator==(const EarlyValue& o) const {
+        return category() == o.category() &&
+               (!isNumeric() || numCategory() == o.numCategory()) &&
+               earlyLexical == o.earlyLexical &&
+               earlyDatatype == o.earlyDatatype &&
+               earlyTag == o.earlyTag;
+    }
+
+    Hash::hash_t hash() const {
+        Hash::hash_t result = category() << 16;
+        if(isNumeric())
+            result |= numCategory();
+        result = Hash::hash(&earlyLexical,  sizeof(earlyLexical),  result);
+        result = Hash::hash(&earlyDatatype, sizeof(earlyDatatype), result);
+        result = Hash::hash(&earlyTag,      sizeof(earlyTag),      result);
+        return result;
+    }
+
+};
+
+/**
  * A temporary file. Also includes utilities to read/write it.
  */
-class TempFile {
+class TempFile : public Buffer {
 public:
     explicit TempFile(const std::string& baseName_);
     ~TempFile();
@@ -62,31 +134,9 @@ public:
     void discard();
 
     /**
-     * Write arbitrary data
+     * Overwritten to flush the buffer when full.
      */
-    void write(unsigned len, const char* data);
-    /**
-     * Write a 32-bit unsigned integer to the page in big endian encoding.
-     * @see PageWriter::writeInt(unsigned)
-     */
-    void writeInt(unsigned val);
-    /**
-     * Write a big integer with variable-length encoding
-     */
-    void writeBigInt(uint64_t val);
-    /**
-     * Serialize a value. The value must have a lexical form.
-     *
-     * The serialized format of a value is
-     * +----+------+--------+------+---------+-----------+------------------+
-     * | id | hash | length | type | typelen | type/lang | lexical          |
-     * +----+------+--------+------+---------+-----------+------------------+
-     *    4     4      4       2        2       typelen
-     *
-     * typelen includes terminal null character
-     * length is the length of type/lang + lexical (including terminal null)
-     */
-    void writeValue(const Value& val);
+    std::size_t write(const unsigned char *data, std::size_t len);
 
 private:
     std::string baseName_; //!< basename for name creation
@@ -96,9 +146,6 @@ private:
     static unsigned nextId_; //!< next id for name creation
 
     static constexpr unsigned BUFFER_SIZE = 16384; //!< buffer size
-    char buffer_[BUFFER_SIZE]; //!< write buffer
-    char* iter_; //!< current write pointer in the buffer
-    char* end_; //!< pointer to the end of the buffer (first byte outside)
 };
 
 }

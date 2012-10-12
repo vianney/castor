@@ -242,7 +242,7 @@ bool VarDiffConstraint::propagate() {
             return false;
     }
     Value::Category cat = store_->category(x1->value());
-    if(cat > Value::CAT_IRI) {
+    if(cat > Value::CAT_URI) {
         // Comparing two literals of different class result in type error
         ValueRange rng = store_->range(cat);
         if(!x2->updateMin(rng.from) || !x2->updateMax(rng.to))

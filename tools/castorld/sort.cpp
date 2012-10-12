@@ -29,7 +29,7 @@ namespace castor {
  * Maximum amount of usable memory.
  * TODO: detect at runtime
  */
-static const unsigned MEM_LIMIT = sizeof(void*) * (1 << 27);
+static constexpr std::size_t MEM_LIMIT = sizeof(void*) * (1 << 27);
 
 namespace {
 
@@ -50,24 +50,25 @@ struct Range {
     /**
      * Write this item to a temporary file
      */
-    void write(TempFile& out) {
-        out.write(to - from, reinterpret_cast<const char*>(from.get()));
+    void write(TempFile& out) const {
+        out.write(from.get(), to - from);
     }
 };
 
 /**
  * Sort wrapper that colls the comparison function
  */
-struct CompareSorter
-{
-    typedef int (*func)(Cursor,Cursor);
-    const func compare; //!< Comparison function
-
-    CompareSorter(func compare) : compare(compare) {}
+class CompareSorter {
+public:
+    CompareSorter(std::function<int(Cursor, Cursor)> compare) :
+        compare_(compare) {}
 
     bool operator()(const Range& a, const Range& b) const {
-       return compare(a.from, b.from) < 0;
+       return compare_(a.from, b.from) < 0;
     }
+
+private:
+    std::function<int(Cursor, Cursor)> compare_; //!< Comparison function
 };
 
 /**
@@ -95,8 +96,8 @@ static unsigned spool(TempFile& out, const vector<Range>& items,
 }
 
 void FileSorter::sort(TempFile& in, TempFile& out,
-                      void (*skip)(Cursor&),
-                      int (*compare)(Cursor, Cursor),
+                      std::function<void(Cursor&)> skip,
+                      std::function<int(Cursor, Cursor)> compare,
                       bool eliminateDuplicates) {
     in.close();
 
@@ -110,14 +111,14 @@ void FileSorter::sort(TempFile& in, TempFile& out,
         while (cur < limit) {
             // Collect items
             vector<Range> items;
-            Cursor maxCur = cur + MEM_LIMIT;
+            Cursor begin = cur;
             while (cur < limit) {
                 Cursor start = cur;
                 skip(cur);
                 items.push_back(Range(start, cur));
 
                 // Memory Overflow?
-                if((cur + (sizeof(Range)*items.size())) > maxCur)
+                if(cur - begin + items.size()*sizeof(Range) > MEM_LIMIT)
                     break;
             }
 

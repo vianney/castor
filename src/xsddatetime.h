@@ -42,7 +42,7 @@ public:
     /**
      * @return lexical form of the datetime
      */
-    std::string getString() {
+    std::string getString() const {
         size_t n;
         char* str = rasqal_xsd_datetime_to_counted_string(val_, &n);
         std::string result = std::string(str, n);

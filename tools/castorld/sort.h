@@ -18,6 +18,8 @@
 #ifndef CASTOR_TOOLS_CASTORLD_SORT_H
 #define CASTOR_TOOLS_CASTORLD_SORT_H
 
+#include <functional>
+
 #include "tempfile.h"
 
 namespace castor {
@@ -29,8 +31,8 @@ public:
      * Sort a file
      */
     static void sort(TempFile& in, TempFile& out,
-                     void (*skip)(Cursor&),
-                     int (*compare)(Cursor, Cursor),
+                     std::function<void(Cursor&)> skip,
+                     std::function<int(Cursor, Cursor)> compare,
                      bool eliminateDuplicates = false);
 
 };

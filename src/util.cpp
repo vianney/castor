@@ -17,6 +17,11 @@
  */
 #include "util.h"
 
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <unistd.h>
+
 #include <sys/param.h>  /* attempt to define endianness */
 #ifdef linux
 # include <endian.h>    /* attempt to define endianness */
@@ -329,6 +334,25 @@ Hash::hash_t Hash::hash(const void *key, size_t length, hash_t initval) {
 
   final(a,b,c);
   return c;
+}
+
+MMapFile::MMapFile(const char* fileName) {
+    fd_ = open(fileName, O_RDONLY);
+    if(fd_ == -1)
+        throw CastorException() << "Unable to open file " << fileName;
+    std::size_t size = lseek(fd_, 0, SEEK_END);
+    if(size < 0)
+        throw CastorException() << "Unable to seek file " << fileName;
+    begin_ = Cursor(static_cast<const unsigned char*>
+                        (mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd_, 0)));
+    if(begin_.get() == MAP_FAILED)
+        throw CastorException() << "Unable to map file " << fileName;
+    end_ = begin_ + size;
+}
+
+MMapFile::~MMapFile() {
+    munmap(const_cast<unsigned char*>(begin_.get()), end_ - begin_);
+    close(fd_);
 }
 
 }

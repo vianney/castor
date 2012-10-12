@@ -21,12 +21,42 @@
 #include <string>
 #include <exception>
 
+#include "util.h"
 #include "model.h"
-#include "store/readutils.h"
 #include "store/btree.h"
 #include "store/triplecache.h"
 
 namespace castor {
+
+/**
+ * Utility class to lookup strings (i.e., point str to the right place
+ * according to the id).
+ */
+class StringMapper {
+public:
+
+    /**
+     * Construct a mapper.
+     *
+     * @param strings beginning of the strings table
+     * @param map beginning of the string map, a sequence of 64-bits offsets in
+     *            strings, ordered by id
+     */
+    StringMapper(Cursor strings = nullptr, Cursor map = nullptr)
+        : strings_(strings), map_(map) {}
+
+    /**
+     * Lookup a string.
+     *
+     * @param id a valid id
+     * @return the string pointed to by id
+     */
+    String lookupString(String::id_t id) const;
+
+protected:
+    Cursor strings_;
+    Cursor map_;
+};
 
 /**
  * Store containing triples and values.
@@ -34,10 +64,10 @@ namespace castor {
  *
  * [1] http://www.mpi-inf.mpg.de/~neumann/rdf3x/
  */
-class Store {
+class Store : public StringMapper {
 public:
-    static constexpr unsigned VERSION = 8; //!< format version
-    static const     char     MAGIC[10];   //!< magic number
+    static constexpr unsigned      VERSION = 9; //!< format version
+    static const     unsigned char MAGIC[10];   //!< magic number
 
     /**
      * Open a store.
@@ -53,17 +83,25 @@ public:
     Store& operator=(const Store&) = delete;
 
     /**
+     * Number of strings in the store. The ids of the strings will always be
+     * between 1 and the returned value included.
+     *
+     * @return the number of strings in the store
+     */
+    unsigned stringsCount() const { return strings_.count; }
+
+    /**
      * Number of values in the store. The ids of the values will always be
      * between 1 and the returned value included.
      *
-     * @return the number of values in the store or -1 if error
+     * @return the number of values in the store
      */
-    unsigned valuesCount() { return values_.count; }
+    unsigned valuesCount() const { return values_.count; }
 
     /**
      * @return range of values of a category in the store
      */
-    ValueRange range(Value::Category cat) {
+    ValueRange range(Value::Category cat) const {
         ValueRange result = {values_.categories[cat],
                              values_.categories[cat+1] - 1};
         return result;
@@ -72,32 +110,40 @@ public:
     /**
      * @return range of values spanning given categories in the store
      */
-    ValueRange range(Value::Category from, Value::Category to) {
+    ValueRange range(Value::Category from, Value::Category to) const {
         ValueRange result = {values_.categories[from],
                              values_.categories[to+1] - 1};
         return result;
     }
 
     /**
-     * Fetch a value from the store
+     * Lookup a value from the store
      *
-     * @param id identifier of the value (within range 1..getValueCount())
-     * @param[out] val will contain the value
+     * @param id identifier of the value (within range 1..valuesCount())
+     * @return the value
      */
-    void fetch(Value::id_t id, Value& val);
+    Value lookupValue(Value::id_t id) const;
 
     /**
-     * Search for the id of a value (if id == 0) and replace it if found.
+     * Search for the id of a string (if id == UNKNOWN_ID) and replace it if
+     * found.
+     *
+     * @param[in,out] str the string to look for and update
+     */
+    void resolve(String& str) const;
+
+    /**
+     * Search for the id of a value (if id == UNKNOWN_ID) and replace it if found.
      *
      * @param[in,out] val the value to look for and update
      */
-    void lookup(Value& val);
+    void resolve(Value& val) const;
 
     /**
      * @param id the identifier of a value in the store
      * @return the equivalence class of that value
      */
-    ValueRange eqClass(Value::id_t id);
+    ValueRange eqClass(Value::id_t id) const;
 
     /**
      * Get the equivalence class of a value. If val.id > 0, this is equivalent
@@ -114,13 +160,13 @@ public:
      *
      * @pre val.ensureInterpreted()
      */
-    ValueRange eqClass(const Value& val);
+    ValueRange eqClass(const Value& val) const;
 
     /**
      * @param id the identifier of a value in the store
      * @return the category of the value
      */
-    Value::Category category(Value::id_t id);
+    Value::Category category(Value::id_t id) const;
 
     /**
      * Get the number of triples of specified pattern. Components with value
@@ -131,8 +177,8 @@ public:
      */
     unsigned triplesCount(Triple pattern);
 
-    unsigned statTripleCacheHits()   { return cache_.statHits();   }
-    unsigned statTripleCacheMisses() { return cache_.statMisses(); }
+    unsigned statTripleCacheHits()   const { return cache_.statHits();   }
+    unsigned statTripleCacheMisses() const { return cache_.statMisses(); }
 
 
     /**
@@ -203,13 +249,22 @@ private:
     BTree<FullyAggregatedTriple>* fullyAggregated_[Triple::COMPONENTS];
 
     /**
+     * Strings
+     */
+    struct {
+        unsigned       count;     //!< number of strings
+        unsigned       begin;     //!< first page of table
+        unsigned       map;       //!< first page of map
+        HashTree<8>*   index;     //!< index (hash->offset mapping)
+    } strings_;
+
+    /**
      * Values
      */
     struct {
         unsigned       count;     //!< number of values
         unsigned       begin;     //!< first page of table
-        unsigned       mapping;   //!< first page of mapping
-        ValueHashTree* index;     //!< index (hash->page mapping)
+        HashTree<4>*   index;     //!< index (hash->page mapping)
         unsigned       eqClasses; //!< first page of equivalence classes boundaries
 
         //! first id of each category

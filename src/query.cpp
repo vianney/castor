@@ -218,9 +218,9 @@ Pattern* Query::convert(rasqal_graph_pattern* gp) {
             rasqal_triple* triple;
             int i = 0;
             while((triple = rasqal_graph_pattern_get_triple(gp, i++))) {
-                TriplePattern tpat(lookup(triple->subject),
-                                   lookup(triple->predicate),
-                                   lookup(triple->object));
+                TriplePattern tpat(resolve(triple->subject),
+                                   resolve(triple->predicate),
+                                   resolve(triple->object));
                 for(int i = 0; i < tpat.COMPONENTS; i++) {
                     if(tpat[i].isUnknown()) {
                         // We have an unknown value, this BGP will never match
@@ -367,7 +367,7 @@ Expression* Query::convert(rasqal_expression* expr) {
                 reinterpret_cast<Variable*>(lit->value.variable->user_data));
         } else {
             Value* val = new Value(lit);
-            store_->lookup(*val);
+            store_->resolve(*val);
             return new ValueExpression(this, val);
         }
     }
@@ -443,12 +443,12 @@ Expression* Query::convert(rasqal_expression* expr) {
     }
 }
 
-VarVal Query::lookup(rasqal_literal* literal) {
+VarVal Query::resolve(rasqal_literal* literal) {
     if(literal->type == RASQAL_LITERAL_VARIABLE) {
         return VarVal((Variable*) literal->value.variable->user_data);
     } else {
         Value val(literal);
-        store_->lookup(val);
+        store_->resolve(val);
         return VarVal(val);
     }
 }

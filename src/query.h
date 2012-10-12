@@ -203,7 +203,7 @@ private:
      * @return the variable or value id of the literal in the store
      * @throws CastorException on parse error
      */
-    VarVal lookup(rasqal_literal* literal);
+    VarVal resolve(rasqal_literal* literal);
 
     /**
      * Find the next solution of the pattern, updating the DISTINCT constraint

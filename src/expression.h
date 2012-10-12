@@ -576,34 +576,34 @@ private:
     Expression* arg3_; //!< third argument
 };
 
-/**
- * Cast expression
- */
-class CastExpression : public Expression {
-public:
-    CastExpression(Value::Type target, Expression* arg);
-    ~CastExpression();
-    bool evaluate(Value& result);
+///**
+// * Cast expression
+// */
+//class CastExpression : public Expression {
+//public:
+//    CastExpression(Value::Type target, Expression* arg);
+//    ~CastExpression();
+//    bool evaluate(Value& result);
 
-    Expression* optimize() {
-        arg_ = arg_->optimize();
-        return this;
-    }
+//    Expression* optimize() {
+//        arg_ = arg_->optimize();
+//        return this;
+//    }
 
-    /**
-     * @return destination type
-     */
-    Value::Type target() { return target_; }
+//    /**
+//     * @return destination type
+//     */
+//    Value::Type target() { return target_; }
 
-    /**
-     * @return argument
-     */
-    Expression* argument() { return arg_; }
+//    /**
+//     * @return argument
+//     */
+//    Expression* argument() { return arg_; }
 
-private:
-    Value::Type target_; //!< target type
-    Expression* arg_; //!< argument to cast
-};
+//private:
+//    Value::Type target_; //!< target type
+//    Expression* arg_; //!< argument to cast
+//};
 
 }
 
