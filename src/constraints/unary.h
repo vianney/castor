@@ -15,19 +15,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef CASTOR_CONSTRAINTS_H
-#define CASTOR_CONSTRAINTS_H
+#ifndef CASTOR_CONSTRAINTS_UNARY_H
+#define CASTOR_CONSTRAINTS_UNARY_H
 
-#include "config.h"
 #include "solver/constraint.h"
-#include "query.h"
-#include "expression.h"
-#include "pattern.h"
-
-#ifdef CASTOR_CSTR_TIMING
-#include <sys/time.h>
-#include <sys/resource.h>
-#endif
+#include "variable.h"
 
 namespace castor {
 
@@ -148,141 +140,6 @@ private:
     Value::id_t v_;
 };
 
-/**
- * Statement constraint
- */
-class TripleConstraint : public cp::StatelessConstraint {
-public:
-    TripleConstraint(Query* query, TriplePattern pat);
-    void restore();
-    bool propagate();
-
-#ifdef CASTOR_CSTR_TIMING
-    static long time[3];
-    static long count[3];
-#endif
-
-private:
-    Store* store_; //!< The store containing the triples
-    TriplePattern pat_; //!< The triple pattern
-    /**
-     * CP variables corresponding to the components of the triple pattern or
-     * nullptr if the component is a fixed value.
-     */
-    cp::RDFVar* x_[TriplePattern::COMPONENTS];
-
-#ifdef CASTOR_CSTR_TIMING
-    static void addtime(int index, rusage &start);
-#endif
-};
-
-/**
- * Generic filter constraint
- */
-class FilterConstraint : public cp::StatelessConstraint {
-public:
-    FilterConstraint(Store* store, Expression* expr);
-    void restore();
-    bool propagate();
-
-private:
-    Store*      store_; //!< The store containing the values
-    Expression* expr_;  //!< The expression
-};
-
-/**
- * Variables must take values of the same classes.
- */
-class SameClassConstraint : public cp::StatelessConstraint {
-public:
-    SameClassConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
-    bool propagate();
-
-private:
-    Store* store_;
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-};
-
-/**
- * Variable difference constraint x1 != x2
- */
-class VarDiffConstraint : public cp::StatelessConstraint {
-public:
-    VarDiffConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
-    bool propagate();
-
-private:
-    Store* store_;
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-};
-
-/**
- * Variable equality constraint x1 = x2
- */
-class VarEqConstraint : public cp::Constraint {
-public:
-    VarEqConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
-    bool post();
-    bool propagate();
-
-private:
-    Store* store_;
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-    unsigned s1_, s2_; //!< previous size of the domain
-};
-
-/**
- * Variable inequality constraint x1 {<,<=} x2
- */
-class VarLessConstraint : public cp::StatelessConstraint {
-public:
-    VarLessConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2, bool equality);
-    void restore();
-    bool propagate();
-
-private:
-    Store* store_;
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-    bool equality; //!< true for <=, false for <
-};
-
-/**
- * Variable difference in sameTerm sense
- */
-class VarDiffTermConstraint : public cp::StatelessConstraint {
-public:
-    VarDiffTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
-    bool propagate();
-
-private:
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-};
-
-/**
- * Variable equality in sameTerm sense
- */
-class VarSameTermConstraint : public cp::Constraint {
-public:
-    VarSameTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
-    bool post();
-    bool propagate();
-
-private:
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-    unsigned s1_, s2_; //!< previous size of the domain
-};
-
 }
 
-#endif // CASTOR_CONSTRAINTS_H
+#endif // CASTOR_CONSTRAINTS_UNARY_H

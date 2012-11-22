@@ -22,8 +22,8 @@
 
 #include "pattern.h"
 #include "expression.h"
-#include "distinct.h"
-#include "bnborder.h"
+#include "constraints/distinct.h"
+#include "constraints/bnborder.h"
 
 using castor::librdf::Sequence;
 

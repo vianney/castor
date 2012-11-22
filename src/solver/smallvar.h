@@ -23,7 +23,7 @@
 #include <cassert>
 #include <iostream>
 
-#include "../util.h"
+#include "util.h"
 #include "solver.h"
 #include "variable.h"
 

@@ -28,6 +28,17 @@ set(CASTOR_SRCS
     store/btree.h
     store/triplecache.h
     store/triplecache.cpp
+    constraints/unary.h
+    constraints/triple.h
+    constraints/triple.cpp
+    constraints/fallback.h
+    constraints/fallback.cpp
+    constraints/compare.h
+    constraints/compare.cpp
+    constraints/distinct.h
+    constraints/distinct.cpp
+    constraints/bnborder.h
+    constraints/bnborder.cpp
     util.h
     util.cpp
     librdfwrapper.h
@@ -46,17 +57,11 @@ set(CASTOR_SRCS
     pattern.cpp
     query.h
     query.cpp
-    constraints.h
-    constraints.cpp
-    distinct.h
-    distinct.cpp
-    bnborder.h
-    bnborder.cpp
 )
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/config.h.in"
                "${CMAKE_CURRENT_BINARY_DIR}/config.h")
-include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+include_directories("${CMAKE_CURRENT_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_library(libcastor ${CASTOR_SRCS})
 set_target_properties(libcastor PROPERTIES OUTPUT_NAME castor)

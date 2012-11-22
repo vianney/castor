@@ -15,8 +15,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef CASTOR_DISTINCT_H
-#define CASTOR_DISTINCT_H
+#ifndef CASTOR_CONSTRAINTS_DISTINCT_H
+#define CASTOR_CONSTRAINTS_DISTINCT_H
 
 #include <set>
 
@@ -67,4 +67,4 @@ private:
 
 }
 
-#endif // CASTOR_DISTINCT_H
+#endif // CASTOR_CONSTRAINTS_DISTINCT_H

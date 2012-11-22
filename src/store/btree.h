@@ -18,8 +18,8 @@
 #ifndef CASTOR_STORE_BTREE_H
 #define CASTOR_STORE_BTREE_H
 
-#include "../util.h"
-#include "../model.h"
+#include "util.h"
+#include "model.h"
 
 namespace castor {
 

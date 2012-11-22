@@ -21,7 +21,9 @@
 
 #include "util.h"
 #include "query.h"
-#include "constraints.h"
+#include "constraints/fallback.h"
+#include "constraints/unary.h"
+#include "constraints/compare.h"
 
 namespace castor {
 

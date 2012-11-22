@@ -19,7 +19,7 @@
 
 #include <cstdlib>
 
-#include "../util.h"
+#include "util.h"
 
 namespace castor {
 namespace cp {

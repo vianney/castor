@@ -15,43 +15,29 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef CASTOR_BNBORDER_H
-#define CASTOR_BNBORDER_H
+#ifndef CASTOR_CONSTRAINTS_FALLBACK_H
+#define CASTOR_CONSTRAINTS_FALLBACK_H
 
 #include "solver/constraint.h"
-#include "query.h"
+#include "store.h"
+#include "expression.h"
 
 namespace castor {
 
-class Query;
-
 /**
- * Branch&Bound ORDER static constraint
+ * Generic filter constraint
  */
-class BnBOrderConstraint : public cp::Constraint {
+class FilterConstraint : public cp::StatelessConstraint {
 public:
-    BnBOrderConstraint(Query* query);
-    ~BnBOrderConstraint();
-
-    /**
-     * Update the bound to sol
-     */
-    void updateBound(Solution* sol);
-
-    /**
-     * Clear the bound.
-     */
-    void reset();
-
+    FilterConstraint(Store* store, Expression* expr);
+    void restore();
     bool propagate();
 
 private:
-    Query* query_;
-    Solution* bound_; //!< the current bound
-    Value* boundOrderVals_; //!< the evaluated ordering expressions given bound
-    bool* boundOrderError_; //!< has an error occured while evaluating the ordering expression?
+    Store*      store_; //!< The store containing the values
+    Expression* expr_;  //!< The expression
 };
 
 }
 
-#endif // CASTOR_BNBORDER_H
+#endif // CASTOR_CONSTRAINTS_FALLBACK_H

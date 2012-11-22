@@ -19,7 +19,8 @@
 
 #include "config.h"
 #include "query.h"
-#include "constraints.h"
+#include "constraints/unary.h"
+#include "constraints/triple.h"
 
 namespace castor {
 

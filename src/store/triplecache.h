@@ -18,8 +18,8 @@
 #ifndef CASTOR_STORE_TRIPLECACHE_H
 #define CASTOR_STORE_TRIPLECACHE_H
 
-#include "../util.h"
-#include "../model.h"
+#include "util.h"
+#include "model.h"
 #include "btree.h"
 
 #include <vector>
