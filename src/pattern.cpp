@@ -45,7 +45,7 @@ void BasicPattern::add(const TriplePattern& triple) {
 
 void BasicPattern::init() {
     for(Variable* x : vars_) {
-        sub_.add(x->cp(), true);
+        sub_.add(x->cp());
         sub_.add(new BoundConstraint(x->cp()));
     }
     for(TriplePattern& t : triples_)

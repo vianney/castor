@@ -18,6 +18,8 @@ set(CASTOR_SRCS
     config.h.in
     solver/solver.h
     solver/solver.cpp
+    solver/trail.h
+    solver/trail.cpp
     solver/variable.h
     solver/discretevar.h
     solver/boundsvar.h

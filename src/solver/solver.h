@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "config.h"
+#include "trail.h"
 #include "constraint.h"
 
 namespace castor {
@@ -43,6 +44,11 @@ public:
     //! Non-copyable
     Solver(const Solver&) = delete;
     Solver& operator=(const Solver&) = delete;
+
+    /**
+     * @return the trail
+     */
+    Trail& trail() { return trail_; }
 
     /**
      * Adds a static constraint.
@@ -134,6 +140,11 @@ private:
      * Propagation stack (linked list using nextPropag field)
      */
     Constraint* propagQueue_[Constraint::PRIOR_COUNT];
+
+    /**
+     * Trail.
+     */
+    Trail trail_;
 
     /**
      * Current active subtree.

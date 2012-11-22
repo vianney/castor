@@ -24,7 +24,7 @@
 #include <sys/resource.h>
 
 #ifdef CASTOR_CSTR_TIMING
-#include "constraints.h"
+#include "constraints/triple.h"
 #endif
 
 using namespace std;

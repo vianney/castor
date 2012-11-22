@@ -49,8 +49,8 @@ public:
     BoundsVariable(Solver* solver, T min, T max);
 
     // Implementation of virtual functions
-    void checkpoint(void* trail) const;
-    void restore(const void* trail);
+    void save(Trail& trail) const;
+    void restore(Trail& trail);
 
     /**
      * @param v a value
@@ -123,16 +123,12 @@ public:
 
 protected:
 
-    /**
-     * Trail size is defined here to be reused by subclasses using multiple
-     * inheritance
-     */
-    static constexpr std::size_t TRAIL_SIZE = 2 * sizeof(T);
-
     T min_; //!< lower bound
     T max_; //!< upper bound
 
 private:
+    Solver* solver_; //!< attached solver
+
     /**
      * List of constraints registered to the bind event.
      */
@@ -179,7 +175,7 @@ public:
     void unlabel();
 
     // Overrides to update size_
-    void restore(const void* trail) {
+    void restore(Trail& trail) {
         BoundsVariable<T>::restore(trail);
         updateSize();
     }
@@ -208,7 +204,7 @@ public:
     }
 
     // Passthrough methods
-    void checkpoint(void* trail) const { BoundsVariable<T>::checkpoint(trail); }
+    void save(Trail& trail) const { BoundsVariable<T>::save(trail); }
     bool contains(T v) const { return BoundsVariable<T>::contains(v); }
     T    min     ()    const { return BoundsVariable<T>::min(); }
     T    max     ()    const { return BoundsVariable<T>::max(); }
@@ -231,35 +227,39 @@ private:
 
 template<class T>
 BoundsVariable<T>::BoundsVariable(Solver* solver, T min, T max) :
-    Trailable(solver, min == max ? 0 : TRAIL_SIZE),
+    Trailable(solver->trail()),
     min_(min),
-    max_(max) {}
+    max_(max),
+    solver_(solver) {}
 
 template<class T>
-void BoundsVariable<T>::checkpoint(void* trail) const {
-    *((reinterpret_cast<T*&>(trail))++) = min_;
-    *((reinterpret_cast<T*&>(trail))++) = max_;
+void BoundsVariable<T>::save(Trail& trail) const {
+    trail.push(min_);
+    trail.push(max_);
 }
 
 template<class T>
-void BoundsVariable<T>::restore(const void* trail) {
-    min_  = *((reinterpret_cast<const T*&>(trail))++);
-    max_  = *((reinterpret_cast<const T*&>(trail))++);
+void BoundsVariable<T>::restore(Trail &trail) {
+    max_ = trail.pop<T>();
+    min_ = trail.pop<T>();
 }
 
 template<class T>
 bool BoundsVariable<T>::bind(T v) {
     if(v < min_ || v > max_)
         return false;
+    if(min_ == max_)
+        return true;
+    modifying();
     if(v != min_) {
         min_ = v;
-        solver()->enqueue(evMin_);
+        solver_->enqueue(evMin_);
     }
     if(v != max_) {
         max_ = v;
-        solver()->enqueue(evMax_);
+        solver_->enqueue(evMax_);
     }
-    solver()->enqueue(evBind_);
+    solver_->enqueue(evBind_);
     return true;
 }
 
@@ -270,8 +270,9 @@ bool BoundsVariable<T>::updateMin(T v) {
     } else if(v == max_) {
         return bind(v);
     } else if(v > min_) {
+        modifying();
         min_ = v;
-        solver()->enqueue(evMin_);
+        solver_->enqueue(evMin_);
         return true;
     } else {
         return true;
@@ -285,8 +286,9 @@ bool BoundsVariable<T>::updateMax(T v) {
     } else if(v == min_) {
         return bind(v);
     } else if(v < max_) {
+        modifying();
         max_ = v;
-        solver()->enqueue(evMax_);
+        solver_->enqueue(evMax_);
         return true;
     } else {
         return true;
@@ -296,7 +298,7 @@ bool BoundsVariable<T>::updateMax(T v) {
 
 template<class T>
 BoundsDecisionVariable<T>::BoundsDecisionVariable(Solver* solver, T min, T max) :
-        Trailable(solver, BoundsVariable<T>::TRAIL_SIZE),
+        Trailable(solver->trail()),
         BoundsVariable<T>(solver, min, max) {
     updateSize();
 }

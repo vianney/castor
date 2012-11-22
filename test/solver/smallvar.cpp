@@ -144,57 +144,32 @@ protected:
 // Tests
 
 /**
- * checkpoint() should not overflow
+ * save() should not modify the domain
  */
-TEST_F(SolverSmallVarTest, CheckpointOverflow) {
-    std::size_t size = x.trailSize();
-    char buf[21*size];
-
-    memset(buf, 0xA5, 21*size);
-    x.checkpoint(buf + 10*size);
-    for(std::size_t i = 0; i < 10*size; i++) {
-        EXPECT_EQ('\xA5', buf[i]) << "overflow index " << ((int)i - 10*(int)size);
-        EXPECT_EQ('\xA5', buf[i+11*size]) << "overflow index " << i;
-    }
-
-    memset(buf, 0x5A, 21*size);
-    x.checkpoint(buf + 10*size);
-    for(std::size_t i = 0; i < 10*size; i++) {
-        EXPECT_EQ('\x5A', buf[i]) << "overflow index " << ((int)i - 10*(int)size);
-        EXPECT_EQ('\x5A', buf[i+11*size]) << "overflow index " << i;
-    }
-}
-
-/**
- * checkpoint() should not modify the domain
- */
-TEST_F(SolverSmallVarTest, CheckpointSanity) {
-    char trail[x.trailSize()];
-    x.checkpoint(trail);
-    y.checkpoint(trail);
-    b.checkpoint(trail);
+TEST_F(SolverSmallVarTest, SaveSanity) {
+    x.save(solver.trail());
+    y.save(solver.trail());
+    b.save(solver.trail());
     EXPECT_INITIAL_STATE;
 }
 
 /**
  * restore() should restore the domain to the state of a checkpoint
  */
-TEST_F(SolverSmallVarTest, CheckpointRestore) {
-    char trail[x.trailSize()];
-
-    x.checkpoint(trail);
+TEST_F(SolverSmallVarTest, Restore) {
+    Trail::checkpoint_t chkp = solver.trail().checkpoint();
     x.remove(8);
-    x.restore(trail);
+    solver.trail().restore(chkp);
     EXPECT_INITIAL_STATE;
 
-    y.checkpoint(trail);
+    chkp = solver.trail().checkpoint();
     y.updateMin(7);
-    y.restore(trail);
+    solver.trail().restore(chkp);
     EXPECT_INITIAL_STATE;
 
-    b.checkpoint(trail);
+    chkp = solver.trail().checkpoint();
     b.bind(false);
-    b.restore(trail);
+    solver.trail().restore(chkp);
     EXPECT_INITIAL_STATE;
 }
 

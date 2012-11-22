@@ -27,11 +27,11 @@ namespace cp {
 /**
  * Checkpoint structure for backtracking
  */
-struct Checkpoint {
+struct Subtree::Checkpoint {
     /**
-     * Checkpoint data of all the variables stored sequentially.
+     * Checkpoint in the trail.
      */
-    char* data;
+    Trail::checkpoint_t trailpoint;
     /**
      * Timestamp of static constraints
      */
@@ -40,10 +40,6 @@ struct Checkpoint {
      * Variable that is being labeled.
      */
     DecisionVariable* x;
-
-    ~Checkpoint() {
-        delete [] data;
-    }
 };
 
 Subtree::Subtree(Solver* solver) : solver_(solver) {
@@ -62,14 +58,8 @@ Subtree::~Subtree() {
     delete [] trail_;
 }
 
-void Subtree::add(Trailable *x) {
-    trailables_.push_back(x);
-}
-
-void Subtree::add(DecisionVariable* x, bool label) {
-    Subtree::add(static_cast<Trailable*>(x));
-    if(label)
-        vars_.push_back(x);
+void Subtree::add(DecisionVariable* x) {
+    vars_.push_back(x);
 }
 
 void Subtree::add(Constraint* c) {
@@ -83,14 +73,9 @@ void Subtree::activate() {
         throw CastorException() << "Cannot activate active subtree.";
     if(trail_ == nullptr) {
         // First activation, allocate trail
-        std::size_t size = 0;
-        for(Trailable* x : trailables_)
-            size += x->trailSize();
         // The depth of the subtree is at most vars_.size(), +1 for the root
         // checkpoint.
         trail_ = new Checkpoint[vars_.size() + 1];
-        for(unsigned i = 0; i <= vars_.size(); i++)
-            trail_[i].data = new char[size];
     }
     active_ = true;
     previous_ = solver_->current_;
@@ -172,13 +157,7 @@ bool Subtree::search() {
 
 void Subtree::checkpoint(DecisionVariable* x) {
     Checkpoint* chkp = &trail_[++trailIndex_];
-    char* data = chkp->data;
-    for(Trailable* y : trailables_) {
-        if(y->trailSize() > 0) {
-            y->checkpoint(data);
-            data += y->trailSize();
-        }
-    }
+    chkp->trailpoint = solver_->trail().checkpoint();
     chkp->timestamp = solver_->tsCurrent_;
     chkp->x = x;
 }
@@ -189,13 +168,7 @@ DecisionVariable* Subtree::backtrack() {
         return nullptr;
     // restore domains
     Checkpoint* chkp = &trail_[trailIndex_--];
-    char* data = chkp->data;
-    for(Trailable* x : trailables_) {
-        if(x->trailSize() > 0) {
-            x->restore(data);
-            data += x->trailSize();
-        }
-    }
+    solver_->trail().restore(chkp->trailpoint);
     solver_->tsCurrent_ = chkp->timestamp;
     // clear propagation queue
     solver_->clearQueue();

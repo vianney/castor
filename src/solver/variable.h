@@ -18,80 +18,10 @@
 #ifndef CASTOR_CP_VARIABLE_H
 #define CASTOR_CP_VARIABLE_H
 
-#include <cstddef>
-#include <cassert>
+#include "trail.h"
 
 namespace castor {
 namespace cp {
-
-class Solver;
-
-/**
- * Base class for a trailable object.
- */
-class Trailable {
-public:
-    /**
-     * @return the parent solver
-     */
-    Solver* solver() { return solver_; }
-
-    /**
-     * @return the number of bytes to allocate for the trailing structure
-     */
-    std::size_t trailSize() const { return trailSize_; }
-
-    /**
-     * Write a checkpoint of the current state to the memory pointed to by
-     * trail. The allocated space is of size trailSize.
-     *
-     * This method will only be called if trailSize() > 0.
-     *
-     * @param trail the target trail memory where the checkpoint must be
-     *              written
-     */
-    virtual void checkpoint(void* trail) const = 0;
-
-    /**
-     * Restore the state from the memory pointed to by trail. This memory, of
-     * size trailSize, had been written to by checkpoint() before.
-     *
-     * This method will only be called if trailSize() > 0.
-     *
-     * @param trail the source memory where the checkpoint has been written
-     */
-    virtual void restore(const void* trail) = 0;
-
-protected:
-    /**
-     * Construct a trailable object.
-     *
-     * @param solver attached solver
-     * @param trailSize size in bytes needed for the trail
-     */
-    Trailable(Solver* solver, std::size_t trailSize) :
-        solver_(solver), trailSize_(trailSize) {
-        assert(solver != nullptr);
-    }
-
-    //! Non-copyable
-    Trailable(const Trailable&) = delete;
-    Trailable& operator=(const Trailable&) = delete;
-
-    virtual ~Trailable() {}
-
-private:
-    /**
-     * Parent solver class.
-     */
-    Solver* solver_;
-
-    /**
-     * Number of bytes to allocate for the trailing structure. This number does
-     * not change after the construction of the object.
-     */
-    std::size_t trailSize_;
-};
 
 /**
  * Base class for a CP decision variable. A decision variable is a trailable
@@ -133,7 +63,7 @@ protected:
      * a virtual base class, subclasses of DecisionVariable would have to
      * initialize Trailable by themselves anyway.
      */
-    DecisionVariable() : Trailable(nullptr, 0) {}
+    DecisionVariable() : Trailable(nullptr) {}
 
     /**
      * Current size of the domain. Must be updated by the subclass.

@@ -53,8 +53,8 @@ public:
     SmallVariable(Solver* solver, T minVal, T maxVal);
 
     // Implementation of virtual functions
-    void checkpoint(void* trail) const;
-    void restore(const void* trail);
+    void save(Trail& trail) const;
+    void restore(Trail& trail);
 
     /**
      * @param v a value
@@ -191,6 +191,8 @@ public:
     void registerMax(Constraint* c) { evMax_.push_back(c); }
 
 private:
+    Solver* solver_; //!< attached solver
+
     T minVal_; //!< lowest value in the initial domain
     T maxVal_; //!< highest value in the initial domain
 
@@ -252,20 +254,21 @@ public:
 
 template<class T>
 SmallVariable<T>::SmallVariable(Solver* solver, T minVal, T maxVal) :
-        Trailable(solver, minVal == maxVal ? 0 : sizeof(unsigned)),
+        Trailable(solver->trail()),
+        solver_(solver),
         minVal_(minVal),
         maxVal_(maxVal) {
     domain_ = ((1 << (maxVal - minVal)) - 1) | (1 << (maxVal - minVal));
 }
 
 template<class T>
-void SmallVariable<T>::checkpoint(void* trail) const {
-    *((reinterpret_cast<unsigned*&>(trail))++) = domain_;
+void SmallVariable<T>::save(Trail& trail) const {
+    trail.push(domain_);
 }
 
 template<class T>
-void SmallVariable<T>::restore(const void* trail) {
-    domain_ = *((reinterpret_cast<const unsigned*&>(trail))++);
+void SmallVariable<T>::restore(Trail &trail) {
+    domain_ = trail.pop<unsigned>();
 }
 
 template<class T>
@@ -276,13 +279,14 @@ bool SmallVariable<T>::bind(T v) {
     T m = min(), M = max();
     if(m == M)
         return true;
+    modifying();
     domain_ = 1 << (v - minVal_);
     if(v != m)
-        solver()->enqueue(evMin_);
+        solver_->enqueue(evMin_);
     if(v != M)
-        solver()->enqueue(evMax_);
-    solver()->enqueue(evChange_);
-    solver()->enqueue(evBind_);
+        solver_->enqueue(evMax_);
+    solver_->enqueue(evChange_);
+    solver_->enqueue(evBind_);
     return true;
 }
 
@@ -291,17 +295,18 @@ bool SmallVariable<T>::remove(T v) {
     clearMarks();
     if(!contains(v))
         return true;
+    modifying();
     T m = min(), M = max();
     domain_ &= ~(1 << (v - minVal_));
     if(domain_ == 0)
         return false;
     if(v == m)
-        solver()->enqueue(evMin_);
+        solver_->enqueue(evMin_);
     if(v == M)
-        solver()->enqueue(evMax_);
+        solver_->enqueue(evMax_);
     if(bound())
-        solver()->enqueue(evBind_);
-    solver()->enqueue(evChange_);
+        solver_->enqueue(evBind_);
+    solver_->enqueue(evChange_);
     return true;
 }
 
@@ -313,15 +318,16 @@ bool SmallVariable<T>::restrictToMarks() {
         return false;
     if(marked == domain_)
         return true;
+    modifying();
     T m = min(), M = max();
     domain_ = marked;
     if(bound() && m != M)
-        solver()->enqueue(evBind_);
+        solver_->enqueue(evBind_);
     if(m != min())
-        solver()->enqueue(evMin_);
+        solver_->enqueue(evMin_);
     if(M != max())
-        solver()->enqueue(evMax_);
-    solver()->enqueue(evChange_);
+        solver_->enqueue(evMax_);
+    solver_->enqueue(evChange_);
     return true;
 }
 
@@ -332,15 +338,16 @@ bool SmallVariable<T>::updateMin(T v) {
         return true;
     if(v > maxVal_)
         return false;
+    modifying();
     unsigned old = domain_;
     domain_ &= ~((1 << (v - minVal_)) - 1);
     if(domain_ == 0)
         return false;
     if(domain_ != old) {
-        solver()->enqueue(evChange_);
-        solver()->enqueue(evMin_);
+        solver_->enqueue(evChange_);
+        solver_->enqueue(evMin_);
         if(bound())
-            solver()->enqueue(evBind_);
+            solver_->enqueue(evBind_);
     }
     return true;
 }
@@ -352,15 +359,16 @@ bool SmallVariable<T>::updateMax(T v) {
         return true;
     if(v < minVal_)
         return false;
+    modifying();
     unsigned old = domain_;
     domain_ &= ((1 << (v - minVal_)) - 1) | (1 << (v - minVal_));
     if(domain_ == 0)
         return false;
     if(domain_ != old) {
-        solver()->enqueue(evChange_);
-        solver()->enqueue(evMax_);
+        solver_->enqueue(evChange_);
+        solver_->enqueue(evMax_);
         if(bound())
-            solver()->enqueue(evBind_);
+            solver_->enqueue(evBind_);
     }
     return true;
 }

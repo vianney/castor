@@ -27,8 +27,6 @@
 namespace castor {
 namespace cp {
 
-class Checkpoint;
-
 /**
  * Search subtree containing the posted constraints
  */
@@ -51,30 +49,15 @@ public:
     Subtree& operator=(const Subtree&) = delete;
 
     /**
-     * Add a trailable object. Make sure to add all trailable objects that need
-     * to be backtracked.
-     *
-     * The subtree does NOT take ownership of the object.
-     *
-     * @note Should not be called once the tree has been activated once.
-     *
-     * @param x the trailable object
-     */
-    void add(Trailable* x);
-
-    /**
-     * Add a decision variable. Make sure to add all variables that need to be
-     * backtracked.
+     * Add a decision variable to be labeled.
      *
      * The subtree does NOT take ownership of the variable.
      *
      * @note Should not be called once the tree has been activated once.
      *
      * @param x the variable
-     * @param label true if x should be labeled during the search, false if x
-     *              is an auxiliary variable
      */
-    void add(DecisionVariable* x, bool label = false);
+    void add(DecisionVariable* x);
 
     /**
      * Add a constraint.
@@ -160,11 +143,7 @@ private:
     bool started_;
 
     /**
-     * Trailable objects to backtrack.
-     */
-    std::vector<Trailable*> trailables_;
-    /**
-     * Decision variables. Subset of trailables_.
+     * Decision variables.
      */
     std::vector<DecisionVariable*> vars_;
 
@@ -172,6 +151,8 @@ private:
      * Posted constraints.
      */
     std::vector<Constraint*> constraints_[Constraint::PRIOR_COUNT];
+
+    class Checkpoint;
 
     /**
      * Trail to backtrack.

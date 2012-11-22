@@ -90,51 +90,26 @@ protected:
 };
 
 /**
- * checkpoint() should not overflow
+ * save() should not modify the domain
  */
-TEST_F(SolverBoundsVarTest, CheckpointOverflow) {
-    std::size_t size = x.trailSize();
-    char buf[21*size];
-
-    memset(buf, 0xA5, 21*size);
-    x.checkpoint(buf + 10*size);
-    for(std::size_t i = 0; i < 10*size; i++) {
-        EXPECT_EQ('\xA5', buf[i]) << "overflow index " << ((int)i - 10*(int)size);
-        EXPECT_EQ('\xA5', buf[i+11*size]) << "overflow index " << i;
-    }
-
-    memset(buf, 0x5A, 21*size);
-    x.checkpoint(buf + 10*size);
-    for(std::size_t i = 0; i < 10*size; i++) {
-        EXPECT_EQ('\x5A', buf[i]) << "overflow index " << ((int)i - 10*(int)size);
-        EXPECT_EQ('\x5A', buf[i+11*size]) << "overflow index " << i;
-    }
-}
-
-/**
- * checkpoint() should not modify the domain
- */
-TEST_F(SolverBoundsVarTest, CheckpointSanity) {
-    char trail[x.trailSize()];
-    x.checkpoint(trail);
-    y.checkpoint(trail);
+TEST_F(SolverBoundsVarTest, SaveSanity) {
+    x.save(solver.trail());
+    y.save(solver.trail());
     expect_initial_state();
 }
 
 /**
  * restore() should restore the domain to the state of a checkpoint
  */
-TEST_F(SolverBoundsVarTest, CheckpointRestore) {
-    char trail[x.trailSize()];
-
-    x.checkpoint(trail);
+TEST_F(SolverBoundsVarTest, Restore) {
+    Trail::checkpoint_t chkp = solver.trail().checkpoint();
     x.updateMin(3);
-    x.restore(trail);
+    solver.trail().restore(chkp);
     expect_initial_state();
 
-    y.checkpoint(trail);
+    chkp = solver.trail().checkpoint();
     y.updateMax(7);
-    y.restore(trail);
+    solver.trail().restore(chkp);
     expect_initial_state();
 }
 
@@ -167,25 +142,24 @@ TEST_F(SolverBoundsVarTest, Label) {
  * Check the unselect() method
  */
 TEST_F(SolverBoundsVarTest, UnLabel) {
-    char trail[x.trailSize()];
     unsigned val;
 
-    x.checkpoint(trail);
+    Trail::checkpoint_t chkp = solver.trail().checkpoint();
     x.label();
     EXPECT_TRUE(x.bound());
     val = x.value();
-    x.restore(trail);
+    solver.trail().restore(chkp);
     EXPECT_FALSE(x.bound());
     EXPECT_TRUE(x.contains(val));
     x.unlabel();
     EXPECT_FALSE(x.contains(val));
     EXPECT_EQ(9u, x.size());
 
-    y.checkpoint(trail);
+    chkp = solver.trail().checkpoint();
     y.label();
     EXPECT_TRUE(y.bound());
     val = y.value();
-    y.restore(trail);
+    solver.trail().restore(chkp);
     EXPECT_FALSE(y.bound());
     EXPECT_TRUE(y.contains(val));
     y.unlabel();
