@@ -252,7 +252,7 @@ public:
 
 template<class T>
 SmallVariable<T>::SmallVariable(Solver* solver, T minVal, T maxVal) :
-        Trailable(solver, sizeof(unsigned)),
+        Trailable(solver, minVal == maxVal ? 0 : sizeof(unsigned)),
         minVal_(minVal),
         maxVal_(maxVal) {
     domain_ = ((1 << (maxVal - minVal)) - 1) | (1 << (maxVal - minVal));

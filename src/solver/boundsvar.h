@@ -231,7 +231,7 @@ private:
 
 template<class T>
 BoundsVariable<T>::BoundsVariable(Solver* solver, T min, T max) :
-    Trailable(solver, TRAIL_SIZE),
+    Trailable(solver, min == max ? 0 : TRAIL_SIZE),
     min_(min),
     max_(max) {}
 

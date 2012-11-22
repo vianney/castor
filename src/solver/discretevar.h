@@ -264,7 +264,7 @@ std::ostream& operator<<(std::ostream& out, const DiscreteVariable<T>& x);
 
 template<class T>
 DiscreteVariable<T>::DiscreteVariable(Solver* solver, T minVal, T maxVal) :
-        Trailable(solver, sizeof(unsigned) + 2 * sizeof(T)),
+        Trailable(solver, minVal == maxVal ? 0 : sizeof(unsigned) + 2 * sizeof(T)),
         minVal_(minVal),
         maxVal_(maxVal) {
     size_ = maxVal - minVal + 1;

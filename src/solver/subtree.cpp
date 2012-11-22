@@ -174,8 +174,10 @@ void Subtree::checkpoint(DecisionVariable* x) {
     Checkpoint* chkp = &trail_[++trailIndex_];
     char* data = chkp->data;
     for(Trailable* y : trailables_) {
-        y->checkpoint(data);
-        data += y->trailSize();
+        if(y->trailSize() > 0) {
+            y->checkpoint(data);
+            data += y->trailSize();
+        }
     }
     chkp->timestamp = solver_->tsCurrent_;
     chkp->x = x;
@@ -189,8 +191,10 @@ DecisionVariable* Subtree::backtrack() {
     Checkpoint* chkp = &trail_[trailIndex_--];
     char* data = chkp->data;
     for(Trailable* x : trailables_) {
-        x->restore(data);
-        data += x->trailSize();
+        if(x->trailSize() > 0) {
+            x->restore(data);
+            data += x->trailSize();
+        }
     }
     solver_->tsCurrent_ = chkp->timestamp;
     // clear propagation queue

@@ -45,6 +45,8 @@ public:
      * Write a checkpoint of the current state to the memory pointed to by
      * trail. The allocated space is of size trailSize.
      *
+     * This method will only be called if trailSize() > 0.
+     *
      * @param trail the target trail memory where the checkpoint must be
      *              written
      */
@@ -53,6 +55,8 @@ public:
     /**
      * Restore the state from the memory pointed to by trail. This memory, of
      * size trailSize, had been written to by checkpoint() before.
+     *
+     * This method will only be called if trailSize() > 0.
      *
      * @param trail the source memory where the checkpoint has been written
      */
