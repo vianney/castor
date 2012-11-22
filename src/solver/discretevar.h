@@ -52,7 +52,7 @@ public:
      * @param minVal lowest value in the domain
      * @param maxVal highest value in the domain
      */
-    DiscreteVariable(Solver* solver, T minVal_, T maxVal_);
+    DiscreteVariable(Solver* solver, T minVal, T maxVal);
 
     /**
      * Destructor.
