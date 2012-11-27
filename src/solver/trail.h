@@ -71,8 +71,8 @@ public:
      * Push a value on the trail.
      */
     template<class T>
-    void push(T val) {
-        ensureSpace(sizeof(val));
+    void push(const T& val) {
+        ensureSpace(sizeof(T));
         *((reinterpret_cast<T*&>(ptr_))++) = val;
     }
 
@@ -87,10 +87,21 @@ public:
 
 private:
     /**
+     * Enlarge the allocated space for the stack to be at least of the given
+     * capacity.
+     *
+     * @param capacity
+     */
+    void enlargeSpace(std::size_t capacity);
+
+    /**
      * Ensure there are at least size bytes free at the top of the stack.
      * @param size
      */
-    void ensureSpace(std::size_t size);
+    void ensureSpace(std::size_t size) {
+        if(static_cast<std::size_t>(end_ - ptr_) < size)
+            enlargeSpace(ptr_ - trail_ + size);
+    }
 
 private:
     /**

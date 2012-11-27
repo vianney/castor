@@ -31,14 +31,14 @@ Trail::~Trail() {
     free(trail_);
 }
 
-void Trail::ensureSpace(std::size_t size) {
-    if(ptr_ + size > end_) {
-        std::size_t newsize = (end_ - trail_) * 2;
-        std::ptrdiff_t ptrpos = (ptr_ - trail_);
-        trail_ = reinterpret_cast<char*>(realloc(trail_, newsize));
-        end_ = trail_ + newsize;
-        ptr_ = trail_ + ptrpos;
-    }
+void Trail::enlargeSpace(std::size_t capacity) {
+    std::size_t size = end_ - trail_;
+    while(size < capacity)
+        size *= 2;
+    std::ptrdiff_t ptrpos = (ptr_ - trail_);
+    trail_ = reinterpret_cast<char*>(realloc(trail_, size));
+    end_ = trail_ + size;
+    ptr_ = trail_ + ptrpos;
 }
 
 Trail::checkpoint_t Trail::checkpoint() {
