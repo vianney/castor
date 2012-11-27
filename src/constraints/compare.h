@@ -54,10 +54,10 @@ private:
 /**
  * Variable equality constraint x1 = x2
  */
-class VarEqConstraint : public cp::Constraint {
+class VarEqConstraint : public cp::Constraint, cp::TrailListener {
 public:
     VarEqConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
+    void restored(cp::Trailable* obj);
     bool post();
     bool propagate();
 
@@ -100,10 +100,10 @@ private:
 /**
  * Variable equality in sameTerm sense
  */
-class VarSameTermConstraint : public cp::Constraint {
+class VarSameTermConstraint : public cp::Constraint, cp::TrailListener {
 public:
     VarSameTermConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
+    void restored(cp::Trailable* obj);
     bool post();
     bool propagate();
 

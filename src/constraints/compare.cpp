@@ -87,15 +87,17 @@ VarEqConstraint::VarEqConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2) :
         store_(query->store()), x1_(x1), x2_(x2) {
     x1->registerChange(this);
     x2->registerChange(this);
+    x1->registerRestored(this);
+    x2->registerRestored(this);
 }
 
-void VarEqConstraint::restore() {
+void VarEqConstraint::restored(cp::Trailable*) {
     s1_ = x1_->size();
     s2_ = x2_->size();
 }
 
 bool VarEqConstraint::post() {
-    restore();
+    restored(nullptr);
     return propagate();
 }
 
@@ -239,15 +241,17 @@ VarSameTermConstraint::VarSameTermConstraint(Query *query, cp::RDFVar* x1,
         Constraint(query->solver(), PRIOR_HIGH), x1_(x1), x2_(x2) {
     x1->registerChange(this);
     x2->registerChange(this);
+    x1->registerRestored(this);
+    x2->registerRestored(this);
 }
 
-void VarSameTermConstraint::restore() {
+void VarSameTermConstraint::restored(cp::Trailable*) {
     s1_ = x1_->size();
     s2_ = x2_->size();
 }
 
 bool VarSameTermConstraint::post() {
-    restore();
+    restored(nullptr);
     return propagate();
 }
 

@@ -173,12 +173,6 @@ DecisionVariable* Subtree::backtrack() {
     // clear propagation queue
     solver_->clearQueue();
     if(chkp->x) {
-        // restore constraints
-        for(Constraint::Priority p = Constraint::PRIOR_FIRST;
-            p <= Constraint::PRIOR_LAST; ++p) {
-            for(Constraint* c : constraints_[p])
-                c->restore();
-        }
         // remove old (failed) choice
         chkp->x->unlabel();
         if(solver_->tsCurrent_ < solver_->tsLastConstraint_ &&

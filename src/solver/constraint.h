@@ -100,12 +100,6 @@ public:
      */
     virtual bool propagate() { return true; }
 
-    /**
-     * Restore callback. It is called after a backtrack.
-     * This is useful for resetting structures.
-     */
-    virtual void restore() {}
-
 protected:
     /**
      * Solver containing this constraint.
@@ -121,8 +115,7 @@ protected:
 
     /**
      * If this variable is set to true, the constraint will not react to further
-     * events. The restore callback will still be called, such that done can
-     * be reset to false when appropriate.
+     * events.
      */
     Reversible<bool> done_;
 

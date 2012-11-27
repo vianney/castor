@@ -50,6 +50,8 @@ void Trail::restore(checkpoint_t chkp) {
     while(ptr_ - trail_ > chkp) {
         Trailable* x = pop<Trailable*>();
         x->restore(*this);
+        for(TrailListener* listener : x->listeners_)
+            listener->restored(x);
     }
     assert(ptr_ - trail_ == chkp);
     timestamp_++;

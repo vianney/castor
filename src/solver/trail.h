@@ -18,6 +18,7 @@
 #ifndef CASTOR_CP_TRAIL_H
 #define CASTOR_CP_TRAIL_H
 
+#include <vector>
 #include <cstdlib>
 #include <cassert>
 
@@ -138,6 +139,18 @@ private:
     friend class Trailable;
 };
 
+/**
+ * Interface for a listener.
+ */
+class TrailListener {
+public:
+    /**
+     * Called when obj has been restored.
+     *
+     * @param obj
+     */
+    virtual void restored(Trailable* obj) = 0;
+};
 
 /**
  * Base class for a trailable object.
@@ -157,6 +170,15 @@ public:
      * @param trail the trail
      */
     virtual void restore(Trail& trail) = 0;
+
+    /**
+     * Call listener.restored() whenever this object gets restored.
+     *
+     * @param listener
+     */
+    void registerRestored(TrailListener* listener) {
+        listeners_.push_back(listener);
+    }
 
 protected:
     Trailable(Trail* trail) : trail_(trail), timestamp_(0) {
@@ -191,6 +213,11 @@ private:
      * Timestamp of the latest trail checkpoint.
      */
     Trail::timestamp_t timestamp_;
+
+    /**
+     * Listeners registered for the restore event.
+     */
+    std::vector<TrailListener*> listeners_;
 
     friend class Trail;
 };

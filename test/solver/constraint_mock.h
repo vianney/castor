@@ -34,7 +34,6 @@ public:
     MOCK_METHOD0(init, void());
     MOCK_METHOD0(post, bool());
     MOCK_METHOD0(propagate, bool());
-    MOCK_METHOD0(restore, void());
 };
 
 }
