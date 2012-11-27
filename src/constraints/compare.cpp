@@ -21,7 +21,7 @@ namespace castor {
 
 SameClassConstraint::SameClassConstraint(Query* query, cp::RDFVar* x1,
                                          cp::RDFVar* x2) :
-        StatelessConstraint(query->solver(), PRIOR_HIGH),
+        Constraint(query->solver(), PRIOR_HIGH),
         store_(query->store()), x1_(x1), x2_(x2) {
     x1->registerMin(this);
     x1->registerMax(this);
@@ -30,7 +30,6 @@ SameClassConstraint::SameClassConstraint(Query* query, cp::RDFVar* x1,
 }
 
 bool SameClassConstraint::propagate() {
-    StatelessConstraint::propagate();
     Value::Category catMin1 = store_->category(x1_->min());
     Value::Category catMax1 = store_->category(x1_->max());
     Value::Category catMin2 = store_->category(x2_->min());
@@ -52,14 +51,13 @@ bool SameClassConstraint::propagate() {
 
 VarDiffConstraint::VarDiffConstraint(Query* query, cp::RDFVar* x1,
                                      cp::RDFVar* x2) :
-        StatelessConstraint(query->solver(), PRIOR_HIGH),
+        Constraint(query->solver(), PRIOR_HIGH),
         store_(query->store()), x1_(x1), x2_(x2) {
     x1->registerBind(this);
     x2->registerBind(this);
 }
 
 bool VarDiffConstraint::propagate() {
-    StatelessConstraint::propagate();
     // TODO: we could start propagating once only equivalent values remain
     if(!x1_->bound() && !x2_->bound())
         return true;
@@ -187,7 +185,7 @@ bool VarEqConstraint::propagate() {
 
 VarLessConstraint::VarLessConstraint(Query* query, cp::RDFVar* x1,
                                      cp::RDFVar* x2, bool equality) :
-        StatelessConstraint(query->solver(), PRIOR_HIGH),
+        Constraint(query->solver(), PRIOR_HIGH),
         store_(query->store()), x1_(x1), x2_(x2), equality(equality) {
     x1->registerMin(this);
     x1->registerMax(this);
@@ -196,7 +194,6 @@ VarLessConstraint::VarLessConstraint(Query* query, cp::RDFVar* x1,
 }
 
 bool VarLessConstraint::propagate() {
-    StatelessConstraint::propagate();
     ValueRange eqClassMax2 = store_->eqClass(x2_->max());
     if(!x1_->updateMax(equality ? eqClassMax2.to : eqClassMax2.from - 1))
         return false;
@@ -216,13 +213,12 @@ bool VarLessConstraint::propagate() {
 
 VarDiffTermConstraint::VarDiffTermConstraint(Query *query, cp::RDFVar* x1,
                                              cp::RDFVar* x2) :
-        StatelessConstraint(query->solver(), PRIOR_HIGH), x1_(x1), x2_(x2) {
+        Constraint(query->solver(), PRIOR_HIGH), x1_(x1), x2_(x2) {
     x1->registerBind(this);
     x2->registerBind(this);
 }
 
 bool VarDiffTermConstraint::propagate() {
-    StatelessConstraint::propagate();
     if(x1_->bound()) {
         done_ = true;
         return x2_->remove(x1_->value());

@@ -31,7 +31,6 @@ public:
         ON_CALL(*this, propagate()).WillByDefault(Return(true));
     }
 
-    MOCK_METHOD0(init, void());
     MOCK_METHOD0(post, bool());
     MOCK_METHOD0(propagate, bool());
 };

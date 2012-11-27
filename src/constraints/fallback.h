@@ -27,7 +27,7 @@ namespace castor {
 /**
  * Generic filter constraint
  */
-class FilterConstraint : public cp::StatelessConstraint {
+class FilterConstraint : public cp::Constraint {
 public:
     FilterConstraint(Query* query, Expression* expr);
     bool propagate();

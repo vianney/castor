@@ -33,7 +33,7 @@ namespace castor {
 /**
  * Statement constraint
  */
-class TripleConstraint : public cp::StatelessConstraint {
+class TripleConstraint : public cp::Constraint {
 public:
     TripleConstraint(Query* query, TriplePattern pat);
     bool propagate();

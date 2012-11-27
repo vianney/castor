@@ -82,12 +82,6 @@ public:
     Priority priority() { return priority_; }
 
     /**
-     * Constraint (re)initialization. Called when parent subtree is activated
-     * and before any propagation occurs. Should not propagate anything.
-     */
-    virtual void init() {}
-
-    /**
      * Initial propagation callback. It should perform the initial propagation
      * and return true if all went well or false if the propagation failed.
      */
@@ -141,28 +135,6 @@ private:
 static inline Constraint::Priority& operator++(Constraint::Priority& p) {
     return p = static_cast<Constraint::Priority>(p + 1);
 }
-
-/**
- * A stateless constraint does not do anything in his post method apart from
- * calling propagate. As such, it can react to variable events before being
- * "posted".
- *
- * @note Implementations should not forget to call the parent class
- *       implementation when overriding methods.
- */
-class StatelessConstraint : public Constraint {
-public:
-    StatelessConstraint(Solver* solver) : Constraint(solver) {}
-    StatelessConstraint(Solver* solver, Priority priority) :
-        Constraint(solver, priority) {}
-
-    void init() { Constraint::init(); posted_ = false; }
-    bool post() { return posted_ ? true : propagate(); }
-    bool propagate() { posted_ = true; return true; }
-
-private:
-    bool posted_; //!< true if initial propagation has been performed
-};
 
 }
 }

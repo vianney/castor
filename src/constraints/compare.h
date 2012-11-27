@@ -26,7 +26,7 @@ namespace castor {
 /**
  * Variables must take values of the same classes.
  */
-class SameClassConstraint : public cp::StatelessConstraint {
+class SameClassConstraint : public cp::Constraint {
 public:
     SameClassConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
     bool propagate();
@@ -40,7 +40,7 @@ private:
 /**
  * Variable difference constraint x1 != x2
  */
-class VarDiffConstraint : public cp::StatelessConstraint {
+class VarDiffConstraint : public cp::Constraint {
 public:
     VarDiffConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
     bool propagate();
@@ -71,7 +71,7 @@ private:
 /**
  * Variable inequality constraint x1 {<,<=} x2
  */
-class VarLessConstraint : public cp::StatelessConstraint {
+class VarLessConstraint : public cp::Constraint {
 public:
     VarLessConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2,
                       bool equality);
@@ -87,7 +87,7 @@ private:
 /**
  * Variable difference in sameTerm sense
  */
-class VarDiffTermConstraint : public cp::StatelessConstraint {
+class VarDiffTermConstraint : public cp::Constraint {
 public:
     VarDiffTermConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
     bool propagate();

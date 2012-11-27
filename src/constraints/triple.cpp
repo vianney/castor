@@ -20,7 +20,7 @@
 namespace castor {
 
 TripleConstraint::TripleConstraint(Query* query, TriplePattern pat) :
-        StatelessConstraint(query->solver(), CASTOR_CONSTRAINTS_STATEMENT_PRIORITY),
+        Constraint(query->solver(), CASTOR_CONSTRAINTS_STATEMENT_PRIORITY),
         store_(query->store()), pat_(pat) {
     for(int i = 0; i < pat.COMPONENTS; i++) {
         if(pat[i].isVariable()) {
@@ -48,8 +48,6 @@ void TripleConstraint::addtime(int index, rusage &start) {
 #endif
 
 bool TripleConstraint::propagate() {
-    StatelessConstraint::propagate();
-
 #ifdef CASTOR_CSTR_TIMING
     rusage ru;
     getrusage(RUSAGE_SELF, &ru);

@@ -22,14 +22,13 @@
 namespace castor {
 
 FilterConstraint::FilterConstraint(Query* query, Expression* expr) :
-        StatelessConstraint(query->solver(), CASTOR_CONSTRAINTS_FILTER_PRIORITY),
+        Constraint(query->solver(), CASTOR_CONSTRAINTS_FILTER_PRIORITY),
         store_(query->store()), expr_(expr) {
     for(Variable* var : expr->variables())
         var->cp()->registerBind(this);
 }
 
 bool FilterConstraint::propagate() {
-    StatelessConstraint::propagate();
     Variable* unbound = nullptr;
     for(Variable* var : expr_->variables()) {
         if(var->cp()->contains(0))

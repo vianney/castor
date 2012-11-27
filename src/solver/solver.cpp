@@ -68,14 +68,10 @@ void Solver::enqueue(std::vector<Constraint*>& constraints) {
 bool Solver::postStatic() {
     Constraint::timestamp_t ts = tsCurrent_;
     tsCurrent_ = tsLastConstraint_;
-    // mark all to-be reposted constraints as propagating or unqueued if they
-    // are stateless
+    // mark all to-be reposted constraints as propagating
     for(Constraint* c : constraints_) {
-        if(c->timestamp_ > ts) {
-            c->nextPropag_ = dynamic_cast<StatelessConstraint*>(c) ?
-                        unqueued() : nullptr;
-            c->init();
-        }
+        if(c->timestamp_ > ts)
+            c->nextPropag_ = nullptr;
     }
     // call initial propagation
     for(Constraint* c : constraints_) {
@@ -97,14 +93,11 @@ bool Solver::postStatic() {
 }
 
 bool Solver::post(std::vector<Constraint *>* constraints) {
-    // mark all constraints as propagating or unqueued if they are stateless
+    // mark all constraints as propagating
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
         p <= Constraint::PRIOR_LAST; ++p) {
-        for(Constraint* c : constraints[p]) {
-            c->nextPropag_ = dynamic_cast<StatelessConstraint*>(c) ?
-                        unqueued() : nullptr;
-            c->init();
-        }
+        for(Constraint* c : constraints[p])
+            c->nextPropag_ = nullptr;
     }
     for(Constraint::Priority p = Constraint::PRIOR_FIRST;
         p <= Constraint::PRIOR_LAST; ++p) {
