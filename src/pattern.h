@@ -233,13 +233,6 @@ public:
     }
 
 protected:
-    /**
-     * Called by the constructors to perform member initialization. In
-     * particular, subclasses should compute the set of used variables here.
-     */
-    virtual void initialize() {}
-
-protected:
     Pattern* left_;
     Pattern* right_;
 };
@@ -249,8 +242,12 @@ protected:
  */
 class JoinPattern : public CompoundPattern {
 public:
-    JoinPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {}
-    JoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {}
+    JoinPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {
+        initialize();
+    }
+    JoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
+        initialize();
+    }
     bool next();
     void discard();
 
@@ -263,8 +260,12 @@ protected:
  */
 class LeftJoinPattern : public CompoundPattern {
 public:
-    LeftJoinPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {}
-    LeftJoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {}
+    LeftJoinPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {
+        initialize();
+    }
+    LeftJoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
+        initialize();
+    }
     bool next();
     void discard();
 
@@ -280,8 +281,12 @@ private:
  */
 class DiffPattern : public CompoundPattern {
 public:
-    DiffPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {}
-    DiffPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {}
+    DiffPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {
+        initialize();
+    }
+    DiffPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
+        initialize();
+    }
     bool next();
     void discard();
 
@@ -294,8 +299,12 @@ protected:
  */
 class UnionPattern : public CompoundPattern {
 public:
-    UnionPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {}
-    UnionPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {}
+    UnionPattern(Pattern* left, Pattern* right) : CompoundPattern(left, right) {
+        initialize();
+    }
+    UnionPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
+        initialize();
+    }
     bool next();
     void discard();
 

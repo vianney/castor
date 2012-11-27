@@ -138,16 +138,13 @@ void FilterPattern::discard() {
 }
 
 CompoundPattern::CompoundPattern(Pattern* left, Pattern* right) :
-        Pattern(left->query()), left_(left), right_(right) {
-    initialize();
-}
+        Pattern(left->query()), left_(left), right_(right) {}
 
 CompoundPattern::CompoundPattern(CompoundPattern&& o) : Pattern(o.query()) {
     left_    = o.left_;
     right_   = o.right_;
     o.left_  = nullptr;
     o.right_ = nullptr;
-    initialize();
 }
 
 CompoundPattern::~CompoundPattern() {
