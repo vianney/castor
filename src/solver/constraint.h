@@ -18,6 +18,8 @@
 #ifndef CASTOR_CP_CONSTRAINT_H
 #define CASTOR_CP_CONSTRAINT_H
 
+#include "reversible.h"
+
 namespace castor {
 namespace cp {
 
@@ -64,10 +66,10 @@ public:
      * The constraint will be marked as "propagating" (nextPropag_ = nullptr)
      * and not entailed (done_ = false).
      *
+     * @param solver the solver
      * @param priority the priority of the constraint
      */
-    Constraint(Priority priority = PRIOR_MEDIUM) :
-        done_(false), priority_(priority), nextPropag_(nullptr) {}
+    Constraint(Solver* solver, Priority priority = PRIOR_MEDIUM);
     virtual ~Constraint() {}
 
     //! Non-copyable
@@ -83,7 +85,7 @@ public:
      * Constraint (re)initialization. Called when parent subtree is activated
      * and before any propagation occurs. Should not propagate anything.
      */
-    virtual void init() { done_ = false; }
+    virtual void init() {}
 
     /**
      * Initial propagation callback. It should perform the initial propagation
@@ -122,7 +124,7 @@ protected:
      * events. The restore callback will still be called, such that done can
      * be reset to false when appropriate.
      */
-    bool done_;
+    Reversible<bool> done_;
 
 private:
     /**
@@ -157,8 +159,9 @@ static inline Constraint::Priority& operator++(Constraint::Priority& p) {
  */
 class StatelessConstraint : public Constraint {
 public:
-    StatelessConstraint() : Constraint() {}
-    StatelessConstraint(Priority priority) : Constraint(priority) {}
+    StatelessConstraint(Solver* solver) : Constraint(solver) {}
+    StatelessConstraint(Solver* solver, Priority priority) :
+        Constraint(solver, priority) {}
 
     void init() { Constraint::init(); posted_ = false; }
     bool post() { return posted_ ? true : propagate(); }

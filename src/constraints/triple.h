@@ -36,7 +36,6 @@ namespace castor {
 class TripleConstraint : public cp::StatelessConstraint {
 public:
     TripleConstraint(Query* query, TriplePattern pat);
-    void restore();
     bool propagate();
 
 #ifdef CASTOR_CSTR_TIMING

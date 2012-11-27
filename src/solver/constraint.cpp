@@ -15,28 +15,17 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-#ifndef CASTOR_CONSTRAINTS_FALLBACK_H
-#define CASTOR_CONSTRAINTS_FALLBACK_H
+#include "constraint.h"
 
-#include "solver/constraint.h"
-#include "query.h"
-#include "expression.h"
+#include "solver.h"
 
 namespace castor {
+namespace cp {
 
-/**
- * Generic filter constraint
- */
-class FilterConstraint : public cp::StatelessConstraint {
-public:
-    FilterConstraint(Query* query, Expression* expr);
-    bool propagate();
-
-private:
-    Store*      store_; //!< The store containing the values
-    Expression* expr_;  //!< The expression
-};
+Constraint::Constraint(Solver* solver, Priority priority) :
+    done_(solver->trail(), false),
+    priority_(priority),
+    nextPropag_(nullptr) {}
 
 }
-
-#endif // CASTOR_CONSTRAINTS_FALLBACK_H
+}

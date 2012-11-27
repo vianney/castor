@@ -19,7 +19,7 @@
 #define CASTOR_CONSTRAINTS_UNARY_H
 
 #include "solver/constraint.h"
-#include "variable.h"
+#include "query.h"
 
 namespace castor {
 
@@ -28,7 +28,7 @@ namespace castor {
  */
 class FalseConstraint : public cp::Constraint {
 public:
-    FalseConstraint() : Constraint(PRIOR_HIGH) {}
+    FalseConstraint(Query* query) : Constraint(query->solver(), PRIOR_HIGH) {}
     bool post() { return false; }
 };
 
@@ -37,7 +37,8 @@ public:
  */
 class BoundConstraint : public cp::Constraint {
 public:
-    BoundConstraint(cp::RDFVar* x) : Constraint(PRIOR_HIGH), x_(x) {}
+    BoundConstraint(Query* query, cp::RDFVar* x) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x) {}
     bool post() { return x_->remove(0); }
 
 private:
@@ -49,8 +50,8 @@ private:
  */
 class InRangeConstraint : public cp::Constraint {
 public:
-    InRangeConstraint(cp::RDFVar* x, ValueRange rng)
-        : Constraint(PRIOR_HIGH), x_(x), rng_(rng) {}
+    InRangeConstraint(Query* query, cp::RDFVar* x, ValueRange rng) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), rng_(rng) {}
     bool post() {
         return x_->updateMin(rng_.from) && x_->updateMax(rng_.to);
     }
@@ -65,8 +66,9 @@ private:
  */
 class InRangesConstraint : public cp::Constraint {
 public:
-    InRangesConstraint(cp::RDFVar* x, std::initializer_list<ValueRange> ranges)
-        : Constraint(PRIOR_HIGH), x_(x), ranges_(ranges) {}
+    InRangesConstraint(Query* query, cp::RDFVar* x,
+                       std::initializer_list<ValueRange> ranges) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), ranges_(ranges) {}
     bool post() {
         x_->clearMarks();
         for(ValueRange rng : ranges_) {
@@ -87,9 +89,10 @@ private:
  */
 class ComparableConstraint : public InRangeConstraint {
 public:
-    ComparableConstraint(Store* store, cp::RDFVar* x) : InRangeConstraint(x,
-        store->range(Value::CAT_SIMPLE_LITERAL,
-                              Value::CAT_DATETIME)) {}
+    ComparableConstraint(Query* query, cp::RDFVar* x) :
+        InRangeConstraint(query, x,
+                          query->store()->range(Value::CAT_SIMPLE_LITERAL,
+                                                Value::CAT_DATETIME)) {}
 };
 
 /**
@@ -97,8 +100,8 @@ public:
  */
 class NotInRangeConstraint : public cp::Constraint {
 public:
-    NotInRangeConstraint(cp::RDFVar* x, ValueRange rng)
-        : Constraint(PRIOR_HIGH), x_(x), rng_(rng) {}
+    NotInRangeConstraint(Query* query, cp::RDFVar* x, ValueRange rng) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), rng_(rng) {}
     bool post() {
         for(Value::id_t id : rng_) {
             if(!x_->remove(id))
@@ -117,8 +120,8 @@ private:
  */
 class ConstGEConstraint : public cp::Constraint {
 public:
-    ConstGEConstraint(cp::RDFVar* x, Value::id_t v)
-        : Constraint(PRIOR_HIGH), x_(x), v_(v) {}
+    ConstGEConstraint(Query* query, cp::RDFVar* x, Value::id_t v) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v) {}
     bool post() { return x_->updateMin(v_); }
 
 private:
@@ -131,8 +134,8 @@ private:
  */
 class ConstLEConstraint : public cp::Constraint {
 public:
-    ConstLEConstraint(cp::RDFVar* x, Value::id_t v)
-        : Constraint(PRIOR_HIGH), x_(x), v_(v) {}
+    ConstLEConstraint(Query* query, cp::RDFVar* x, Value::id_t v) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v) {}
     bool post() { return x_->updateMax(v_); }
 
 private:

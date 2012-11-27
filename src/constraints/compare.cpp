@@ -19,23 +19,14 @@
 
 namespace castor {
 
-SameClassConstraint::SameClassConstraint(Store* store, cp::RDFVar* x1,
-                                         cp::RDFVar* x2)
-        : StatelessConstraint(PRIOR_HIGH), store_(store), x1_(x1), x2_(x2) {
+SameClassConstraint::SameClassConstraint(Query* query, cp::RDFVar* x1,
+                                         cp::RDFVar* x2) :
+        StatelessConstraint(query->solver(), PRIOR_HIGH),
+        store_(query->store()), x1_(x1), x2_(x2) {
     x1->registerMin(this);
     x1->registerMax(this);
     x2->registerMin(this);
     x2->registerMax(this);
-}
-
-void SameClassConstraint::restore() {
-    Value::Category catMin1 = store_->category(x1_->min());
-    Value::Category catMax1 = store_->category(x1_->max());
-    Value::Category catMin2 = store_->category(x2_->min());
-    Value::Category catMax2 = store_->category(x2_->max());
-    Value::Category catMin = std::max(catMin1, catMin2);
-    Value::Category catMax = std::min(catMax1, catMax2);
-    done_ = (catMin == catMax);
 }
 
 bool SameClassConstraint::propagate() {
@@ -59,15 +50,12 @@ bool SameClassConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarDiffConstraint::VarDiffConstraint(Store* store, cp::RDFVar* x1,
-                                     cp::RDFVar* x2)
-        : StatelessConstraint(PRIOR_HIGH), store_(store), x1_(x1), x2_(x2) {
+VarDiffConstraint::VarDiffConstraint(Query* query, cp::RDFVar* x1,
+                                     cp::RDFVar* x2) :
+        StatelessConstraint(query->solver(), PRIOR_HIGH),
+        store_(query->store()), x1_(x1), x2_(x2) {
     x1->registerBind(this);
     x2->registerBind(this);
-}
-
-void VarDiffConstraint::restore() {
-    done_ = (x1_->bound() || x2_->bound());
 }
 
 bool VarDiffConstraint::propagate() {
@@ -94,8 +82,9 @@ bool VarDiffConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarEqConstraint::VarEqConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2) :
-        Constraint(PRIOR_HIGH), store_(store), x1_(x1), x2_(x2) {
+VarEqConstraint::VarEqConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2) :
+        Constraint(query->solver(), PRIOR_HIGH),
+        store_(query->store()), x1_(x1), x2_(x2) {
     x1->registerChange(this);
     x2->registerChange(this);
 }
@@ -194,48 +183,40 @@ bool VarEqConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarLessConstraint::VarLessConstraint(Store* store, cp::RDFVar* x1,
-                                     cp::RDFVar* x2, bool equality)
-        : StatelessConstraint(PRIOR_HIGH), store_(store), x1_(x1), x2_(x2),
-          equality(equality) {
+VarLessConstraint::VarLessConstraint(Query* query, cp::RDFVar* x1,
+                                     cp::RDFVar* x2, bool equality) :
+        StatelessConstraint(query->solver(), PRIOR_HIGH),
+        store_(query->store()), x1_(x1), x2_(x2), equality(equality) {
     x1->registerMin(this);
     x1->registerMax(this);
     x2->registerMin(this);
     x2->registerMax(this);
 }
 
-void VarLessConstraint::restore() {
-    ValueRange eqClass1 = store_->eqClass(x1_->max());
-    ValueRange eqClass2 = store_->eqClass(x2_->min());
-    done_ = equality ? eqClass1.to <= eqClass2.to
-                    : eqClass1.to < eqClass2.from;
-}
-
 bool VarLessConstraint::propagate() {
     StatelessConstraint::propagate();
-    ValueRange eqClassMax1 = store_->eqClass(x1_->max());
-    ValueRange eqClassMin2 = store_->eqClass(x2_->min());
-    done_ = equality ? eqClassMax1.to <= eqClassMin2.to
-                    : eqClassMax1.to < eqClassMin2.from;
-    if(done_)
-        return true;
     ValueRange eqClassMax2 = store_->eqClass(x2_->max());
     if(!x1_->updateMax(equality ? eqClassMax2.to : eqClassMax2.from - 1))
         return false;
     ValueRange eqClassMin1 = store_->eqClass(x1_->min());
-    return x2_->updateMin(equality ? eqClassMin1.from : eqClassMin1.to + 1);
+    if(!x2_->updateMin(equality ? eqClassMin1.from : eqClassMin1.to + 1))
+        return false;
+    // Check entailment
+    ValueRange eqClassMax1 = store_->eqClass(x1_->max());
+    ValueRange eqClassMin2 = store_->eqClass(x2_->min());
+    if(( equality && eqClassMax1.to <= eqClassMin2.to) ||
+       (!equality && eqClassMax1.to <  eqClassMin2.from))
+        done_ = true;
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarDiffTermConstraint::VarDiffTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2) :
-        StatelessConstraint(PRIOR_HIGH), x1_(x1), x2_(x2) {
+VarDiffTermConstraint::VarDiffTermConstraint(Query *query, cp::RDFVar* x1,
+                                             cp::RDFVar* x2) :
+        StatelessConstraint(query->solver(), PRIOR_HIGH), x1_(x1), x2_(x2) {
     x1->registerBind(this);
     x2->registerBind(this);
-}
-
-void VarDiffTermConstraint::restore() {
-    done_ = (x1_->bound() || x2_->bound());
 }
 
 bool VarDiffTermConstraint::propagate() {
@@ -253,8 +234,9 @@ bool VarDiffTermConstraint::propagate() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-VarSameTermConstraint::VarSameTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2) :
-        Constraint(PRIOR_HIGH), x1_(x1), x2_(x2) {
+VarSameTermConstraint::VarSameTermConstraint(Query *query, cp::RDFVar* x1,
+                                             cp::RDFVar* x2) :
+        Constraint(query->solver(), PRIOR_HIGH), x1_(x1), x2_(x2) {
     x1->registerChange(this);
     x2->registerChange(this);
 }

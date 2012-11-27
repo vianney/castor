@@ -20,11 +20,13 @@ set(CASTOR_SRCS
     solver/solver.cpp
     solver/trail.h
     solver/trail.cpp
+    solver/reversible.h
     solver/variable.h
     solver/discretevar.h
     solver/boundsvar.h
     solver/smallvar.h
     solver/constraint.h
+    solver/constraint.cpp
     solver/subtree.h
     solver/subtree.cpp
     store/btree.h

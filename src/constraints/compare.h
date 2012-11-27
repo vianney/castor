@@ -19,8 +19,7 @@
 #define CASTOR_CONSTRAINTS_COMPARE_H
 
 #include "solver/constraint.h"
-#include "store.h"
-#include "variable.h"
+#include "query.h"
 
 namespace castor {
 
@@ -29,8 +28,7 @@ namespace castor {
  */
 class SameClassConstraint : public cp::StatelessConstraint {
 public:
-    SameClassConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
+    SameClassConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
     bool propagate();
 
 private:
@@ -44,8 +42,7 @@ private:
  */
 class VarDiffConstraint : public cp::StatelessConstraint {
 public:
-    VarDiffConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
+    VarDiffConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
     bool propagate();
 
 private:
@@ -59,7 +56,7 @@ private:
  */
 class VarEqConstraint : public cp::Constraint {
 public:
-    VarEqConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2);
+    VarEqConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
     void restore();
     bool post();
     bool propagate();
@@ -76,8 +73,8 @@ private:
  */
 class VarLessConstraint : public cp::StatelessConstraint {
 public:
-    VarLessConstraint(Store* store, cp::RDFVar* x1, cp::RDFVar* x2, bool equality);
-    void restore();
+    VarLessConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2,
+                      bool equality);
     bool propagate();
 
 private:
@@ -92,8 +89,7 @@ private:
  */
 class VarDiffTermConstraint : public cp::StatelessConstraint {
 public:
-    VarDiffTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2);
-    void restore();
+    VarDiffTermConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
     bool propagate();
 
 private:
@@ -106,7 +102,7 @@ private:
  */
 class VarSameTermConstraint : public cp::Constraint {
 public:
-    VarSameTermConstraint(cp::RDFVar* x1, cp::RDFVar* x2);
+    VarSameTermConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
     void restore();
     bool post();
     bool propagate();

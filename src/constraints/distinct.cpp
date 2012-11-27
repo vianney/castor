@@ -34,7 +34,8 @@ bool DistinctConstraint::LexLess::operator()(T* a, T* b) const {
     return false;
 }
 
-DistinctConstraint::DistinctConstraint(Query* query) {
+DistinctConstraint::DistinctConstraint(Query* query) :
+        Constraint(query->solver()) {
     query_ = query;
     unsigned n = query->requested();
     assert(n > 0);

@@ -21,27 +21,11 @@
 
 namespace castor {
 
-FilterConstraint::FilterConstraint(Store* store, Expression* expr) :
-        StatelessConstraint(CASTOR_CONSTRAINTS_FILTER_PRIORITY),
-        store_(store), expr_(expr) {
+FilterConstraint::FilterConstraint(Query* query, Expression* expr) :
+        StatelessConstraint(query->solver(), CASTOR_CONSTRAINTS_FILTER_PRIORITY),
+        store_(query->store()), expr_(expr) {
     for(Variable* var : expr->variables())
         var->cp()->registerBind(this);
-}
-
-void FilterConstraint::restore() {
-    done_ = true;
-    int unbound = 0;
-    for(Variable* var : expr_->variables()) {
-        cp::RDFVar* x = var->cp();
-        if(!x->contains(0) && !x->bound()) {
-            unbound++;
-            if(unbound > 1) {
-                // more than one unbound variable, we are not done
-                done_ = false;
-                return;
-            }
-        }
-    }
 }
 
 bool FilterConstraint::propagate() {

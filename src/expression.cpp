@@ -475,7 +475,7 @@ bool RegExExpression::evaluate(Value& result) {
 // Posting constraints
 
 void Expression::post(cp::Subtree& sub) {
-    sub.add(new FilterConstraint(query_->store(), this));
+    sub.add(new FilterConstraint(query_, this));
 }
 
 void AndExpression::post(cp::Subtree& sub) {
@@ -497,7 +497,7 @@ void EqualityExpression::post(cp::Subtree& sub) {
             query_->store()->resolve(val);
             postConst(sub, x, val);
         } else {
-            sub.add(new FalseConstraint());
+            sub.add(new FalseConstraint(query_));
         }
     } else if(var2 && arg1_->isConstant()) {
         Value val;
@@ -506,57 +506,57 @@ void EqualityExpression::post(cp::Subtree& sub) {
             query_->store()->resolve(val);
             postConst(sub, x, val);
         } else {
-            sub.add(new FalseConstraint());
+            sub.add(new FalseConstraint(query_));
         }
     } else {
         Expression::post(sub);
     }
 }
 void EqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarEqConstraint(query_->store(), x1, x2));
+    sub.add(new VarEqConstraint(query_, x1, x2));
 }
 void EqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
-    sub.add(new InRangeConstraint(x, query_->store()->eqClass(v)));
+    sub.add(new InRangeConstraint(query_, x, query_->store()->eqClass(v)));
 }
 void NEqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
     /* In class CUSTOM, either two values are equal (and thus return false) or
      * the comparison produces a type error (making the constraint false).
      */
     Value::id_t upper = query_->store()->range(Value::CAT_OTHER).from - 1;
-    sub.add(new ConstLEConstraint(x1, upper));
-    sub.add(new ConstLEConstraint(x2, upper));
-    sub.add(new VarDiffConstraint(query_->store(), x1, x2));
+    sub.add(new ConstLEConstraint(query_, x1, upper));
+    sub.add(new ConstLEConstraint(query_, x2, upper));
+    sub.add(new VarDiffConstraint(query_, x1, x2));
 }
 void NEqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
     if(v.isLiteral() && v.isComparable()) {
-        sub.add(new InRangesConstraint(x,
+        sub.add(new InRangesConstraint(query_, x,
             { query_->store()->range(Value::CAT_BLANK, Value::CAT_URI),
               query_->store()->range(v.category()) }));
     } else {
-        sub.add(new InRangeConstraint(x,
+        sub.add(new InRangeConstraint(query_, x,
                         query_->store()->range(Value::CAT_BLANK,
                                                Value::CAT_URI)));
     }
-    sub.add(new NotInRangeConstraint(x, query_->store()->eqClass(v)));
+    sub.add(new NotInRangeConstraint(query_, x, query_->store()->eqClass(v)));
 }
 void SameTermExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarSameTermConstraint(x1, x2));
+    sub.add(new VarSameTermConstraint(query_, x1, x2));
 }
 void SameTermExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
     if(v.id() == 0) {
-        sub.add(new FalseConstraint());
+        sub.add(new FalseConstraint(query_));
     } else {
         ValueRange rng = {v.id(), v.id()};
-        sub.add(new InRangeConstraint(x, rng));
+        sub.add(new InRangeConstraint(query_, x, rng));
     }
 }
 void DiffTermExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarDiffTermConstraint(x1, x2));
+    sub.add(new VarDiffTermConstraint(query_, x1, x2));
 }
 void DiffTermExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
     if(v.id() != 0) {
         ValueRange rng = {v.id(), v.id()};
-        sub.add(new NotInRangeConstraint(x, rng));
+        sub.add(new NotInRangeConstraint(query_, x, rng));
     }
 }
 
@@ -566,84 +566,84 @@ void InequalityExpression::post(cp::Subtree& sub) {
     if(var1 && var2) {
         cp::RDFVar* x1 = var1->variable()->cp();
         cp::RDFVar* x2 = var2->variable()->cp();
-        sub.add(new ComparableConstraint(query_->store(), x1));
-        sub.add(new ComparableConstraint(query_->store(), x2));
-        sub.add(new SameClassConstraint(query_->store(), x1, x2));
+        sub.add(new ComparableConstraint(query_, x1));
+        sub.add(new ComparableConstraint(query_, x2));
+        sub.add(new SameClassConstraint(query_, x1, x2));
         postVars(sub, x1, x2);
     } else if(var1 && arg2_->isConstant()) {
         Value val;
         if(arg2_->evaluate(val) && val.isComparable()) {
             cp::RDFVar* x = var1->variable()->cp();
             query_->store()->resolve(val);
-            sub.add(new InRangeConstraint(x,
+            sub.add(new InRangeConstraint(query_, x,
                         query_->store()->range(val.category())));
             postConst(sub, x, val);
         } else {
-            sub.add(new FalseConstraint());
+            sub.add(new FalseConstraint(query_));
         }
     } else if(var2 && arg1_->isConstant()) {
         Value val;
         if(arg1_->evaluate(val) && val.isComparable()) {
             cp::RDFVar* x = var2->variable()->cp();
             query_->store()->resolve(val);
-            sub.add(new InRangeConstraint(x,
+            sub.add(new InRangeConstraint(query_, x,
                         query_->store()->range(val.category())));
             postConst(sub, val, x);
         } else {
-            sub.add(new FalseConstraint());
+            sub.add(new FalseConstraint(query_));
         }
     } else {
         Expression::post(sub);
     }
 }
 void LTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarLessConstraint(query_->store(), x1, x2, false));
+    sub.add(new VarLessConstraint(query_, x1, x2, false));
 }
 void LTExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
-    sub.add(new ConstLEConstraint(x1,
+    sub.add(new ConstLEConstraint(query_, x1,
                         query_->store()->eqClass(v2).from - 1));
 }
 void LTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
-    sub.add(new ConstGEConstraint(x2,
+    sub.add(new ConstGEConstraint(query_, x2,
                         query_->store()->eqClass(v1).to + 1));
 }
 
 
 void GTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarLessConstraint(query_->store(), x2, x1, false));
+    sub.add(new VarLessConstraint(query_, x2, x1, false));
 }
 void GTExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
-    sub.add(new ConstGEConstraint(x1,
+    sub.add(new ConstGEConstraint(query_, x1,
                         query_->store()->eqClass(v2).to + 1));
 }
 void GTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
-    sub.add(new ConstLEConstraint(x2,
+    sub.add(new ConstLEConstraint(query_, x2,
                         query_->store()->eqClass(v1).from - 1));
 }
 
 
 void LEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarLessConstraint(query_->store(), x1, x2, true));
+    sub.add(new VarLessConstraint(query_, x1, x2, true));
 }
 void LEExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
-    sub.add(new ConstLEConstraint(x1,
+    sub.add(new ConstLEConstraint(query_, x1,
                         query_->store()->eqClass(v2).to));
 }
 void LEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
-    sub.add(new ConstGEConstraint(x2,
+    sub.add(new ConstGEConstraint(query_, x2,
                         query_->store()->eqClass(v1).from));
 }
 
 
 void GEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarLessConstraint(query_->store(), x2, x1, true));
+    sub.add(new VarLessConstraint(query_, x2, x1, true));
 }
 void GEExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
-    sub.add(new ConstGEConstraint(x1,
+    sub.add(new ConstGEConstraint(query_, x1,
                         query_->store()->eqClass(v2).from));
 }
 void GEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
-    sub.add(new ConstLEConstraint(x2,
+    sub.add(new ConstLEConstraint(query_, x2,
                         query_->store()->eqClass(v1).to));
 }
 

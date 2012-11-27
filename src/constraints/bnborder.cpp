@@ -23,7 +23,8 @@
 
 namespace castor {
 
-BnBOrderConstraint::BnBOrderConstraint(Query* query) : query_(query) {
+BnBOrderConstraint::BnBOrderConstraint(Query* query) :
+        Constraint(query->solver()), query_(query) {
     VariableSet vars(query);
     for(Order order : query->orders())
         vars += order.expression()->variables();
