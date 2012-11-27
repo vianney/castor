@@ -55,12 +55,10 @@ void Trail::restore(checkpoint_t chkp) {
     timestamp_++;
 }
 
-void Trailable::modifying() {
-    if(timestamp_ != trail_->timestamp()) {
-        save(*trail_);
-        trail_->push(this);
-        timestamp_ = trail_->timestamp();
-    }
+void Trail::save(Trailable *obj) {
+    obj->save(*this);
+    push(obj);
+    obj->timestamp_ = timestamp_;
 }
 
 }

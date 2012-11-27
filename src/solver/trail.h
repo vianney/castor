@@ -24,6 +24,8 @@
 namespace castor {
 namespace cp {
 
+class Trailable;
+
 /**
  * A trail is a stack of information used to restore trailable objects.
  */
@@ -49,11 +51,6 @@ public:
     ~Trail();
 
     /**
-     * @return the timestamp of the latest checkpoint/restore.
-     */
-    timestamp_t timestamp() const { return timestamp_; }
-
-    /**
      * Make a checkpoint of the trail.
      *
      * @return the new checkpoint
@@ -69,6 +66,9 @@ public:
 
     /**
      * Push a value on the trail.
+     *
+     * @note This method shall only be used inside implementations of
+     *       Trailable::save().
      */
     template<class T>
     void push(const T& val) {
@@ -78,6 +78,9 @@ public:
 
     /**
      * Pop a value from the trail.
+     *
+     * @note This method shall only be used inside implementations of
+     *       Trailable::restore().
      */
     template<class T>
     T pop() {
@@ -103,6 +106,13 @@ private:
             enlargeSpace(ptr_ - trail_ + size);
     }
 
+    /**
+     * Save the state of obj.
+     *
+     * @param obj
+     */
+    void save(Trailable* obj);
+
 private:
     /**
      * The trail stack.
@@ -121,9 +131,11 @@ private:
     char* ptr_;
 
     /**
-     * Current timestamp.
+     * Current timestamp = timestamp of the latest checkpoint or restore.
      */
     timestamp_t timestamp_;
+
+    friend class Trailable;
 };
 
 
@@ -147,11 +159,6 @@ public:
     virtual void restore(Trail& trail) = 0;
 
 protected:
-    /**
-     * Construct a trailable object.
-     *
-     * @param trail attached trail
-     */
     Trailable(Trail* trail) : trail_(trail), timestamp_(0) {
         assert(trail != nullptr);
     }
@@ -169,7 +176,10 @@ protected:
      * @note This method shall be called by implementations before any
      *       modification of the state.
      */
-    void modifying();
+    void modifying() {
+        if(timestamp_ != trail_->timestamp_)
+            trail_->save(this);
+    }
 
 private:
     /**
@@ -181,6 +191,8 @@ private:
      * Timestamp of the latest trail checkpoint.
      */
     Trail::timestamp_t timestamp_;
+
+    friend class Trail;
 };
 
 }
