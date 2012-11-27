@@ -24,6 +24,96 @@ using namespace castor::cp;
 using ::testing::AtMost;
 using ::testing::Between;
 
+////////////////////////////////////////////////////////////////////////////////
+// Assertions
+
+/**
+ * Expect variable x to have the specified domain. Bounds are not checked, but
+ * the domain can be unsynchronized (the given bounds are used to check the
+ * contains() method).
+ *
+ * @param x the variable to check
+ * @param lb lower bound (if unsynchronized)
+ * @param ub upper bound (if unsynchronized)
+ * @param ... domain values
+ */
+#define EXPECT_DOMAIN(x, lb, ub, ...) { \
+    std::initializer_list<unsigned> dom = {__VA_ARGS__}; \
+    ASSERT_LT(0u, dom.size()); \
+    EXPECT_EQ(dom.size(), x.size()); \
+    if(dom.size() == 1) { \
+        EXPECT_TRUE(x.bound()); \
+        EXPECT_EQ(*dom.begin(), x.value()); \
+        EXPECT_EQ(*dom.begin(), x.min()); \
+        EXPECT_EQ(*dom.begin(), x.max()); \
+    } else { \
+        EXPECT_FALSE(x.bound()); \
+    } \
+    for(unsigned v = 0; v <= MAXVAL; v++) { \
+        bool found = false; \
+        if(v >= lb && v <= ub) { \
+            for(unsigned v2 : dom) { \
+                if(v2 == v) { \
+                    found = true; \
+                    break; \
+                } \
+            } \
+        } \
+        if(found) \
+            EXPECT_TRUE(x.contains(v)) << "with value " << v; \
+        else \
+            EXPECT_FALSE(x.contains(v)) << "with value " << v; \
+    } \
+    for(unsigned i = 0; i < dom.size(); i++) { \
+        unsigned v = x.domain()[i]; \
+        bool found = false; \
+        for(unsigned v2 : dom) { \
+            if(v2 == v) { \
+                found = true; \
+                break; \
+            } \
+        } \
+        EXPECT_TRUE(found) << "Value " << v << " at index " << i \
+                           << " of x.domain() should not be there"; \
+    } \
+    for(unsigned v : dom) { \
+        bool found = false; \
+        for(unsigned i = 0; i < dom.size(); i++) { \
+            if(x.domain()[i] == v) { \
+                found = true; \
+                break; \
+            } \
+        } \
+        EXPECT_TRUE(found) << "Value " << v \
+                           << " is missing from x.domain()"; \
+    } \
+}
+
+/**
+ * Expect variable x to have the specified domain. Bounds are not checked, but
+ * the domain is assumed to be synchronized (i.e., contains() returns true for
+ * every value in the given domain).
+ *
+ * @param x the variable to check
+ * @param ... domain values
+ */
+#define EXPECT_DOMAIN_SYNC(x, ...) EXPECT_DOMAIN(x, 0u, MAXVAL, __VA_ARGS__)
+
+/**
+ * Check that the variables are left in their initial state
+ */
+#define EXPECT_INITIAL_STATE { \
+    EXPECT_DOMAIN_SYNC(x, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9); \
+    EXPECT_EQ( 0u, x.min()); \
+    EXPECT_EQ( 9u, x.max()); \
+    EXPECT_DOMAIN_SYNC(y, 5, 6, 7, 8, 9); \
+    EXPECT_EQ(5u, y.min()); \
+    EXPECT_EQ(9u, y.max()); \
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Fixture
+
 class SolverDiscreteVarTest : public ::testing::Test {
 protected:
     typedef DiscreteVariable<unsigned> Var;
@@ -34,10 +124,12 @@ protected:
     //! Upper bound on the values in any domain, will never appear in any of them.
     static const unsigned MAXVAL = 20;
 
-    SolverDiscreteVarTest() : x(&solver, 0, 9), y(&solver, 5, 9) {}
+    SolverDiscreteVarTest() : x(&solver, 0, 9), y(&solver, 5, 9),
+        xBind(&solver), xChange(&solver), xMin(&solver), xMax(&solver),
+        yBind(&solver), yChange(&solver), yMin(&solver), yMax(&solver) {}
 
     virtual void SetUp() {
-        expect_initial_state();
+        EXPECT_INITIAL_STATE;
     }
 
     /**
@@ -53,85 +145,10 @@ protected:
         y.registerMin(&yMin);
         y.registerMax(&yMax);
     }
-
-    /**
-     * Expect variable x to have the domain dom (with n values), ignoring the
-     * ordering. Bounds are not checked.
-     *
-     * @param x the variable to check
-     * @param dom array of the domain values (dom.size() > 0)
-     * @param min lower bound (if unsynchronized)
-     * @param max upper bound (if unsynchronized)
-     */
-    void expect_domain(const Var& x, std::initializer_list<unsigned> dom,
-                       unsigned min=0, unsigned max=MAXVAL) {
-        ASSERT_LT(0u, dom.size());
-        // check size and bound
-        EXPECT_EQ(dom.size(), x.size());
-        if(dom.size() == 1) {
-            EXPECT_TRUE(x.bound());
-            EXPECT_EQ(*dom.begin(), x.value());
-            EXPECT_EQ(*dom.begin(), x.min());
-            EXPECT_EQ(*dom.begin(), x.max());
-        } else {
-            EXPECT_FALSE(x.bound());
-        }
-        // check x.contains()
-        for(unsigned v = 0; v <= MAXVAL; v++) {
-            bool found = false;
-            if(v >= min && v <= max) {
-                for(unsigned v2 : dom) {
-                    if(v2 == v) {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            if(found)
-                EXPECT_TRUE(x.contains(v)) << "with value " << v;
-            else
-                EXPECT_FALSE(x.contains(v)) << "with value " << v;
-        }
-        // every value in x.domain() should appear in dom
-        for(unsigned i = 0; i < dom.size(); i++) {
-            unsigned v = x.domain()[i];
-            bool found = false;
-            for(unsigned v2 : dom) {
-                if(v2 == v) {
-                    found = true;
-                    break;
-                }
-            }
-            EXPECT_TRUE(found) << "Value " << v << " at index " << i
-                               << " of x.domain() should not be there";
-        }
-        // every value in dom should appear in x.domain()
-        for(unsigned v : dom) {
-            bool found = false;
-            for(unsigned i = 0; i < dom.size(); i++) {
-                if(x.domain()[i] == v) {
-                    found = true;
-                    break;
-                }
-            }
-            EXPECT_TRUE(found) << "Value " << v
-                               << " is missing from x.domain()";
-        }
-    }
-
-    /**
-     * Check that the variables are left in their initial state
-     */
-    void expect_initial_state() {
-        expect_domain(x, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
-        EXPECT_EQ( 0u, x.min());
-        EXPECT_EQ( 9u, x.max());
-
-        expect_domain(y, {5, 6, 7, 8, 9});
-        EXPECT_EQ(5u, y.min());
-        EXPECT_EQ(9u, y.max());
-    }
 };
+
+////////////////////////////////////////////////////////////////////////////////
+// Tests
 
 /**
  * save() should not modify the domain
@@ -139,7 +156,7 @@ protected:
 TEST_F(SolverDiscreteVarTest, SaveSanity) {
     x.save(solver.trail());
     y.save(solver.trail());
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 }
 
 /**
@@ -149,12 +166,12 @@ TEST_F(SolverDiscreteVarTest, Restore) {
     Trail::checkpoint_t chkp = solver.trail().checkpoint();
     x.remove(8);
     solver.trail().restore(chkp);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 
     chkp = solver.trail().checkpoint();
     y.updateMin(7);
     solver.trail().restore(chkp);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 }
 
 /**
@@ -175,13 +192,13 @@ TEST_F(SolverDiscreteVarTest, Label) {
     EXPECT_TRUE(x.bound());
     EXPECT_LE(0u, x.value());
     EXPECT_GE(9u, x.value());
-    expect_domain(x, {x.value()});
+    EXPECT_DOMAIN_SYNC(x, x.value());
 
     y.label();
     EXPECT_TRUE(y.bound());
     EXPECT_LE(5u, y.value());
     EXPECT_GE(9u, y.value());
-    expect_domain(y, {y.value()});
+    EXPECT_DOMAIN_SYNC(y, y.value());
 }
 
 /**
@@ -218,30 +235,30 @@ TEST_F(SolverDiscreteVarTest, UnLabel) {
  */
 TEST_F(SolverDiscreteVarTest, MarkSanity) {
     x.clearMarks();
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     x.mark(x.domain()[0]);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     x.mark(4);
-    expect_initial_state();;
+    EXPECT_INITIAL_STATE;
     x.mark(16);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     x.mark(3);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     x.clearMarks();
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 
     y.clearMarks();
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     y.mark(y.domain()[0]);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     y.mark(8);
-    expect_initial_state();;
+    EXPECT_INITIAL_STATE;
     y.mark(16);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     y.mark(4);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     y.clearMarks();
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 }
 
 /**
@@ -259,13 +276,13 @@ TEST_F(SolverDiscreteVarTest, Bind) {
     EXPECT_CALL(yMax, propagate());
 
     EXPECT_TRUE(x.bind(5));
-    expect_domain(x, {5});
+    EXPECT_DOMAIN_SYNC(x, 5);
 
     EXPECT_TRUE(x.bind(5));
     EXPECT_FALSE(x.bind(6));
 
     EXPECT_TRUE(y.bind(7));
-    expect_domain(y, {7});
+    EXPECT_DOMAIN_SYNC(y, 7);
 
     EXPECT_TRUE(y.bind(7));
     EXPECT_FALSE(y.bind(6));
@@ -286,13 +303,13 @@ TEST_F(SolverDiscreteVarTest, BindMin) {
     EXPECT_CALL(yMax,    propagate());
 
     EXPECT_TRUE(x.bind(0));
-    expect_domain(x, {0});
+    EXPECT_DOMAIN_SYNC(x, 0);
 
     EXPECT_TRUE(x.bind(0));
     EXPECT_FALSE(x.bind(6));
 
     EXPECT_TRUE(y.bind(5));
-    expect_domain(y, {5});
+    EXPECT_DOMAIN_SYNC(y, 5);
 
     EXPECT_TRUE(y.bind(5));
     EXPECT_FALSE(y.bind(6));
@@ -314,13 +331,13 @@ TEST_F(SolverDiscreteVarTest, BindMax) {
     EXPECT_CALL(yMax,    propagate()).Times(0);
 
     EXPECT_TRUE(x.bind(9));
-    expect_domain(x, {9});
+    EXPECT_DOMAIN_SYNC(x, 9);
 
     EXPECT_TRUE(x.bind(9));
     EXPECT_FALSE(x.bind(6));
 
     EXPECT_TRUE(y.bind(9));
-    expect_domain(y, {9});
+    EXPECT_DOMAIN_SYNC(y, 9);
 
     EXPECT_TRUE(y.bind(9));
     EXPECT_FALSE(y.bind(6));
@@ -349,10 +366,10 @@ TEST_F(SolverDiscreteVarTest, Remove) {
     EXPECT_CALL(yMax,    propagate()).Times(0);
 
     EXPECT_TRUE(x.remove(6));
-    expect_domain(x, {0, 1, 2, 3, 4, 5, /*6,*/ 7, 8, 9});
+    EXPECT_DOMAIN_SYNC(x, 0, 1, 2, 3, 4, 5, /*6,*/ 7, 8, 9);
 
     EXPECT_TRUE(y.remove(7));
-    expect_domain(y, {5, 6, /*7,*/ 8, 9});
+    EXPECT_DOMAIN_SYNC(y, 5, 6, /*7,*/ 8, 9);
 }
 
 /**
@@ -370,10 +387,10 @@ TEST_F(SolverDiscreteVarTest, RemoveMin) {
     EXPECT_CALL(yMax,    propagate()).Times(0);
 
     EXPECT_TRUE(x.remove(0));
-    expect_domain(x, {/*0,*/ 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    EXPECT_DOMAIN_SYNC(x, /*0,*/ 1, 2, 3, 4, 5, 6, 7, 8, 9);
 
     EXPECT_TRUE(y.remove(5));
-    expect_domain(y, {/*5,*/ 6, 7, 8, 9});
+    EXPECT_DOMAIN_SYNC(y, /*5,*/ 6, 7, 8, 9);
 }
 
 /**
@@ -391,10 +408,10 @@ TEST_F(SolverDiscreteVarTest, RemoveMax) {
     EXPECT_CALL(yMax,    propagate()).Times(AtMost(1));
 
     EXPECT_TRUE(x.remove(9));
-    expect_domain(x, {0, 1, 2, 3, 4, 5, 6, 7, 8/*, 9*/});
+    EXPECT_DOMAIN_SYNC(x, 0, 1, 2, 3, 4, 5, 6, 7, 8/*, 9*/);
 
     EXPECT_TRUE(y.remove(9));
-    expect_domain(y, {5, 6, 7, 8/*, 9*/});
+    EXPECT_DOMAIN_SYNC(y, 5, 6, 7, 8/*, 9*/);
 }
 
 /**
@@ -415,13 +432,13 @@ TEST_F(SolverDiscreteVarTest, RemoveAllButOne) {
     for(unsigned v = 2; v <= 9; v++)
         EXPECT_TRUE(x.remove(v)) << "with value " << v;
     EXPECT_TRUE(x.remove(0));
-    expect_domain(x, {1});
+    EXPECT_DOMAIN_SYNC(x, 1);
 
     EXPECT_TRUE(y.remove(6));
     EXPECT_TRUE(y.remove(8));
     EXPECT_TRUE(y.remove(5));
     EXPECT_TRUE(y.remove(9));
-    expect_domain(y, {7});
+    EXPECT_DOMAIN_SYNC(y, 7);
 }
 
 /**
@@ -431,10 +448,10 @@ TEST_F(SolverDiscreteVarTest, RemoveAllButOne) {
 TEST_F(SolverDiscreteVarTest, RemoveSyncBind) {
     Var z(&solver, 10, 12);
     z.updateMax(11);
-    expect_domain(z, {10, 11, 12}, 10, 11);
+    EXPECT_DOMAIN(z, 10u, 11u, 10, 11, 12);
     z.remove(10);
     if(z.min() == z.max())
-        expect_domain(z, {11});
+        EXPECT_DOMAIN_SYNC(z, 11);
 }
 
 /**
@@ -456,7 +473,7 @@ TEST_F(SolverDiscreteVarTest, Restrict) {
     x.mark(2);
     x.mark(7);
     EXPECT_TRUE(x.restrictToMarks());
-    expect_domain(x, {2, 4, 7});
+    EXPECT_DOMAIN_SYNC(x, 2, 4, 7);
     EXPECT_EQ(2u, x.min());
     EXPECT_EQ(7u, x.max());
 
@@ -465,7 +482,7 @@ TEST_F(SolverDiscreteVarTest, Restrict) {
     y.mark(8);
     y.mark(6);
     EXPECT_TRUE(y.restrictToMarks());
-    expect_domain(y, {6, 8});
+    EXPECT_DOMAIN_SYNC(y, 6, 8);
     EXPECT_EQ(6u, y.min());
     EXPECT_EQ(8u, y.max());
 }
@@ -490,7 +507,7 @@ TEST_F(SolverDiscreteVarTest, RestrictMin) {
     x.mark(0);
     x.mark(7);
     EXPECT_TRUE(x.restrictToMarks());
-    expect_domain(x, {0, 2, 4, 7});
+    EXPECT_DOMAIN_SYNC(x, 0, 2, 4, 7);
     EXPECT_EQ(0u, x.min());
     EXPECT_EQ(7u, x.max());
 
@@ -500,7 +517,7 @@ TEST_F(SolverDiscreteVarTest, RestrictMin) {
     y.mark(8);
     y.mark(6);
     EXPECT_TRUE(y.restrictToMarks());
-    expect_domain(y, {5, 6, 8});
+    EXPECT_DOMAIN_SYNC(y, 5, 6, 8);
     EXPECT_EQ(5u, y.min());
     EXPECT_EQ(8u, y.max());
 }
@@ -525,7 +542,7 @@ TEST_F(SolverDiscreteVarTest, RestrictMax) {
     x.mark(7);
     x.mark(9);
     EXPECT_TRUE(x.restrictToMarks());
-    expect_domain(x, {2, 4, 7, 9});
+    EXPECT_DOMAIN_SYNC(x, 2, 4, 7, 9);
     EXPECT_EQ(2u, x.min());
     EXPECT_EQ(9u, x.max());
 
@@ -535,7 +552,7 @@ TEST_F(SolverDiscreteVarTest, RestrictMax) {
     y.mark(8);
     y.mark(6);
     EXPECT_TRUE(y.restrictToMarks());
-    expect_domain(y, {6, 8, 9});
+    EXPECT_DOMAIN_SYNC(y, 6, 8, 9);
     EXPECT_EQ(6u, y.min());
     EXPECT_EQ(9u, y.max());
 }
@@ -558,7 +575,7 @@ TEST_F(SolverDiscreteVarTest, RestrictNoOp) {
     for(unsigned v = 0; v <= 9; v++)
         x.mark(v);
     EXPECT_TRUE(x.restrictToMarks());
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 
     y.clearMarks();
     y.mark(6);
@@ -567,7 +584,7 @@ TEST_F(SolverDiscreteVarTest, RestrictNoOp) {
     y.mark(9);
     y.mark(7);
     EXPECT_TRUE(y.restrictToMarks());
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 }
 
 /**
@@ -611,7 +628,7 @@ TEST_F(SolverDiscreteVarTest, RestrictFail2) {
     x.mark(3);
     x.mark(4);
     x.restrictToMarks();
-    expect_domain(x, {2, 3, 4});
+    EXPECT_DOMAIN_SYNC(x, 2, 3, 4);
 
     x.clearMarks();
     x.mark(0);
@@ -636,12 +653,12 @@ TEST_F(SolverDiscreteVarTest, RestrictBind) {
     x.clearMarks();
     x.mark(4);
     EXPECT_TRUE(x.restrictToMarks());
-    expect_domain(x, {4});
+    EXPECT_DOMAIN_SYNC(x, 4);
 
     y.clearMarks();
     y.mark(8);
     EXPECT_TRUE(y.restrictToMarks());
-    expect_domain(y, {8});
+    EXPECT_DOMAIN_SYNC(y, 8);
 }
 
 /**
@@ -661,12 +678,12 @@ TEST_F(SolverDiscreteVarTest, RestrictBindMin) {
     x.clearMarks();
     x.mark(0);
     EXPECT_TRUE(x.restrictToMarks());
-    expect_domain(x, {0});
+    EXPECT_DOMAIN_SYNC(x, 0);
 
     y.clearMarks();
     y.mark(5);
     EXPECT_TRUE(y.restrictToMarks());
-    expect_domain(y, {5});
+    EXPECT_DOMAIN_SYNC(y, 5);
 }
 
 /**
@@ -686,12 +703,12 @@ TEST_F(SolverDiscreteVarTest, RestrictBindMax) {
     x.clearMarks();
     x.mark(9);
     EXPECT_TRUE(x.restrictToMarks());
-    expect_domain(x, {9});
+    EXPECT_DOMAIN_SYNC(x, 9);
 
     y.clearMarks();
     y.mark(9);
     EXPECT_TRUE(y.restrictToMarks());
-    expect_domain(y, {9});
+    EXPECT_DOMAIN_SYNC(y, 9);
 }
 
 /**
@@ -709,23 +726,23 @@ TEST_F(SolverDiscreteVarTest, UpdateMin) {
     EXPECT_CALL(yMax,    propagate()).Times(0);
 
     EXPECT_TRUE(x.updateMin(0));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMin(0));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMin(3));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMin(5));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 
     EXPECT_TRUE(x.updateMin(3));
-    expect_domain(x, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, 3, 9); // no sync
+    EXPECT_DOMAIN(x, 3u, 9u, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9); // no sync
     EXPECT_EQ(3u, x.min());
     EXPECT_EQ(9u, x.max());
 
     EXPECT_FALSE(x.updateMin(15));
 
     EXPECT_TRUE(y.updateMin(8));
-    expect_domain(y, {5, 6, 7, 8, 9}, 8, 9); // no sync
+    EXPECT_DOMAIN(y, 8u, 9u, 5, 6, 7, 8, 9); // no sync
     EXPECT_EQ(8u, y.min());
     EXPECT_EQ(9u, y.max());
 
@@ -747,10 +764,10 @@ TEST_F(SolverDiscreteVarTest, UpdateMinBind) {
     EXPECT_CALL(yMax,    propagate()).Times(0);
 
     EXPECT_TRUE(x.updateMin(9));
-    expect_domain(x, {9});
+    EXPECT_DOMAIN_SYNC(x, 9);
 
     EXPECT_TRUE(y.updateMin(9));
-    expect_domain(y, {9});
+    EXPECT_DOMAIN_SYNC(y, 9);
 }
 
 /**
@@ -768,21 +785,21 @@ TEST_F(SolverDiscreteVarTest, UpdateMax) {
     EXPECT_CALL(yMax,    propagate());
 
     EXPECT_TRUE(x.updateMax(15));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(x.updateMax(9));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMax(10));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMax(9));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 
     EXPECT_TRUE(x.updateMax(7));
-    expect_domain(x, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, 0, 7); // no sync
+    EXPECT_DOMAIN(x, 0u, 7u, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9); // no sync
     EXPECT_EQ(0u, x.min());
     EXPECT_EQ(7u, x.max());
 
     EXPECT_TRUE(y.updateMax(8));
-    expect_domain(y, {5, 6, 7, 8, 9}, 5, 8); // no sync
+    EXPECT_DOMAIN(y, 5u, 8u, 5, 6, 7, 8, 9); // no sync
     EXPECT_EQ(5u, y.min());
     EXPECT_EQ(8u, y.max());
 
@@ -804,8 +821,8 @@ TEST_F(SolverDiscreteVarTest, UpdateMaxBind) {
     EXPECT_CALL(yMax,    propagate());
 
     EXPECT_TRUE(x.updateMax(0));
-    expect_domain(x, {0});
+    EXPECT_DOMAIN_SYNC(x, 0);
 
     EXPECT_TRUE(y.updateMax(5));
-    expect_domain(y, {5});
+    EXPECT_DOMAIN_SYNC(y, 5);
 }

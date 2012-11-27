@@ -25,7 +25,8 @@ namespace cp {
 
 class MockConstraint : public Constraint {
 public:
-    MockConstraint(Priority priority = PRIOR_MEDIUM) : Constraint(priority) {
+    MockConstraint(Solver* solver, Priority priority = PRIOR_MEDIUM) :
+            Constraint(solver, priority) {
         ON_CALL(*this, post())     .WillByDefault(Return(true));
         ON_CALL(*this, propagate()).WillByDefault(Return(true));
     }

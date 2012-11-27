@@ -24,6 +24,46 @@ using namespace castor::cp;
 using ::testing::AtMost;
 using ::testing::Between;
 
+////////////////////////////////////////////////////////////////////////////////
+// Assertions
+
+/**
+ * Expect variable x to have the domain lb..ub.
+ *
+ * @param x the variable to check
+ * @param lb lower bound
+ * @param ub upper bound
+ */
+#define EXPECT_DOMAIN(x, lb, ub) { \
+    ASSERT_LE(lb, ub); \
+    EXPECT_EQ(lb, x.min()); \
+    EXPECT_EQ(ub, x.max()); \
+    EXPECT_EQ(ub - lb + 1, x.size()); \
+    if(lb == ub) { \
+        EXPECT_TRUE(x.bound()); \
+        EXPECT_EQ(lb, x.value()); \
+    } else { \
+        EXPECT_FALSE(x.bound()); \
+    } \
+    for(unsigned v = 0; v <= MAXVAL; v++) { \
+        if(v >= lb && v <= ub) \
+            EXPECT_TRUE(x.contains(v)) << "with value " << v; \
+        else \
+            EXPECT_FALSE(x.contains(v)) << "with value " << v; \
+    } \
+}
+
+/**
+ * Check that the variables are left in their initial state
+ */
+#define EXPECT_INITIAL_STATE { \
+    EXPECT_DOMAIN(x, 0u, 9u); \
+    EXPECT_DOMAIN(y, 5u, 9u); \
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Fixture
+
 class SolverBoundsVarTest : public ::testing::Test {
 protected:
     typedef BoundsDecisionVariable<unsigned> Var;
@@ -34,10 +74,12 @@ protected:
     //! Upper bound on the values in any domain, will never appear in any of them.
     static const unsigned MAXVAL = 20;
 
-    SolverBoundsVarTest() : x(&solver, 0, 9), y(&solver, 5, 9) {}
+    SolverBoundsVarTest() : x(&solver, 0, 9), y(&solver, 5, 9),
+        xBind(&solver), xMin(&solver), xMax(&solver),
+        yBind(&solver), yMin(&solver), yMax(&solver) {}
 
     virtual void SetUp() {
-        expect_initial_state();
+        EXPECT_INITIAL_STATE;
     }
 
     /**
@@ -51,43 +93,10 @@ protected:
         y.registerMin(&yMin);
         y.registerMax(&yMax);
     }
-
-    /**
-     * Expect variable x to have the domain min..max.
-     *
-     * @param x the variable to check
-     * @param min lower bound
-     * @param max upper bound
-     */
-    void expect_domain(const Var& x, unsigned min, unsigned max) {
-        ASSERT_LE(min, max);
-        // check size and bound
-        EXPECT_EQ(min, x.min());
-        EXPECT_EQ(max, x.max());
-        EXPECT_EQ(max - min + 1, x.size());
-        if(min == max) {
-            EXPECT_TRUE(x.bound());
-            EXPECT_EQ(min, x.value());
-        } else {
-            EXPECT_FALSE(x.bound());
-        }
-        // check x.contains()
-        for(unsigned v = 0; v <= MAXVAL; v++) {
-            if(v >= min && v <= max)
-                EXPECT_TRUE(x.contains(v)) << "with value " << v;
-            else
-                EXPECT_FALSE(x.contains(v)) << "with value " << v;
-        }
-    }
-
-    /**
-     * Check that the variables are left in their initial state
-     */
-    void expect_initial_state() {
-        expect_domain(x, 0, 9);
-        expect_domain(y, 5, 9);
-    }
 };
+
+////////////////////////////////////////////////////////////////////////////////
+// Tests
 
 /**
  * save() should not modify the domain
@@ -95,7 +104,7 @@ protected:
 TEST_F(SolverBoundsVarTest, SaveSanity) {
     x.save(solver.trail());
     y.save(solver.trail());
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 }
 
 /**
@@ -105,12 +114,12 @@ TEST_F(SolverBoundsVarTest, Restore) {
     Trail::checkpoint_t chkp = solver.trail().checkpoint();
     x.updateMin(3);
     solver.trail().restore(chkp);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 
     chkp = solver.trail().checkpoint();
     y.updateMax(7);
     solver.trail().restore(chkp);
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 }
 
 /**
@@ -129,13 +138,13 @@ TEST_F(SolverBoundsVarTest, Label) {
     EXPECT_TRUE(x.bound());
     EXPECT_LE(0u, x.value());
     EXPECT_GE(9u, x.value());
-    expect_domain(x, x.value(), x.value());
+    EXPECT_DOMAIN(x, x.value(), x.value());
 
     y.label();
     EXPECT_TRUE(y.bound());
     EXPECT_LE(5u, y.value());
     EXPECT_GE(9u, y.value());
-    expect_domain(y, y.value(), y.value());
+    EXPECT_DOMAIN(y, y.value(), y.value());
 }
 
 /**
@@ -180,13 +189,13 @@ TEST_F(SolverBoundsVarTest, Bind) {
     EXPECT_CALL(yMax, propagate());
 
     EXPECT_TRUE(x.bind(5));
-    expect_domain(x, 5, 5);
+    EXPECT_DOMAIN(x, 5u, 5u);
 
     EXPECT_TRUE(x.bind(5));
     EXPECT_FALSE(x.bind(6));
 
     EXPECT_TRUE(y.bind(7));
-    expect_domain(y, 7, 7);
+    EXPECT_DOMAIN(y, 7u, 7u);
 
     EXPECT_TRUE(y.bind(7));
     EXPECT_FALSE(y.bind(6));
@@ -205,13 +214,13 @@ TEST_F(SolverBoundsVarTest, BindMin) {
     EXPECT_CALL(yMax,    propagate());
 
     EXPECT_TRUE(x.bind(0));
-    expect_domain(x, 0, 0);
+    EXPECT_DOMAIN(x, 0u, 0u);
 
     EXPECT_TRUE(x.bind(0));
     EXPECT_FALSE(x.bind(6));
 
     EXPECT_TRUE(y.bind(5));
-    expect_domain(y, 5, 5);
+    EXPECT_DOMAIN(y, 5u, 5u);
 
     EXPECT_TRUE(y.bind(5));
     EXPECT_FALSE(y.bind(6));
@@ -231,13 +240,13 @@ TEST_F(SolverBoundsVarTest, BindMax) {
     EXPECT_CALL(yMax,    propagate()).Times(0);
 
     EXPECT_TRUE(x.bind(9));
-    expect_domain(x, 9, 9);
+    EXPECT_DOMAIN(x, 9u, 9u);
 
     EXPECT_TRUE(x.bind(9));
     EXPECT_FALSE(x.bind(6));
 
     EXPECT_TRUE(y.bind(9));
-    expect_domain(y, 9, 9);
+    EXPECT_DOMAIN(y, 9u, 9u);
 
     EXPECT_TRUE(y.bind(9));
     EXPECT_FALSE(y.bind(6));
@@ -264,21 +273,21 @@ TEST_F(SolverBoundsVarTest, UpdateMin) {
     EXPECT_CALL(yMax,    propagate()).Times(0);
 
     EXPECT_TRUE(x.updateMin(0));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMin(0));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMin(3));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMin(5));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 
     EXPECT_TRUE(x.updateMin(3));
-    expect_domain(x, 3, 9);
+    EXPECT_DOMAIN(x, 3u, 9u);
 
     EXPECT_FALSE(x.updateMin(15));
 
     EXPECT_TRUE(y.updateMin(8));
-    expect_domain(y, 8, 9);
+    EXPECT_DOMAIN(y, 8u, 9u);
 
     EXPECT_FALSE(y.updateMin(16));
 }
@@ -296,10 +305,10 @@ TEST_F(SolverBoundsVarTest, UpdateMinBind) {
     EXPECT_CALL(yMax,    propagate()).Times(0);
 
     EXPECT_TRUE(x.updateMin(9));
-    expect_domain(x, 9, 9);
+    EXPECT_DOMAIN(x, 9u, 9u);
 
     EXPECT_TRUE(y.updateMin(9));
-    expect_domain(y, 9, 9);
+    EXPECT_DOMAIN(y, 9u, 9u);
 }
 
 /**
@@ -315,19 +324,19 @@ TEST_F(SolverBoundsVarTest, UpdateMax) {
     EXPECT_CALL(yMax,    propagate());
 
     EXPECT_TRUE(x.updateMax(15));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(x.updateMax(9));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMax(10));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
     EXPECT_TRUE(y.updateMax(9));
-    expect_initial_state();
+    EXPECT_INITIAL_STATE;
 
     EXPECT_TRUE(x.updateMax(7));
-    expect_domain(x, 0, 7);
+    EXPECT_DOMAIN(x, 0u, 7u);
 
     EXPECT_TRUE(y.updateMax(8));
-    expect_domain(y, 5, 8);
+    EXPECT_DOMAIN(y, 5u, 8u);
 
     EXPECT_FALSE(y.updateMax(3));
 }
@@ -345,8 +354,8 @@ TEST_F(SolverBoundsVarTest, UpdateMaxBind) {
     EXPECT_CALL(yMax,    propagate());
 
     EXPECT_TRUE(x.updateMax(0));
-    expect_domain(x, 0, 0);
+    EXPECT_DOMAIN(x, 0u, 0u);
 
     EXPECT_TRUE(y.updateMax(5));
-    expect_domain(y, 5, 5);
+    EXPECT_DOMAIN(y, 5u, 5u);
 }

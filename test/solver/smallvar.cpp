@@ -117,7 +117,10 @@ protected:
     //! Upper bound on the values in any domain, will never appear in any of them.
     static const unsigned MAXVAL = 20;
 
-    SolverSmallVarTest() : x(&solver, 0, 9), y(&solver, 5, 9), b(&solver) {}
+    SolverSmallVarTest() : x(&solver, 0, 9), y(&solver, 5, 9), b(&solver),
+        xBind(&solver), xChange(&solver), xMin(&solver), xMax(&solver),
+        yBind(&solver), yChange(&solver), yMin(&solver), yMax(&solver),
+        bBind(&solver), bChange(&solver) {}
 
     virtual void SetUp() {
         EXPECT_INITIAL_STATE;
