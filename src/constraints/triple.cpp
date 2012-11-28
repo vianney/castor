@@ -51,18 +51,18 @@ bool TripleConstraint::propagate() {
     }
 
     for(int i = 0; i < triple_.COMPONENTS; i++)
-        if(min[i] != max[i]) triple_[i]->clearMarks();
+        triple_[i]->clearMarks();
     Triple t;
     while(q.next(&t)) {
         for(int i = 0; i < triple_.COMPONENTS; i++)
-            if(min[i] != max[i] && !triple_[i]->contains(t[i])) goto nextTriple;
+            if(!triple_[i]->contains(t[i])) goto nextTriple;
         for(int i = 0; i < triple_.COMPONENTS; i++)
-            if(min[i] != max[i]) triple_[i]->mark(t[i]);
+            triple_[i]->mark(t[i]);
     nextTriple:
         ;
     }
     for(int i = 0; i < triple_.COMPONENTS; i++)
-        if(min[i] != max[i] && !triple_[i]->restrictToMarks()) return false;
+        if(!triple_[i]->restrictToMarks()) return false;
     return true;
 }
 
