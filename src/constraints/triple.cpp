@@ -32,27 +32,7 @@ TripleConstraint::TripleConstraint(Query* query, TriplePattern pat) :
     }
 }
 
-#ifdef CASTOR_CSTR_TIMING
-long TripleConstraint::time[3] = {0, 0, 0};
-long TripleConstraint::count[3] = {0, 0, 0};
-
-void TripleConstraint::addtime(int index, rusage &start) {
-    rusage stop;
-    getrusage(RUSAGE_SELF, &stop);
-    count[index]++;
-    time[index] += ((long)(stop.ru_utime.tv_sec + stop.ru_stime.tv_sec -
-                    start.ru_utime.tv_sec - start.ru_stime.tv_sec) * 1000L +
-             (long)(stop.ru_utime.tv_usec + stop.ru_stime.tv_usec -
-                    start.ru_utime.tv_usec - start.ru_stime.tv_usec) / 1000L);
-}
-#endif
-
 bool TripleConstraint::propagate() {
-#ifdef CASTOR_CSTR_TIMING
-    rusage ru;
-    getrusage(RUSAGE_SELF, &ru);
-#endif
-
     Triple min, max;
     int bound = pat_.COMPONENTS;
     for(int i = 0; i < pat_.COMPONENTS; i++) {
@@ -67,9 +47,6 @@ bool TripleConstraint::propagate() {
 
     if(bound == 0) {
         // nothing bound, we do not want to check all triples
-#ifdef CASTOR_CSTR_TIMING
-        addtime(0, ru);
-#endif
         return true;
     }
 
@@ -81,9 +58,6 @@ bool TripleConstraint::propagate() {
     if(bound == pat_.COMPONENTS) {
         // all variables are bound, just check
         bool result = q.next(nullptr);
-#ifdef CASTOR_CSTR_TIMING
-        addtime(1, ru);
-#endif
         return result;
     }
 
@@ -100,9 +74,6 @@ bool TripleConstraint::propagate() {
     }
     for(int i = 0; i < pat_.COMPONENTS; i++)
         if(min[i] != max[i] && !x_[i]->restrictToMarks()) return false;
-#ifdef CASTOR_CSTR_TIMING
-    addtime(2, ru);
-#endif
     return true;
 }
 

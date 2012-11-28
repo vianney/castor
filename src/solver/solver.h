@@ -24,6 +24,14 @@
 #include "trail.h"
 #include "constraint.h"
 
+#ifdef CASTOR_CSTR_TIMING
+#include <unordered_map>
+#include <typeinfo>
+#include <typeindex>
+#include <sys/time.h>
+#include <sys/resource.h>
+#endif
+
 namespace castor {
 namespace cp {
 
@@ -77,19 +85,34 @@ public:
     /**
      * @return the number of backtracks so far
      */
-    int statBacktracks() const { return statBacktracks_; }
+    unsigned long statBacktracks() const { return statBacktracks_; }
     /**
      * @return the number of subtree activations so far
      */
-    int statSubtrees()   const { return statSubtrees_;   }
+    unsigned long statSubtrees()   const { return statSubtrees_;   }
     /**
      * @return number of times a constraint's post method has been called
      */
-    int statPost()       const { return statPost_;       }
+    unsigned long statPost()       const { return statPost_;       }
     /**
      * @return number of times a constraint's propagate method has been called
      */
-    int statPropagate()  const { return statPropagate_;  }
+    unsigned long statPropagate()  const { return statPropagate_;  }
+
+#ifdef CASTOR_CSTR_TIMING
+    /**
+     * @return number of times the constraint's propagate or post method has
+     *         been called, for each constraint type.
+     */
+    const std::unordered_map<std::type_index, unsigned long>&
+    statCstrCount() const { return statCstrCount_; }
+    /**
+     * @return time in milliseconds spent in the constraint's propagate and post
+     *         methods, for each constraint type.
+     */
+    const std::unordered_map<std::type_index, unsigned long>&
+    statCstrTime() const { return statCstrTime_; }
+#endif
 
 private: // for subtree
     /**
@@ -169,22 +192,42 @@ private:
     /**
      * Number of backtracks so far
      */
-    int statBacktracks_;
+    unsigned long statBacktracks_;
 
     /**
      * Number of subtree activiations so far
      */
-    int statSubtrees_;
+    unsigned long statSubtrees_;
 
     /**
      * Number of times a constraint's post method has been called
      */
-    int statPost_;
+    unsigned long statPost_;
 
     /**
      * Number of times a constraint's propagate method has been called
      */
-    int statPropagate_;
+    unsigned long statPropagate_;
+
+#ifdef CASTOR_CSTR_TIMING
+    /**
+     * Number of times the constraint's propagate or post method has been
+     * called, for each constraint type.
+     */
+    std::unordered_map<std::type_index, unsigned long> statCstrCount_;
+    /**
+     * Time in milliseconds spent in the constraint's propagate and post
+     * methods, for each constraint type.
+     */
+    std::unordered_map<std::type_index, unsigned long> statCstrTime_;
+    /**
+     * Add timing information.
+     *
+     * @param c the constraint
+     * @param start start time
+     */
+    void addTiming(Constraint* c, const rusage& start);
+#endif
 
     friend class Subtree;
 };

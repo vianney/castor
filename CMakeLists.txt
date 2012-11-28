@@ -27,7 +27,7 @@ option(CASTOR_NOFILTERS
        OFF)
 
 option(CASTOR_CSTR_TIMING
-       "Perform time measurements on some constraints (may affect performances)"
+       "Perform time measurements during propagation (may affect performances)"
        OFF)
 
 find_package(Raptor2 REQUIRED)

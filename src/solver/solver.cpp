@@ -17,8 +17,6 @@
  */
 #include "solver.h"
 
-#include <cstdlib>
-#include <iostream>
 
 namespace castor {
 namespace cp {
@@ -77,7 +75,15 @@ bool Solver::postStatic() {
     for(Constraint* c : constraints_) {
         if(c->timestamp_ > ts) {
             statPost_++;
-            if(!c->post()) {
+#ifdef CASTOR_CSTR_TIMING
+            rusage start;
+            getrusage(RUSAGE_SELF, &start);
+#endif
+            bool outcome = c->post();
+#ifdef CASTOR_CSTR_TIMING
+            addTiming(c, start);
+#endif
+            if(!outcome) {
                 /* Beware that some constraints are left in "propagating" state
                  * while they are not in queue. As we are inconsistent, we will
                  * backtrack, so tsCurrent will be restored and it will not
@@ -107,12 +113,21 @@ bool Solver::post(std::vector<Constraint *>* constraints) {
         // call initial propagation
         for(Constraint* c : constraints[p]) {
             statPost_++;
-            if(!c->post())
+#ifdef CASTOR_CSTR_TIMING
+            rusage start;
+            getrusage(RUSAGE_SELF, &start);
+#endif
+            bool outcome = c->post();
+#ifdef CASTOR_CSTR_TIMING
+            addTiming(c, start);
+#endif
+            if(!outcome) {
                 /* Beware that some constraints are left in "propagating" state
                  * while they are not in queue. As we are in initial propagation,
                  * the subtree will be inconsistent and be discarded.
                  */
                 return false;
+            }
             c->nextPropag_ = unqueued();
         }
         // propagate
@@ -129,12 +144,19 @@ bool Solver::propagate() {
             Constraint* c = propagQueue_[p];
             propagQueue_[p] = c->nextPropag_;
             statPropagate_++;
-            if(!c->propagate()) {
-                c->nextPropag_ = unqueued();
-                return false;
-            }
+#ifdef CASTOR_CSTR_TIMING
+            rusage start;
+            getrusage(RUSAGE_SELF, &start);
+#endif
+            bool outcome = c->propagate();
+#ifdef CASTOR_CSTR_TIMING
+            addTiming(c, start);
+#endif
             c->nextPropag_ = unqueued();
-            return propagate();
+            if(outcome)
+                return propagate();
+            else
+                return false;
         }
     }
     return true;
@@ -150,6 +172,20 @@ void Solver::clearQueue() {
         }
     }
 }
+
+#ifdef CASTOR_CSTR_TIMING
+void Solver::addTiming(Constraint *c, const rusage& start) {
+    rusage stop;
+    getrusage(RUSAGE_SELF, &stop);
+    std::type_index key(typeid(*c));
+    ++statCstrCount_[key];
+    statCstrTime_[key] +=
+        ((long)(stop.ru_utime.tv_sec + stop.ru_stime.tv_sec -
+                start.ru_utime.tv_sec - start.ru_stime.tv_sec) * 1000L +
+         (long)(stop.ru_utime.tv_usec + stop.ru_stime.tv_usec -
+                start.ru_utime.tv_usec - start.ru_stime.tv_usec) / 1000L);
+}
+#endif
 
 }
 }
