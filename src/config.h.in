@@ -28,14 +28,4 @@
 #define MOCKABLE
 #endif
 
-/**
- * Priority of castor::StatementConstraint
- */
-#define CASTOR_CONSTRAINTS_STATEMENT_PRIORITY  PRIOR_LOW
-
-/**
- * Priority of castor::FilterConstraint
- */
-#define CASTOR_CONSTRAINTS_FILTER_PRIORITY  PRIOR_MEDIUM
-
 #endif // CONFIG_H

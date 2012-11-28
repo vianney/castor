@@ -19,50 +19,92 @@
 
 namespace castor {
 
-TripleConstraint::TripleConstraint(Query* query, RDFVarTriple triple) :
-        Constraint(query->solver(), CASTOR_CONSTRAINTS_STATEMENT_PRIORITY),
+FCTripleConstraint::FCTripleConstraint(Query* query, RDFVarTriple triple) :
+        Constraint(query->solver(), PRIOR_MEDIUM),
         store_(query->store()), triple_(triple) {
     for(int i = 0; i < triple_.COMPONENTS; i++)
         triple_[i]->registerBind(this);
 }
 
-bool TripleConstraint::propagate() {
+bool FCTripleConstraint::propagate() {
     Triple min, max;
-    int bound = triple_.COMPONENTS;
+    int unbound = -1;
     for(int i = 0; i < triple_.COMPONENTS; i++) {
+        if(!triple_[i]->bound()) {
+            if(unbound == -1)
+                unbound = i;
+            else
+                return true; // too many unbound variables (> 1)
+        }
         min[i] = triple_[i]->min();
         max[i] = triple_[i]->max();
-        bound -= triple_[i]->bound() ? 0 : 1;
     }
-
-    if(bound == 0) {
-        // nothing bound, we do not want to check all triples
-        return true;
-    }
-
-    if(bound >= triple_.COMPONENTS - 1)
-        done_ = true;
 
     Store::TripleRange q(store_, min, max);
 
-    if(bound == triple_.COMPONENTS) {
+    if(unbound == -1) {
         // all variables are bound, just check
-        return q.next(nullptr);
+        if(!q.next(nullptr))
+            return false;
+        done_ = true;
+        return true;
     }
 
+    triple_[unbound]->clearMarks();
+    Triple t;
+    while(q.next(&t))
+        triple_[unbound]->mark(t[unbound]);
+    if(!triple_[unbound]->restrictToMarks())
+        return false;
+    done_ = true;
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+ExtraTripleConstraint::ExtraTripleConstraint(Query* query, RDFVarTriple triple) :
+        Constraint(query->solver(), PRIOR_LOW),
+        store_(query->store()), triple_(triple) {
     for(int i = 0; i < triple_.COMPONENTS; i++)
-        triple_[i]->clearMarks();
+        triple_[i]->registerBind(this);
+}
+
+bool ExtraTripleConstraint::propagate() {
+    Triple min, max;
+    int a = -1, b = -1;
+    for(int i = 0; i < triple_.COMPONENTS; i++) {
+        if(!triple_[i]->bound()) {
+            if(a == -1)
+                a = i;
+            else if(b == -1)
+                b = i;
+            else
+                return true; // too many unbound variables (> 2)
+        }
+        min[i] = triple_[i]->min();
+        max[i] = triple_[i]->max();
+    }
+
+    if(a == -1 || b == -1) {
+        // too few unbound variables (< 2), let FCTripleConstraint handle it
+        done_ = true;
+        return true;
+    }
+
+    Store::TripleRange q(store_, min, max);
+
+    triple_[a]->clearMarks();
+    triple_[b]->clearMarks();
     Triple t;
     while(q.next(&t)) {
-        for(int i = 0; i < triple_.COMPONENTS; i++)
-            if(!triple_[i]->contains(t[i])) goto nextTriple;
-        for(int i = 0; i < triple_.COMPONENTS; i++)
-            triple_[i]->mark(t[i]);
-    nextTriple:
-        ;
+        if(triple_[a]->contains(t[a]) && triple_[b]->contains(t[b])) {
+            triple_[a]->mark(t[a]);
+            triple_[b]->mark(t[b]);
+        }
     }
-    for(int i = 0; i < triple_.COMPONENTS; i++)
-        if(!triple_[i]->restrictToMarks()) return false;
+    if(!(triple_[a]->restrictToMarks() && triple_[b]->restrictToMarks()))
+        return false;
+    done_ = true;
     return true;
 }
 

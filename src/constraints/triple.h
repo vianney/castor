@@ -26,11 +26,28 @@
 namespace castor {
 
 /**
- * Statement constraint
+ * Triple constraint with Forward-Checking consistency.
  */
-class TripleConstraint : public cp::Constraint {
+class FCTripleConstraint : public cp::Constraint {
 public:
-    TripleConstraint(Query* query, RDFVarTriple triple);
+    FCTripleConstraint(Query* query, RDFVarTriple triple);
+    bool propagate();
+
+private:
+    Store* store_; //!< The store containing the triples
+    RDFVarTriple triple_; //!< The triple pattern
+};
+
+/**
+ * Triple constraint providing extra pruning.
+ *
+ * The smaller the domains, the better the extra pruning will be. Thus this
+ * constraint has low priority to ensure it comes last in the propagation
+ * queue.
+ */
+class ExtraTripleConstraint : public cp::Constraint {
+public:
+    ExtraTripleConstraint(Query* query, RDFVarTriple triple);
     bool propagate();
 
 private:

@@ -22,7 +22,7 @@
 namespace castor {
 
 FilterConstraint::FilterConstraint(Query* query, Expression* expr) :
-        Constraint(query->solver(), CASTOR_CONSTRAINTS_FILTER_PRIORITY),
+        Constraint(query->solver(), PRIOR_MEDIUM),
         store_(query->store()), expr_(expr) {
     for(Variable* var : expr->variables())
         var->cp()->registerBind(this);

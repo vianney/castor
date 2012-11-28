@@ -64,8 +64,10 @@ void BasicPattern::init() {
         sub_.add(x->cp());
         sub_.add(new BoundConstraint(query_, x->cp()));
     }
-    for(RDFVarTriple& t : cptriples_)
-        sub_.add(new TripleConstraint(query_, t));
+    for(RDFVarTriple& t : cptriples_) {
+        sub_.add(new FCTripleConstraint(query_, t));
+        sub_.add(new ExtraTripleConstraint(query_, t));
+    }
 }
 
 bool BasicPattern::next() {
