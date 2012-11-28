@@ -157,8 +157,11 @@ public:
      */
     unsigned peekShort(std::size_t offset=0) const {
         const unsigned char* p = ptr_ + offset;
-        return static_cast<unsigned>(p[1]) << 8 |
-               static_cast<unsigned>(p[0]);
+        if(littleEndian)
+            return *reinterpret_cast<const uint16_t*>(p);
+        else
+            return static_cast<unsigned>(p[1]) << 8 |
+                   static_cast<unsigned>(p[0]);
     }
 
     /**
@@ -167,10 +170,13 @@ public:
      */
     unsigned peekInt(std::size_t offset=0) const {
         const unsigned char* p = ptr_ + offset;
-        return static_cast<unsigned>(p[3]) << 24 |
-               static_cast<unsigned>(p[2]) << 16 |
-               static_cast<unsigned>(p[1]) << 8 |
-               static_cast<unsigned>(p[0]);
+        if(littleEndian)
+            return *reinterpret_cast<const uint32_t*>(p);
+        else
+            return static_cast<unsigned>(p[3]) << 24 |
+                   static_cast<unsigned>(p[2]) << 16 |
+                   static_cast<unsigned>(p[1]) << 8 |
+                   static_cast<unsigned>(p[0]);
     }
 
     /**
@@ -179,14 +185,17 @@ public:
      */
     unsigned long peekLong(std::size_t offset=0) const {
         const unsigned char* p = ptr_ + offset;
-        return static_cast<unsigned long>(p[7]) << 56 |
-               static_cast<unsigned long>(p[6]) << 48 |
-               static_cast<unsigned long>(p[5]) << 40 |
-               static_cast<unsigned long>(p[4]) << 32 |
-               static_cast<unsigned long>(p[3]) << 24 |
-               static_cast<unsigned long>(p[2]) << 16 |
-               static_cast<unsigned long>(p[1]) << 8 |
-               static_cast<unsigned long>(p[0]);
+        if(littleEndian)
+            return *reinterpret_cast<const uint64_t*>(p);
+        else
+            return static_cast<unsigned long>(p[7]) << 56 |
+                   static_cast<unsigned long>(p[6]) << 48 |
+                   static_cast<unsigned long>(p[5]) << 40 |
+                   static_cast<unsigned long>(p[4]) << 32 |
+                   static_cast<unsigned long>(p[3]) << 24 |
+                   static_cast<unsigned long>(p[2]) << 16 |
+                   static_cast<unsigned long>(p[1]) << 8 |
+                   static_cast<unsigned long>(p[0]);
     }
 
 
@@ -243,9 +252,14 @@ public:
     unsigned readDelta1() { return readByte(); }
     unsigned readDelta2() { return readShort(); }
     unsigned readDelta3() {
-        unsigned result = static_cast<unsigned>(ptr_[2]) << 16 |
-                          static_cast<unsigned>(ptr_[1]) << 8 |
-                          static_cast<unsigned>(ptr_[0]);
+        unsigned result;
+        if(littleEndian)
+            result = *reinterpret_cast<const uint16_t*>(ptr_) |
+                     static_cast<unsigned>(ptr_[2]) << 16;
+        else
+            result = static_cast<unsigned>(ptr_[2]) << 16 |
+                     static_cast<unsigned>(ptr_[1]) << 8 |
+                     static_cast<unsigned>(ptr_[0]);
         ptr_ += 3;
         return result;
     }
