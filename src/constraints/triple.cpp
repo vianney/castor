@@ -19,30 +19,20 @@
 
 namespace castor {
 
-TripleConstraint::TripleConstraint(Query* query, TriplePattern pat) :
+TripleConstraint::TripleConstraint(Query* query, RDFVarTriple triple) :
         Constraint(query->solver(), CASTOR_CONSTRAINTS_STATEMENT_PRIORITY),
-        store_(query->store()), pat_(pat) {
-    for(int i = 0; i < pat.COMPONENTS; i++) {
-        if(pat[i].isVariable()) {
-            x_[i] = query->variable(pat[i])->cp();
-            x_[i]->registerBind(this);
-        } else {
-            x_[i] = nullptr;
-        }
-    }
+        store_(query->store()), triple_(triple) {
+    for(int i = 0; i < triple_.COMPONENTS; i++)
+        triple_[i]->registerBind(this);
 }
 
 bool TripleConstraint::propagate() {
     Triple min, max;
-    int bound = pat_.COMPONENTS;
-    for(int i = 0; i < pat_.COMPONENTS; i++) {
-        if(x_[i] == nullptr) {
-            min[i] = max[i] = pat_[i].valueId();
-        } else {
-            min[i] = x_[i]->min();
-            max[i] = x_[i]->max();
-            bound -= x_[i]->bound() ? 0 : 1;
-        }
+    int bound = triple_.COMPONENTS;
+    for(int i = 0; i < triple_.COMPONENTS; i++) {
+        min[i] = triple_[i]->min();
+        max[i] = triple_[i]->max();
+        bound -= triple_[i]->bound() ? 0 : 1;
     }
 
     if(bound == 0) {
@@ -50,30 +40,29 @@ bool TripleConstraint::propagate() {
         return true;
     }
 
-    if(bound >= pat_.COMPONENTS - 1)
+    if(bound >= triple_.COMPONENTS - 1)
         done_ = true;
 
     Store::TripleRange q(store_, min, max);
 
-    if(bound == pat_.COMPONENTS) {
+    if(bound == triple_.COMPONENTS) {
         // all variables are bound, just check
-        bool result = q.next(nullptr);
-        return result;
+        return q.next(nullptr);
     }
 
-    for(int i = 0; i < pat_.COMPONENTS; i++)
-        if(min[i] != max[i]) x_[i]->clearMarks();
+    for(int i = 0; i < triple_.COMPONENTS; i++)
+        if(min[i] != max[i]) triple_[i]->clearMarks();
     Triple t;
     while(q.next(&t)) {
-        for(int i = 0; i < pat_.COMPONENTS; i++)
-            if(min[i] != max[i] && !x_[i]->contains(t[i])) goto nextTriple;
-        for(int i = 0; i < pat_.COMPONENTS; i++)
-            if(min[i] != max[i]) x_[i]->mark(t[i]);
+        for(int i = 0; i < triple_.COMPONENTS; i++)
+            if(min[i] != max[i] && !triple_[i]->contains(t[i])) goto nextTriple;
+        for(int i = 0; i < triple_.COMPONENTS; i++)
+            if(min[i] != max[i]) triple_[i]->mark(t[i]);
     nextTriple:
         ;
     }
-    for(int i = 0; i < pat_.COMPONENTS; i++)
-        if(min[i] != max[i] && !x_[i]->restrictToMarks()) return false;
+    for(int i = 0; i < triple_.COMPONENTS; i++)
+        if(min[i] != max[i] && !triple_[i]->restrictToMarks()) return false;
     return true;
 }
 

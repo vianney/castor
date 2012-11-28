@@ -30,17 +30,12 @@ namespace castor {
  */
 class TripleConstraint : public cp::Constraint {
 public:
-    TripleConstraint(Query* query, TriplePattern pat);
+    TripleConstraint(Query* query, RDFVarTriple triple);
     bool propagate();
 
 private:
     Store* store_; //!< The store containing the triples
-    TriplePattern pat_; //!< The triple pattern
-    /**
-     * CP variables corresponding to the components of the triple pattern or
-     * nullptr if the component is a fixed value.
-     */
-    cp::RDFVar* x_[TriplePattern::COMPONENTS];
+    RDFVarTriple triple_; //!< The triple pattern
 };
 
 }

@@ -135,6 +135,7 @@ public:
 };
 
 typedef BasicTriple<VarVal> TriplePattern;
+typedef BasicTriple<cp::RDFVar*> RDFVarTriple;
 
 /**
  * Basic graph pattern (set of triple patterns)
@@ -142,17 +143,13 @@ typedef BasicTriple<VarVal> TriplePattern;
 class BasicPattern : public Pattern {
 public:
     BasicPattern(Query* query);
+    ~BasicPattern();
 
     /**
      * Add a triple pattern
      * @param[in] triple the triple pattern
      */
     void add(const TriplePattern& triple);
-
-    /**
-     * @return triple patterns
-     */
-    std::vector<TriplePattern>& triples() { return triples_; }
 
     void init();
     bool next();
@@ -164,6 +161,7 @@ public:
 
 private:
     std::vector<TriplePattern> triples_;
+    std::vector<RDFVarTriple>  cptriples_;
     cp::Subtree                sub_;
 
     friend class FilterPattern;

@@ -32,15 +32,31 @@ std::ostream& operator<<(std::ostream& out, const Pattern& p) {
 BasicPattern::BasicPattern(Query* query) :
     Pattern(query), sub_(query->solver()) {}
 
+BasicPattern::~BasicPattern() {
+    for(unsigned i = 0; i < triples_.size(); i++) {
+        for(int j = 0; j < TriplePattern::COMPONENTS; j++) {
+            if(!triples_[i][j].isVariable())
+                delete cptriples_[i][j];
+        }
+    }
+}
+
 void BasicPattern::add(const TriplePattern& triple) {
     triples_.push_back(triple);
-    for(VarVal v : triple) {
+    RDFVarTriple cptriple;
+    for(int i = 0; i < triple.COMPONENTS; i++) {
+        VarVal v = triple[i];
         if(v.isVariable()) {
             Variable* x = query_->variable(v);
             vars_ += x;
             cvars_ += x;
+            cptriple[i] = x->cp();
+        } else {
+            cptriple[i] = new cp::RDFVar(query_->solver(),
+                                         v.valueId(), v.valueId());
         }
     }
+    cptriples_.push_back(cptriple);
 }
 
 void BasicPattern::init() {
@@ -48,7 +64,7 @@ void BasicPattern::init() {
         sub_.add(x->cp());
         sub_.add(new BoundConstraint(query_, x->cp()));
     }
-    for(TriplePattern& t : triples_)
+    for(RDFVarTriple& t : cptriples_)
         sub_.add(new TripleConstraint(query_, t));
 }
 
