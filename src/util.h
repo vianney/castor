@@ -26,12 +26,28 @@
 #include <cstring>
 #include <cassert>
 
+#include <sys/param.h>  /* attempt to define endianness */
+#ifdef linux
+# include <endian.h>    /* attempt to define endianness */
+#endif
+
 namespace castor {
 
 static_assert(sizeof(void*) >= sizeof(uint64_t),
               "A 64-bit architecture is required.");
 static_assert(sizeof(unsigned long) >= sizeof(uint64_t),
               "unsigned long must be at least 64 bits");
+
+/* Guess if we can assume little-endian byte order.
+ */
+#if (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && \
+     __BYTE_ORDER == __LITTLE_ENDIAN) || \
+    (defined(i386) || defined(__i386__) || defined(__i486__) || \
+     defined(__i586__) || defined(__i686__) || defined(vax) || defined(MIPSEL))
+static constexpr bool littleEndian = true;
+#else
+static constexpr bool littleEndian = false;
+#endif
 
 /**
  * Exception thrown by the Castor library.
@@ -137,40 +153,40 @@ public:
 
     /**
      * @param offset additional offset to add to the pointer
-     * @return the 16-bit integer in big-endian under the cursor head
+     * @return the 16-bit integer in little-endian under the cursor head
      */
     unsigned peekShort(std::size_t offset=0) const {
         const unsigned char* p = ptr_ + offset;
-        return static_cast<unsigned>(p[0]) << 8 |
-               static_cast<unsigned>(p[1]);
+        return static_cast<unsigned>(p[1]) << 8 |
+               static_cast<unsigned>(p[0]);
     }
 
     /**
      * @param offset additional offset to add to the pointer
-     * @return the 32-bit integer in big-endian under the cursor head
+     * @return the 32-bit integer in little-endian under the cursor head
      */
     unsigned peekInt(std::size_t offset=0) const {
         const unsigned char* p = ptr_ + offset;
-        return static_cast<unsigned>(p[0]) << 24 |
-               static_cast<unsigned>(p[1]) << 16 |
-               static_cast<unsigned>(p[2]) << 8 |
-               static_cast<unsigned>(p[3]);
+        return static_cast<unsigned>(p[3]) << 24 |
+               static_cast<unsigned>(p[2]) << 16 |
+               static_cast<unsigned>(p[1]) << 8 |
+               static_cast<unsigned>(p[0]);
     }
 
     /**
      * @param offset additional offset to add to the pointer
-     * @return the 64-bit integer in big-endian under the cursor head
+     * @return the 64-bit integer in little-endian under the cursor head
      */
     unsigned long peekLong(std::size_t offset=0) const {
         const unsigned char* p = ptr_ + offset;
-        return static_cast<unsigned long>(p[0]) << 56 |
-               static_cast<unsigned long>(p[1]) << 48 |
-               static_cast<unsigned long>(p[2]) << 40 |
-               static_cast<unsigned long>(p[3]) << 32 |
-               static_cast<unsigned long>(p[4]) << 24 |
-               static_cast<unsigned long>(p[5]) << 16 |
-               static_cast<unsigned long>(p[6]) << 8 |
-               static_cast<unsigned long>(p[7]);
+        return static_cast<unsigned long>(p[7]) << 56 |
+               static_cast<unsigned long>(p[6]) << 48 |
+               static_cast<unsigned long>(p[5]) << 40 |
+               static_cast<unsigned long>(p[4]) << 32 |
+               static_cast<unsigned long>(p[3]) << 24 |
+               static_cast<unsigned long>(p[2]) << 16 |
+               static_cast<unsigned long>(p[1]) << 8 |
+               static_cast<unsigned long>(p[0]);
     }
 
 
@@ -197,7 +213,7 @@ public:
     unsigned char readByte() { return *(ptr_++); }
 
     /**
-     * Read a 16-bit integer in big-endian and advance pointer.
+     * Read a 16-bit integer in little-endian and advance pointer.
      */
     unsigned readShort() {
         unsigned result = peekShort();
@@ -206,7 +222,7 @@ public:
     }
 
     /**
-     * Read a 32-bit integer in big-endian and advance pointer.
+     * Read a 32-bit integer in little-endian and advance pointer.
      */
     unsigned readInt() {
         unsigned result = peekInt();
@@ -215,7 +231,7 @@ public:
     }
 
     /**
-     * Read a 64-bit integer in big-endian and advance pointer.
+     * Read a 64-bit integer in little-endian and advance pointer.
      */
     unsigned long readLong() {
         unsigned long result = peekLong();
@@ -227,9 +243,9 @@ public:
     unsigned readDelta1() { return readByte(); }
     unsigned readDelta2() { return readShort(); }
     unsigned readDelta3() {
-        unsigned result = static_cast<unsigned>(ptr_[0]) << 16 |
+        unsigned result = static_cast<unsigned>(ptr_[2]) << 16 |
                           static_cast<unsigned>(ptr_[1]) << 8 |
-                          static_cast<unsigned>(ptr_[2]);
+                          static_cast<unsigned>(ptr_[0]);
         ptr_ += 3;
         return result;
     }
@@ -373,12 +389,12 @@ public:
     }
 
     /**
-     * Write a 16-bit unsigned integer in big endian encoding.
+     * Write a 16-bit unsigned integer in little-endian encoding.
      * @return the number of bytes written
      */
     std::size_t writeShort(unsigned short val, std::size_t offset=OFFSET_APPEND) {
-        unsigned char data[2] = {static_cast<unsigned char>(val >> 8),
-                                 static_cast<unsigned char>(val & 0xff)};
+        unsigned char data[2] = {static_cast<unsigned char>(val & 0xff),
+                                 static_cast<unsigned char>(val >> 8)};
         if(offset == OFFSET_APPEND)
             return write(data, 2);
         else
@@ -386,14 +402,14 @@ public:
     }
 
     /**
-     * Write a 32-bit unsigned integer in big endian encoding
+     * Write a 32-bit unsigned integer in little-endian encoding
      * @return the number of bytes written
      */
     std::size_t writeInt(unsigned val, std::size_t offset=OFFSET_APPEND) {
-        unsigned char data[4] = {static_cast<unsigned char>(val >> 24),
-                                 static_cast<unsigned char>((val >> 16) & 0xff),
+        unsigned char data[4] = {static_cast<unsigned char>(val & 0xff),
                                  static_cast<unsigned char>((val >> 8) & 0xff),
-                                 static_cast<unsigned char>(val & 0xff)};
+                                 static_cast<unsigned char>((val >> 16) & 0xff),
+                                 static_cast<unsigned char>(val >> 24)};
         if(offset == OFFSET_APPEND)
             return write(data, 4);
         else
@@ -401,18 +417,18 @@ public:
     }
 
     /**
-     * Write a 64-bit unsigned integer in big endian encoding
+     * Write a 64-bit unsigned integer in little-endian encoding
      * @return the number of bytes written
      */
     std::size_t writeLong(unsigned long val, std::size_t offset=OFFSET_APPEND) {
-        unsigned char data[8] = {static_cast<unsigned char>(val >> 56),
-                                 static_cast<unsigned char>((val >> 48) & 0xff),
-                                 static_cast<unsigned char>((val >> 40) & 0xff),
-                                 static_cast<unsigned char>((val >> 32) & 0xff),
-                                 static_cast<unsigned char>((val >> 24) & 0xff),
-                                 static_cast<unsigned char>((val >> 16) & 0xff),
+        unsigned char data[8] = {static_cast<unsigned char>(val & 0xff),
                                  static_cast<unsigned char>((val >> 8) & 0xff),
-                                 static_cast<unsigned char>(val & 0xff)};
+                                 static_cast<unsigned char>((val >> 16) & 0xff),
+                                 static_cast<unsigned char>((val >> 24) & 0xff),
+                                 static_cast<unsigned char>((val >> 32) & 0xff),
+                                 static_cast<unsigned char>((val >> 40) & 0xff),
+                                 static_cast<unsigned char>((val >> 48) & 0xff),
+                                 static_cast<unsigned char>(val >> 56)};
         if(offset == OFFSET_APPEND)
             return write(data, 8);
         else
@@ -463,9 +479,9 @@ public:
         if(value >= 1 << 24) {
             return writeInt(value);
         } else if(value >= 1 << 16) {
-            unsigned char data[3] = {static_cast<unsigned char>(value >> 16),
+            unsigned char data[3] = {static_cast<unsigned char>(value & 0xff),
                                      static_cast<unsigned char>((value >> 8) & 0xff),
-                                     static_cast<unsigned char>(value & 0xff)};
+                                     static_cast<unsigned char>(value >> 16)};
             return write(data, 3);
         } else if(value >= 1 << 8) {
             return writeShort(value);

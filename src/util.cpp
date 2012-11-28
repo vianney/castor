@@ -22,32 +22,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#include <sys/param.h>  /* attempt to define endianness */
-#ifdef linux
-# include <endian.h>    /* attempt to define endianness */
-#endif
-
 namespace castor {
-
-/*
- * My best guess at if you are big-endian or little-endian.  This may
- * need adjustment.
- */
-#if (defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && \
-     __BYTE_ORDER == __LITTLE_ENDIAN) || \
-    (defined(i386) || defined(__i386__) || defined(__i486__) || \
-     defined(__i586__) || defined(__i686__) || defined(vax) || defined(MIPSEL))
-# define HASH_LITTLE_ENDIAN 1
-# define HASH_BIG_ENDIAN 0
-#elif (defined(__BYTE_ORDER) && defined(__BIG_ENDIAN) && \
-       __BYTE_ORDER == __BIG_ENDIAN) || \
-      (defined(sparc) || defined(POWERPC) || defined(mc68000) || defined(sel))
-# define HASH_LITTLE_ENDIAN 0
-# define HASH_BIG_ENDIAN 1
-#else
-# define HASH_LITTLE_ENDIAN 0
-# define HASH_BIG_ENDIAN 0
-#endif
 
 #define hashsize(n) ((uint32_t)1<<(n))
 #define hashmask(n) (hashsize(n)-1)
@@ -177,7 +152,7 @@ Hash::hash_t Hash::hash(const void *key, size_t length, hash_t initval) {
   a = b = c = 0xdeadbeef + ((uint32_t)length) + initval;
 
   u.ptr = key;
-  if (HASH_LITTLE_ENDIAN && ((u.i & 0x3) == 0)) {
+  if (littleEndian && ((u.i & 0x3) == 0)) {
     const uint32_t *k = (const uint32_t *)key;         /* read 32-bit chunks */
 
     /*------ all but last block: aligned reads and affect 32 bits of (a,b,c) */
@@ -242,7 +217,7 @@ Hash::hash_t Hash::hash(const void *key, size_t length, hash_t initval) {
 
 #endif /* !valgrind */
 
-  } else if (HASH_LITTLE_ENDIAN && ((u.i & 0x1) == 0)) {
+  } else if (littleEndian && ((u.i & 0x1) == 0)) {
     const uint16_t *k = (const uint16_t *)key;         /* read 16-bit chunks */
     const uint8_t  *k8;
 
