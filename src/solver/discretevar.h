@@ -378,6 +378,10 @@ bool DiscreteVariable<T>::remove(T v) {
     clearMarks();
     if(v < minVal_ || v > maxVal_)
         return true;
+    if(v == min_ && min_ + 1 == max_)
+        return bind(max_);
+    if(v == max_ && max_ - 1 == min_)
+        return bind(min_);
     unsigned i = map_[v-minVal_];
     if(i >= size_)
         return true;
@@ -396,18 +400,14 @@ bool DiscreteVariable<T>::remove(T v) {
             map_[v2-minVal_] = i;
             map_[v-minVal_] = size_;
         }
-        // FIXME: this may break the invariants
-        // e.g.: domain_ = [10 11 12], min_=10, max_=11; remove(10)
-        /*if(v == min_) {
-            // TODO: is this usefull?
+        if(v == min_) {
             min_++; // not perfect bound
-            solver()->enqueue(evMin_);
+            solver_->enqueue(evMin_);
         }
         if(v == max_) {
-            // TODO: is this usefull?
             max_--; // not perfect bound
-            solver()->enqueue(evMax_);
-        }*/
+            solver_->enqueue(evMax_);
+        }
         solver_->enqueue(evChange_);
         assert(size_ > 1 || (min_ == max_ && min_ == value()));
         assert(min_ < max_ || (size_ == 1 && min_ == value()));
