@@ -108,6 +108,11 @@ public:
     void mark(T v);
 
     /**
+     * @return the number of marked values
+     */
+    unsigned marked() const { return marked_; }
+
+    /**
      * Clear marks of a variable.
      */
     void clearMarks();

@@ -486,6 +486,8 @@ struct StoreBuilder {
 
     unsigned triplesCount; //!< number of triples
 
+    unsigned triplesTable; //!< first page of the triples table
+
     /**
      * Triple indexes (in various orderings)
      */
@@ -549,6 +551,25 @@ struct WriteTriple : public Triple {
             writer.writeInt(c[i]);
     }
 };
+
+/**
+ * Store the triples table.
+ *
+ * @param b store builder
+ * @param triples
+ */
+void storeTriplesTable(StoreBuilder& b, TempFile& triples) {
+    b.triplesTable = b.w.page();
+    MMapFile in(triples.fileName().c_str());
+    for(Cursor cur = in.begin(); cur != in.end();) {
+        if(b.w.remaining() == 0)
+            b.w.flush();
+        else if(b.w.remaining() < 4)
+            throw CastorException() << "Unaligned write in storeTriplesTable";
+        b.w.writeInt(cur.readVarInt());
+    }
+    b.w.flush();
+}
 
 /**
  * Store full triples of a particular order.
@@ -896,6 +917,10 @@ void storeTriplesOrderSorted(StoreBuilder& b, TempFile& triples,
  * @param triples file with triples. Will be discarded.
  */
 void storeTriples(StoreBuilder& b, TempFile& triples) {
+    // Store raw table
+    storeTriplesTable(b, triples);
+
+    // Store B-trees
     storeTriplesOrder             (b, triples, TripleOrder::SPO, true);
     storeTriplesOrderSorted<0,2,1>(b, triples, TripleOrder::SOP, false);
     storeTriplesOrderSorted<1,0,2>(b, triples, TripleOrder::PSO, true);
@@ -1102,6 +1127,9 @@ void storeHeader(StoreBuilder& b) {
 
     // Triples count
     b.w.writeInt(b.triplesCount);
+
+    // Triples raw table
+    b.w.writeInt(b.triplesTable);
 
     // Triples
     for(int i = 0; i < TRIPLE_ORDERS; i++) {

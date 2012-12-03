@@ -55,6 +55,20 @@ private:
     RDFVarTriple triple_; //!< The triple pattern
 };
 
+/**
+ * Triple constraint using the STR algorithm.
+ */
+class STRTripleConstraint : public cp::Constraint {
+public:
+    STRTripleConstraint(Query* query, RDFVarTriple triple);
+    bool propagate();
+
+private:
+    Store* store_; //!< The store containing the triples
+    RDFVarTriple triple_; //!< The triple pattern
+    cp::ReversibleSet<unsigned> supports_; //!< support triples
+};
+
 }
 
 #endif // CASTOR_CONSTRAINTS_TRIPLE_H

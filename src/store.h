@@ -20,6 +20,7 @@
 
 #include <string>
 #include <exception>
+#include <cassert>
 
 #include "util.h"
 #include "model.h"
@@ -66,8 +67,8 @@ protected:
  */
 class Store : public StringMapper {
 public:
-    static constexpr unsigned      VERSION = 9; //!< format version
-    static const     unsigned char MAGIC[10];   //!< magic number
+    static constexpr unsigned      VERSION = 10; //!< format version
+    static const     unsigned char MAGIC[10];    //!< magic number
 
     /**
      * Open a store.
@@ -169,6 +170,11 @@ public:
     Value::Category category(Value::id_t id) const;
 
     /**
+     * @return the number of triples
+     */
+    unsigned triplesCount() const { return triplesCount_; }
+
+    /**
      * Get the number of triples of specified pattern. Components with value
      * 0 are wildcards. Other components are matched exactly.
      *
@@ -176,6 +182,15 @@ public:
      * @return the number of triples matching the pattern
      */
     unsigned triplesCount(Triple pattern);
+
+    /**
+     * @param index
+     * @return the triple at index index
+     */
+    Triple triple(unsigned index) const {
+        assert(index >= 0 && index < triplesCount_);
+        return Triple::read(db_.page(triplesTable_) + index * Triple::SIZE);
+    }
 
     unsigned statTripleCacheHits()   const { return cache_.statHits();   }
     unsigned statTripleCacheMisses() const { return cache_.statMisses(); }
@@ -232,6 +247,11 @@ private:
      * Number of triples
      */
     unsigned triplesCount_;
+
+    /**
+     * Raw triples table
+     */
+    unsigned triplesTable_;
 
     /**
      * Triple indexes. Each index has a different ordering.

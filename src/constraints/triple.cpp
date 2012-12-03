@@ -108,4 +108,52 @@ bool ExtraTripleConstraint::propagate() {
     return true;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+STRTripleConstraint::STRTripleConstraint(Query *query, RDFVarTriple triple) :
+    Constraint(query->solver(), PRIOR_LOW),
+    store_(query->store()), triple_(triple),
+    supports_(query->solver()->trail(), 0, query->store()->triplesCount() - 1) {
+    for(int i = 0; i < triple_.COMPONENTS; i++)
+        triple_[i]->registerChange(this);
+}
+
+bool STRTripleConstraint::propagate() {
+    for(int j = 0; j < triple_.COMPONENTS; j++)
+        triple_[j]->clearMarks();
+    for(unsigned i = 0; i < supports_.size(); i++) {
+        Triple t = store_->triple(supports_[i]);
+        bool valid = true;
+        for(int j = 0; j < triple_.COMPONENTS; j++) {
+            if(!triple_[j]->contains(t[j])) {
+                valid = false;
+                break;
+            }
+        }
+        if(valid) {
+            int fullyMarked = 0;
+            for(int j = 0; j < triple_.COMPONENTS; j++) {
+                triple_[j]->mark(t[j]);
+                if(triple_[j]->marked() == triple_[j]->size())
+                    ++fullyMarked;
+            }
+            if(fullyMarked == triple_.COMPONENTS)
+                return true;
+        } else {
+            supports_.remove(i);
+            i--;
+        }
+    }
+    int bound = 0;
+    for(int j = 0; j < triple_.COMPONENTS; j++) {
+        if(!triple_[j]->restrictToMarks())
+            return false;
+        if(triple_[j]->bound())
+            ++bound;
+    }
+    if(bound >= triple_.COMPONENTS - 1)
+        done_ = true;
+    return true;
+}
+
 }

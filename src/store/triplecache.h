@@ -85,7 +85,7 @@ struct Triple : public BasicTriple<Value::id_t> {
         return *this;
     }
 
-    static constexpr unsigned SIZE = 12;
+    static constexpr std::size_t SIZE = 12;
     static Triple read(Cursor cur) {
         Triple t;
         for(int i = 0; i < COMPONENTS; i++)

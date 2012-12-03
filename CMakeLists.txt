@@ -30,6 +30,10 @@ option(CASTOR_CSTR_TIMING
        "Perform time measurements during propagation (may affect performances)"
        OFF)
 
+option(CASTOR_TRIPLE_STR
+       "Use STR propagator for triple constraints"
+       OFF)
+
 find_package(Raptor2 REQUIRED)
 find_package(Rasqal REQUIRED)
 

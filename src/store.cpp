@@ -61,6 +61,9 @@ Store::Store(const char* fileName) : db_(fileName) {
     // Get triples count
     triplesCount_ = cur.readInt();
 
+    // Get raw triples table
+    triplesTable_ = cur.readInt();
+
     // Get triples pointers
     for(int i = 0; i < TRIPLE_ORDERS; i++) {
         triples_[i].begin = cur.readInt();
