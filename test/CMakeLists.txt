@@ -1,7 +1,7 @@
 # This file is part of Castor
 #
 # Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
-# Copyright (C) 2010-2012, Université catholique de Louvain
+# Copyright (C) 2010-2013, Université catholique de Louvain
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
