@@ -29,6 +29,8 @@ void usage() {
     cout << "Usage: " << progname << " DB [switches...]" << endl;
     cout << endl << "Switches:" << endl;
     cout << "  -i            Show general information" << endl;
+    cout << "  -T            Show all triples" << endl;
+    cout << "  -V            Show all values" << endl;
     cout << "  -v ID         Show value with id ID" << endl;
     cout << "  -s ID         Show string with id ID" << endl;
     exit(1);
@@ -43,6 +45,21 @@ void show_info(Store& store) {
     cout << "Strings count: " << store.stringsCount() << endl;
     cout << "Values count: " << store.valuesCount() << endl;
     cout << "Triples count: " << store.triplesCount(Triple({0,0,0})) << endl;
+}
+
+void show_triples(Store& store) {
+    for(unsigned i = 0; i < store.triplesCount(); ++i) {
+        Triple t = store.triple(i);
+        cout << t[0] << " " << t[1] << " " << t[2] << endl;
+    }
+}
+
+void show_values(Store& store) {
+    for(Value::id_t id = 1; id <= store.valuesCount(); ++id) {
+        Value v = store.lookupValue(id);
+        v.ensureDirectStrings(store);
+        cout << id << " " << v << endl;
+    }
 }
 
 void show_value(Store& store, Value::id_t id) {
@@ -83,9 +100,11 @@ int main(int argc, char* argv[]) {
 
     optind = 2;
     int c;
-    while((c = getopt(argc, argv, "iv:s:")) != -1) {
+    while((c = getopt(argc, argv, "iTVv:s:")) != -1) {
         switch(c) {
         case 'i': show_info  (store);                break;
+        case 'T': show_triples(store);               break;
+        case 'V': show_values(store);                break;
         case 'v': show_value (store, atoi(optarg));  break;
         case 's': show_string(store, atoi(optarg));  break;
         default: usage();
