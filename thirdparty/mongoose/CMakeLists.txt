@@ -14,8 +14,5 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-if(CASTOR_UNITTESTS)
-    add_subdirectory(googlemock EXCLUDE_FROM_ALL)
-endif(CASTOR_UNITTESTS)
 
-add_subdirectory(mongoose)
+add_library(mongoose mongoose.h mongoose.c)

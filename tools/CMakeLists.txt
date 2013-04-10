@@ -19,5 +19,6 @@ include_directories("${PROJECT_SOURCE_DIR}/src"
 set(EXECUTABLE_OUTPUT_PATH "${PROJECT_BINARY_DIR}/bin")
 
 add_subdirectory(castor)
+add_subdirectory(castord)
 add_subdirectory(castorld)
 add_subdirectory(dbinfo)

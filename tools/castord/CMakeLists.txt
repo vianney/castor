@@ -14,8 +14,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-if(CASTOR_UNITTESTS)
-    add_subdirectory(googlemock EXCLUDE_FROM_ALL)
-endif(CASTOR_UNITTESTS)
 
-add_subdirectory(mongoose)
+include_directories("${PROJECT_SOURCE_DIR}/thirdparty/mongoose")
+add_executable(castord castord.cpp)
+target_link_libraries(castord libcastor mongoose dl)
