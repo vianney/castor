@@ -427,7 +427,6 @@ void Value::fillCopy(const Value& value, bool deep)  {
         } else if(isDecimal()) {
             if(deep && interpreted_ == INTERPRETED_OWNED) {
                 decimal_ = new XSDDecimal(*value.decimal_);
-                interpreted_ = INTERPRETED_UNOWNED;
             } else {
                 decimal_ = value.decimal_;
                 interpreted_ = INTERPRETED_UNOWNED;
