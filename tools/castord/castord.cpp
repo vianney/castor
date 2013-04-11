@@ -188,6 +188,14 @@ static int handler(mg_connection* conn) {
             cout << "  Propagate: " << query.solver()->statPropagate() << endl;
             cout << "  Cache hit: " << store->statTripleCacheHits() << endl;
             cout << "  Cache miss: " << store->statTripleCacheMisses() << endl;
+#ifdef CASTOR_CSTR_TIMING
+            cout << "  Constraints:" << endl;
+            for(const auto& item : query.solver()->statCstrCount()) {
+                cout << "    " << item.first.name() << ": " << item.second
+                     << " (" << query.solver()->statCstrTime().at(item.first)
+                     << "ms)" << endl;
+            }
+#endif
         }
     } catch(CastorException e) {
         return send_error(conn, 400, e.what());
