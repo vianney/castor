@@ -1167,7 +1167,7 @@ void storeHeader(StoreBuilder& b) {
 int main(int argc, char* argv[]) {
     // Parse options
     bool force = false;
-    const char* syntax = "turtle";
+    const char* syntax = nullptr;
     int c;
     while((c = getopt(argc, argv, "s:f")) != -1) {
         switch(c) {
@@ -1188,6 +1188,20 @@ int main(int argc, char* argv[]) {
     }
     char* dbpath = argv[optind++];
     char* rdfpath = argv[optind++];
+
+    if(syntax == nullptr) {
+        char* rdfext = rdfpath + strlen(rdfpath) - 4;
+        if(rdfext > rdfpath && strcmp(rdfext, ".rdf") == 0) {
+            syntax = "rdfxml";
+        } else if(rdfext > rdfpath && strcmp(rdfext, ".ttl") == 0) {
+            syntax = "turtle";
+        } else if(rdfext >= rdfpath && strcmp(rdfext + 1, ".nt") == 0) {
+            syntax = "ntriples";
+        } else {
+            cerr << "Unknown extension. Assuming ntriples format." << endl;
+            syntax = "ntriples";
+        }
+    }
 
     struct stat stbuf;
     if(lstat(rdfpath, &stbuf) == -1) {
