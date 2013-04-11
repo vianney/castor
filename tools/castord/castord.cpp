@@ -53,20 +53,20 @@ static bool verbose;
 ////////////////////////////////////////////////////////////////////////////////
 // HTTP handler
 
-static void start_response(mg_connection* conn, unsigned status,
-                           const char* content_type) {
+static void start_response(mg_connection* conn, const char* content_type) {
     if(verbose)
-        cout << status << endl;
+        cout << "200 (OK)" << endl;
     mg_printf(conn,
-              "HTTP/1.0 %d OK\r\n"
+              "HTTP/1.0 200 OK\r\n"
               "Content-Type: %s\r\n"
               "\r\n",
-              status, content_type);
+              content_type);
 }
 
-static int send_error(mg_connection* conn, unsigned status, const char* body) {
-    start_response(conn, status, "text/plain");
-    mg_write(conn, body, strlen(body));
+static int send_error(mg_connection* conn, unsigned status, const char* msg) {
+    if(verbose)
+        cout << status << " (" << msg << ")" << endl;
+    mg_printf(conn, "HTTP/1.0 %d %s\r\n\r\n", status, msg);
     return 1;
 }
 
@@ -79,7 +79,7 @@ static int handler(mg_connection* conn) {
 
     if(strcmp(req->uri, HOMEPATH) == 0 &&
             strcmp(req->request_method, "GET") == 0) {
-        start_response(conn, 200, "text/html");
+        start_response(conn, "text/html");
         mg_printf(conn,
                   "<html>"
                   "<head><title>Castor SPARQL Endpoint</title></head>"
@@ -117,7 +117,7 @@ static int handler(mg_connection* conn) {
 
     try {
         Query query(store, querystr);
-        start_response(conn, 200, "application/sparql-results+xml");
+        start_response(conn, "application/sparql-results+xml");
         // FIXME: escape strings
         mg_printf(conn,
                   "<?xml version=\"1.0\"?>\n"
