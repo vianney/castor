@@ -49,6 +49,7 @@ static constexpr size_t MAX_POST_LEN = MAX_QUERY_LEN * 2;
 
 static const char* progname;
 static bool verbose;
+static const char* mimetype = "application/sparql-results+xml";
 
 ////////////////////////////////////////////////////////////////////////////////
 // HTTP handler
@@ -117,7 +118,7 @@ static int handler(mg_connection* conn) {
 
     try {
         Query query(store, querystr);
-        start_response(conn, "application/sparql-results+xml");
+        start_response(conn, "application/xml");
         // FIXME: escape strings
         mg_printf(conn,
                   "<?xml version=\"1.0\"?>\n"
@@ -202,6 +203,7 @@ static void usage() {
     cout << endl << "Options:" << endl;
     cout << "  -d DB         Dataset to load" << endl;
     cout << "  -p PORT       Port to listen on (default: " << DEFAULT_PORT << ")" << endl;
+    cout << "  -x            Use application/xml content type for results." << endl;
     cout << "  -v            Be verbose" << endl;
     exit(1);
 }
@@ -214,10 +216,11 @@ int main(int argc, char* argv[]) {
     char* dbpath = nullptr;
     const char* port = DEFAULT_PORT;
     verbose = false;
-    while((c = getopt(argc, argv, "d:p:v")) != -1) {
+    while((c = getopt(argc, argv, "d:p:xv")) != -1) {
         switch(c) {
         case 'd': dbpath = optarg;                   break;
         case 'p': port = optarg;                     break;
+        case 'x': mimetype = "application/xml";      break;
         case 'v': verbose = true;                    break;
         default: usage();
         }
