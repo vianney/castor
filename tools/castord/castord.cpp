@@ -179,6 +179,15 @@ static int handler(mg_connection* conn) {
             mg_printf(conn, "  </results>\n");
         }
         mg_printf(conn, "</sparql>");
+        if(verbose) {
+            cout << "  Solutions: " << query.count() << endl;
+            cout << "  Backtracks: " << query.solver()->statBacktracks() << endl;
+            cout << "  Subtrees: " << query.solver()->statSubtrees() << endl;
+            cout << "  Post: " << query.solver()->statPost() << endl;
+            cout << "  Propagate: " << query.solver()->statPropagate() << endl;
+            cout << "  Cache hit: " << store->statTripleCacheHits() << endl;
+            cout << "  Cache miss: " << store->statTripleCacheMisses() << endl;
+        }
     } catch(CastorException e) {
         return send_error(conn, 400, e.what());
     }
