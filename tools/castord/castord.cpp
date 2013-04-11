@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <cstring>
 #include <cstdio>
+#include <csignal>
 
 #include "store.h"
 #include "query.h"
@@ -194,12 +195,14 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // Load database
     if(dbpath == nullptr)
         usage();
     if(verbose)
         cout << "Loading " << dbpath << "." << endl;
     Store store(dbpath);
 
+    // Start HTTP server
     mg_callbacks callbacks;
     memset(&callbacks, 0, sizeof(callbacks));
     callbacks.begin_request = handler;
@@ -213,7 +216,17 @@ int main(int argc, char* argv[]) {
         return 2;
     if(verbose)
         cout << "Listening on :" << port << "." << endl;
-    getchar();
+
+    // Wait for SIGINT or SIGTERM
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGINT);
+    sigaddset(&set, SIGTERM);
+    sigprocmask(SIG_BLOCK, &set, nullptr);
+    int sig;
+    sigwait(&set, &sig);
+
+    // Clean up
     if(verbose)
         cout << "Exiting." << endl;
     mg_stop(ctx);
