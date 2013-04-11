@@ -39,6 +39,7 @@ namespace {
 
 static const char* DEFAULT_PORT = "8000";
 static const char* PATH = "/sparql";
+static const char* HOMEPATH = "/";
 
 static constexpr size_t MAX_QUERY_LEN = 32768;
 static constexpr size_t MAX_POST_LEN = MAX_QUERY_LEN * 2;
@@ -75,6 +76,24 @@ static int handler(mg_connection* conn) {
 
     if(verbose)
         cout << req->request_method << " " << req->uri << " ";
+
+    if(strcmp(req->uri, HOMEPATH) == 0 &&
+            strcmp(req->request_method, "GET") == 0) {
+        start_response(conn, 200, "text/html");
+        mg_printf(conn,
+                  "<html>"
+                  "<head><title>Castor SPARQL Endpoint</title></head>"
+                  "<body>"
+                  "<h1>Castor SPARQL Endpoint</h1>"
+                  "<form action=\"%s\" method=\"POST\">"
+                  "<textarea name=\"query\" cols=\"80\" rows=\"15\">"
+                  "SELECT * WHERE { ?s ?p ?o }"
+                  "</textarea>"
+                  "<input type=\"submit\" value=\"Run\" />"
+                  "</form>"
+                  "</body></html>", PATH);
+        return 1;
+    }
 
     if(strcmp(req->uri, PATH) != 0)
         return send_error(conn, 404, "Not found.");
