@@ -432,8 +432,12 @@ void Value::fillCopy(const Value& value, bool deep)  {
                 interpreted_ = INTERPRETED_UNOWNED;
             }
         } else if(isDateTime()) {
-            // FIXME: copy datetime
-            abort();
+            if(deep && interpreted_ == INTERPRETED_OWNED) {
+                datetime_ = new XSDDateTime(*value.datetime_);
+            } else {
+                datetime_ = value.datetime_;
+                interpreted_ = INTERPRETED_UNOWNED;
+            }
         }
     }
 }

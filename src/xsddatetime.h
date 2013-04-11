@@ -34,6 +34,13 @@ public:
         val_ = rasqal_new_xsd_datetime(librdf::World::instance().rasqal,
                                        lexical);
     }
+    /**
+     * Copy constructor.
+     */
+    XSDDateTime(const XSDDateTime& o) {
+        val_ = rasqal_new_xsd_datetime(librdf::World::instance().rasqal,
+                                       o.getString().c_str());
+    }
 
     ~XSDDateTime() {
         rasqal_free_xsd_datetime(val_);
