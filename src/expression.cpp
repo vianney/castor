@@ -460,7 +460,25 @@ bool DiffTermExpression::evaluate(Value& result) {
 }
 
 bool LangMatchesExpression::evaluate(Value& result) {
-    throw CastorException() << "Unsupported operator: LANGMATCHES";
+    Value right;
+    if(!arg1_->evaluate(result) || !result.isSimple() ||
+       !arg2_->evaluate(right)  || !right.isSimple())
+        return false;
+    result.ensureDirectStrings(*query_->store());
+    right.ensureDirectStrings(*query_->store());
+    const char* tag = result.lexical().str();
+    unsigned taglen = result.lexical().length();
+    const char* range = right.lexical().str();
+    unsigned rangelen = right.lexical().length();
+    if(strcmp(range, "*") == 0) {
+        result.fillBoolean(taglen > 0);
+    } else if(taglen < rangelen) {
+        result.fillBoolean(false);
+    } else {
+        result.fillBoolean(strncasecmp(tag, range, rangelen) == 0 &&
+                           (tag[rangelen] == '\0' || tag[rangelen] == '-'));
+    }
+    return true;
 }
 
 bool RegExExpression::evaluate(Value& result) {
