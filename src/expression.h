@@ -544,36 +544,37 @@ public:
  */
 class RegExExpression : public Expression {
 public:
-    RegExExpression(Expression* arg1, Expression* arg2, Expression* arg3);
+    RegExExpression(Expression* text, Expression* pattern, Expression* flags);
     ~RegExExpression();
     bool evaluate(Value& result);
 
     Expression* optimize() {
-        arg1_ = arg1_->optimize();
-        arg2_ = arg2_->optimize();
-        arg3_ = arg3_->optimize();
+        text_ = text_->optimize();
+        pattern_ = pattern_->optimize();
+        if(flags_ != nullptr)
+            flags_ = flags_->optimize();
         return this;
     }
 
     /**
-     * @return the first argument
+     * @return the text (first argument)
      */
-    Expression* arg1() { return arg1_; }
+    Expression* text() { return text_; }
 
     /**
-     * @return the first argument
+     * @return the pattern (second argument)
      */
-    Expression* arg2() { return arg2_; }
+    Expression* pattern() { return pattern_; }
 
     /**
-     * @return the first argument
+     * @return the flags (third argument), nullptr if unset
      */
-    Expression* arg3() { return arg3_; }
+    Expression* flags() { return flags_; }
 
 private:
-    Expression* arg1_; //!< first argument
-    Expression* arg2_; //!< second argument
-    Expression* arg3_; //!< third argument
+    Expression* text_; //!< first argument
+    Expression* pattern_; //!< second argument
+    Expression* flags_; //!< third argument
 };
 
 ///**

@@ -19,6 +19,8 @@
 
 #include <cmath>
 
+#include <pcrecpp.h>
+
 #include "util.h"
 #include "query.h"
 #include "constraints/fallback.h"
@@ -76,17 +78,19 @@ BoundExpression::BoundExpression(Variable* variable) :
     vars_ += variable;
 }
 
-RegExExpression::RegExExpression(Expression* arg1, Expression* arg2,
-                                 Expression* arg3) :
-        Expression(arg1->query()), arg1_(arg1), arg2_(arg2), arg3_(arg3) {
-    vars_ = arg1->variables();
-    vars_ += arg2->variables();
-    vars_ += arg3->variables();
+RegExExpression::RegExExpression(Expression* text, Expression* pattern,
+                                 Expression* flags) :
+        Expression(text->query()), text_(text), pattern_(pattern), flags_(flags) {
+    vars_ = text->variables();
+    vars_ += pattern->variables();
+    if(flags_ != nullptr)
+        vars_ += flags->variables();
 }
 RegExExpression::~RegExExpression() {
-    delete arg1_;
-    delete arg2_;
-    delete arg3_;
+    delete text_;
+    delete pattern_;
+    if(flags_ != nullptr)
+        delete flags_;
 }
 
 //CastExpression::CastExpression(Value::Type target, Expression* arg) :
@@ -482,7 +486,34 @@ bool LangMatchesExpression::evaluate(Value& result) {
 }
 
 bool RegExExpression::evaluate(Value& result) {
-    throw CastorException() << "Unsupported operator: REGEX";
+    Value pattern, flags;
+    pcrecpp::RE_Options opts;
+    opts.set_utf8(true);
+    opts.set_no_auto_capture(true);
+    if(flags_ != nullptr) {
+        if(!flags_->evaluate(flags) || !flags.isSimple())
+            return false;
+        flags.ensureDirectStrings(*query_->store());
+        const char* f = flags.lexical().str();
+        while(*f != '\0') {
+            switch(*f) {
+            case 'i': opts.set_caseless (true); break;
+            case 's': opts.set_dotall   (true); break;
+            case 'm': opts.set_multiline(true); break;
+            case 'x': opts.set_extended (true); break;
+            default: return false;
+            }
+            ++f;
+        }
+    }
+    if(!text_->evaluate(result)     || !result.isSimple() ||
+       !pattern_->evaluate(pattern) || !pattern.isSimple())
+        return false;
+    result.ensureDirectStrings(*query_->store());
+    pattern.ensureDirectStrings(*query_->store());
+    result.fillBoolean(pcrecpp::RE(pattern.lexical().str(), opts)
+                       .PartialMatch(result.lexical().str()));
+    return true;
 }
 
 //bool CastExpression::evaluate(Value& result) {

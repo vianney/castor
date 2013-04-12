@@ -36,15 +36,18 @@ option(CASTOR_TRIPLE_STR
 
 find_package(Raptor2 REQUIRED)
 find_package(Rasqal REQUIRED)
+find_package(Pcrecpp REQUIRED)
 
 include_directories(SYSTEM
     ${RAPTOR2_INCLUDE_DIRS}
     ${RASQAL_INCLUDE_DIRS}
+    ${PCRECPP_INCLUDE_DIRS}
 )
 
 set(LIBS
     ${RAPTOR2_LIBRARIES}
     ${RASQAL_LIBRARIES}
+    ${PCRECPP_LIBRARIES}
 )
 
 set(CMAKE_CXX_FLAGS "-std=c++0x -Wall")

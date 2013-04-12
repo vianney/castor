@@ -358,6 +358,8 @@ Pattern* Query::convert(rasqal_graph_pattern* gp) {
 }
 
 Expression* Query::convert(rasqal_expression* expr) {
+    if(expr == nullptr)
+        return nullptr;
     switch(expr->op) {
     case RASQAL_EXPR_LITERAL:
     {
