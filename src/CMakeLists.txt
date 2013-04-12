@@ -51,6 +51,8 @@ set(CASTOR_SRCS
     librdfwrapper.cpp
     xsddecimal.h
     xsddatetime.h
+    numrange.h
+    numrange.cpp
     model.h
     model.cpp
     store.h

@@ -26,6 +26,7 @@
 #include "util.h"
 #include "xsddecimal.h"
 #include "xsddatetime.h"
+#include "numrange.h"
 
 namespace castor {
 
@@ -306,12 +307,12 @@ std::ostream& operator<<(std::ostream& out, const String& s);
  * An RDF value
  *
  * The serialized format of a value is
- * +----+----------+-------------+------+-----+---------+
- * | id | category | numCategory | type | tag | lexical |
- * +----+----------+-------------+------+-----+---------+
- *    4       2           2          4     4       4
+ * +----+----------+-------------+------+-----+---------+-----------+
+ * | id | category | numCategory | type | tag | lexical | numapprox |
+ * +----+----------+-------------+------+-----+---------+-----------+
+ *    4       2           2          4     4       4          8
  *
- * Total length is always 20 bytes.
+ * Total length is always 28 bytes.
  */
 class Value {
 public:
@@ -400,7 +401,7 @@ public:
     /**
      * Size of a serialized value in bytes.
      */
-    static constexpr std::size_t SERIALIZED_SIZE = 20;
+    static constexpr std::size_t SERIALIZED_SIZE = 28;
 
     /**
      * Advance cur to skip the value underneath the pointer.
@@ -415,6 +416,7 @@ public:
     explicit Value(Cursor& cur);
 
     /**
+     * @pre category() != CAT_NUMERIC || !numapprox().empty()
      * @return the serialized value
      */
     Buffer serialize() const;
@@ -690,6 +692,20 @@ public:
                                   tag_ = std::move(tag); }
 
     /**
+     * @pre isNumeric()
+     * @return approximated numerical range
+     */
+    NumRange numapprox() const { assert(isNumeric());
+                                 return numapprox_; }
+
+    /**
+     * Set the numerical approximation
+     * @param rng
+     */
+    void numapprox(NumRange rng) { assert(isNumeric());
+                                   numapprox_ = rng; }
+
+    /**
      * @return whether the literal been interpreted
      */
     bool interpreted() const { return interpreted_ != INTERPRETED_NONE; }
@@ -745,6 +761,7 @@ public:
 
     /**
      * Ensure this value is interpreted if it is a typed literal.
+     * This also ensures numapprox() is non-empty for numeric types.
      * @param mapper string mapper for the lexical
      * @return this
      */
@@ -825,6 +842,12 @@ private:
      * corresponding to datatype_.
      */
     String tag_;
+    /**
+     * The numerical approximation of the value.
+     * If category_ != CAT_NUMERIC, this range is empty.
+     * Otherwise, it may be empty if unspecified.
+     */
+    NumRange numapprox_;
 
     enum Interpreted {
         INTERPRETED_NONE,    //!< not interpreted

@@ -259,12 +259,20 @@ void buildValues(TempFile& rawValues, TempFile& values, TempFile& earlyMap,
                  TempFile& hashes, TempFile& valueEqClasses,
                  Value::id_t* categories, StringMapper& resolver) {
     // sort values using SPARQL order
+    // Make numapprox empty, as it has not been initialized yet and would
+    // otherwise mess up with the sort.
     TempFile sortedValues(rawValues.baseName());
     FileSorter::sort(rawValues, sortedValues,
                      [](Cursor& cur) { Value::skip(cur); cur.skipVarInt(); cur.skipVarInt(); },
                      [&resolver](Cursor a, Cursor b) {
-                         Value va(a);  va.ensureInterpreted(resolver);
-                         Value vb(b);  vb.ensureInterpreted(resolver);
+                         Value va(a);
+                         if(va.isNumeric())
+                            va.numapprox(NumRange());
+                         va.ensureInterpreted(resolver);
+                         Value vb(b);
+                         if(vb.isNumeric())
+                            vb.numapprox(NumRange());
+                         vb.ensureInterpreted(resolver);
                          if(va == vb) return 0;
                          else if(va < vb) return -1;
                          else return 1;
@@ -287,6 +295,9 @@ void buildValues(TempFile& rawValues, TempFile& values, TempFile& earlyMap,
             Value val(cur);
             unsigned long type = cur.readVarInt();
             unsigned long id = cur.readVarInt();
+            // This will also set numapprox() for numeric types.
+            if(val.isNumeric())
+                val.numapprox(NumRange());
             val.ensureInterpreted(resolver);
             if(!last.validId() || last != val) {
                 val.id(last.id() + 1);

@@ -198,6 +198,15 @@ public:
                    static_cast<unsigned long>(p[0]);
     }
 
+    /**
+     * @param offset additional offset to add to the pointer
+     * @return the 64-bit signed integer in little-endian under the cursor head
+     */
+    long peekSignedLong(std::size_t offset=0) const {
+        unsigned long result = peekLong(offset);
+        return *reinterpret_cast<long*>(&result);
+    }
+
 
     ////////////////////////////////////////////////////////////////////////////
     // Skip methods (move the cursor)
@@ -244,6 +253,15 @@ public:
      */
     unsigned long readLong() {
         unsigned long result = peekLong();
+        ptr_ += 8;
+        return result;
+    }
+
+    /**
+     * Read a 64-bit signed integer in little-endian and advance pointer.
+     */
+    long readSignedLong() {
+        unsigned long result = peekSignedLong();
         ptr_ += 8;
         return result;
     }
@@ -447,6 +465,15 @@ public:
             return write(data, 8);
         else
             return write(data, 8, offset);
+    }
+
+    /**
+     * Write a 64-bit signed integer in little-endian encoding
+     * @return the number of bytes written
+     */
+    std::size_t writeSignedLong(long val,
+                                std::size_t offset=OFFSET_APPEND) {
+        return writeLong(*reinterpret_cast<unsigned long*>(&val), offset);
     }
 
     /**

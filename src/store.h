@@ -69,7 +69,7 @@ protected:
  */
 class Store : public StringMapper {
 public:
-    static constexpr unsigned      VERSION = 10; //!< format version
+    static constexpr unsigned      VERSION = 11; //!< format version
     static const     unsigned char MAGIC[10];    //!< magic number
 
     /**

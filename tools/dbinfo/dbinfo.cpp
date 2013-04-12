@@ -80,6 +80,8 @@ void show_value(Store& store, Value::id_t id) {
     } else if(v.isPlainWithLang()) {
         cout << "Language tag: " << v.language().id() << endl;
     }
+    if(v.isNumeric())
+        cout << "Approximated range: " << v.numapprox() << endl;
 }
 
 void show_string(Store& store, String::id_t id) {

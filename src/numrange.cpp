@@ -1,0 +1,42 @@
+/* This file is part of Castor
+ *
+ * Author: Vianney le Clément de Saint-Marcq <vianney.leclement@uclouvain.be>
+ * Copyright (C) 2010-2013, Université catholique de Louvain
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3 of the License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+#include "numrange.h"
+
+namespace castor {
+
+const XSDDecimal NumRange::DECIMAL_POS_INFINITY(NumRange::POS_INFINITY);
+
+const XSDDecimal NumRange::DECIMAL_NEG_INFINITY(NumRange::NEG_INFINITY);
+
+std::ostream& operator<<(std::ostream& out, const NumRange& rng) {
+    if(rng.empty()) {
+        out << "[]";
+    } else {
+        if(rng.lower() == NumRange::NEG_INFINITY)
+            out << "]-inf";
+        else
+            out << "[" << rng.lower();
+        if(rng.upper() == NumRange::POS_INFINITY)
+            out << ",+inf[";
+        else
+            out << "," << rng.upper() << "[";
+    }
+    return out;
+}
+
+}

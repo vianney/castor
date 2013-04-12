@@ -76,6 +76,11 @@ public:
     }
 
     /**
+     * @return value as long integer (may loose precision)
+     */
+    long getLong() const { return rasqal_xsd_decimal_get_long(val_, nullptr); }
+
+    /**
      * @return value as floating point number (may loose precision)
      */
     double getFloat() const { return rasqal_xsd_decimal_get_double(val_); }
@@ -99,6 +104,12 @@ public:
     bool operator>(const XSDDecimal& o) const { return compare(o) > 0; }
     bool operator<=(const XSDDecimal& o) const { return compare(o) <= 0; }
     bool operator>=(const XSDDecimal& o) const { return compare(o) >= 0; }
+
+    XSDDecimal* floor() const {
+        XSDDecimal* result = new XSDDecimal();
+        rasqal_xsd_decimal_floor(result->val_, val_);
+        return result;
+    }
 
     XSDDecimal* negate() const {
         XSDDecimal* result = new XSDDecimal();

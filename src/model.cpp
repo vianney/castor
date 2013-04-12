@@ -374,6 +374,9 @@ Value::Value(Cursor& cur) {
     tag_ = String(cur.readInt());
     assert(isTyped() || isPlainWithLang() || tag_.null());
     lexical_ = String(cur.readInt());
+    long n = cur.readSignedLong();
+    if(isNumeric())
+        numapprox_ = NumRange(n);
     interpreted_ = INTERPRETED_NONE;
 }
 
@@ -385,6 +388,7 @@ Buffer Value::serialize() const {
     buf.writeInt(datatype_);
     buf.writeInt(tag_.id());
     buf.writeInt(lexical_.id());
+    buf.writeSignedLong(isNumeric() ? numapprox().lower() : 0);
     return buf;
 }
 
@@ -416,6 +420,7 @@ void Value::fillCopy(const Value& value, bool deep)  {
     lexical_ = String(value.lexical_, deep);
     datatype_ = value.datatype_;
     tag_ = String(value.tag_, deep);
+    numapprox_ = value.numapprox_;
     interpreted_ = value.interpreted_;
     if(interpreted()) {
         if(isBoolean()) {
@@ -450,6 +455,7 @@ void Value::fillMove(Value& value)  {
     lexical_ = std::move(value.lexical_);
     datatype_ = value.datatype_;
     tag_ = std::move(value.tag_);
+    numapprox_ = value.numapprox_;
     interpreted_ = value.interpreted_;
     if(interpreted()) {
         if(isBoolean())
@@ -475,6 +481,7 @@ void Value::fillBoolean(bool value) {
     datatype_ = UNKNOWN_ID;
     tag_ = String(       "http://www.w3.org/2001/XMLSchema#boolean",
                   sizeof("http://www.w3.org/2001/XMLSchema#boolean") - 1);
+    numapprox_ = NumRange();
     interpreted_ = INTERPRETED_UNOWNED;
     boolean_ = value;
 }
@@ -488,6 +495,7 @@ void Value::fillInteger(long value) {
     datatype_ = UNKNOWN_ID;
     tag_ = String(       "http://www.w3.org/2001/XMLSchema#integer",
                   sizeof("http://www.w3.org/2001/XMLSchema#integer") - 1);
+    numapprox_ = NumRange(value);
     interpreted_ = INTERPRETED_UNOWNED;
     integer_ = value;
 }
@@ -501,6 +509,7 @@ void Value::fillFloating(double value) {
     datatype_ = UNKNOWN_ID;
     tag_ = String(       "http://www.w3.org/2001/XMLSchema#double",
                   sizeof("http://www.w3.org/2001/XMLSchema#double") - 1);
+    numapprox_ = NumRange(value);
     interpreted_ = INTERPRETED_UNOWNED;
     floating_ = value;
 }
@@ -514,6 +523,7 @@ void Value::fillDecimal(XSDDecimal* value) {
     datatype_ = UNKNOWN_ID;
     tag_ = String(       "http://www.w3.org/2001/XMLSchema#decimal",
                   sizeof("http://www.w3.org/2001/XMLSchema#decimal") - 1);
+    numapprox_ = NumRange(*value);
     interpreted_ = INTERPRETED_OWNED;
     decimal_ = value;
 }
@@ -526,6 +536,7 @@ void Value::fillSimpleLiteral(String&& lex) {
     lexical_ = std::move(lex);
     datatype_ = 0;
     tag_ = String();
+    numapprox_ = NumRange();
     interpreted_ = INTERPRETED_UNOWNED;
 }
 
@@ -537,6 +548,7 @@ void Value::fillURI(String&& lex) {
     lexical_ = std::move(lex);
     datatype_ = 0;
     tag_ = String();
+    numapprox_ = NumRange();
     interpreted_ = INTERPRETED_UNOWNED;
 }
 
@@ -547,6 +559,11 @@ void Value::fillURI(String&& lex) {
 
 int Value::compare(const Value& o) const {
     if(isNumeric() && o.isNumeric()) {
+        if(!numapprox().empty() && !o.numapprox().empty()) {
+            // fast path
+            if(numapprox() < o.numapprox()) return -1;
+            if(numapprox() > o.numapprox()) return 1;
+        }
         if(isInteger() && o.isInteger()) {
             long diff = integer() - o.integer();
             if(diff < 0) return -1;
@@ -584,6 +601,9 @@ int Value::equals(const Value& o) const {
     if(isNumeric() && o.isNumeric()) {
         if(validId() && o.validId())
             return id() == o.id() ? 0 : 1;
+        if(!numapprox().empty() && !o.numapprox().empty() &&
+                numapprox() != o.numapprox())
+            return 0;
         if(isInteger() && o.isInteger()) {
             return integer() == o.integer() ? 0 : 1;
         } else if(isDecimal() && o.isDecimal()) {
@@ -761,11 +781,17 @@ Value& Value::ensureInterpreted(const StringMapper& mapper) {
                    lexical_.equals("true", sizeof("true")-1);
     } else if(isInteger()) {
         integer_ = atoi(lexical_.str());
+        if(numapprox_.empty())
+            numapprox_ = NumRange(integer_);
     } else if(isFloating()) {
         floating_ = atof(lexical_.str());
+        if(numapprox_.empty())
+            numapprox_ = NumRange(floating_);
     } else if(isDecimal()) {
         decimal_ = new XSDDecimal(lexical_.str());
         interpreted_ = INTERPRETED_OWNED;
+        if(numapprox_.empty())
+            numapprox_ = NumRange(*decimal_);
     } else if(isDateTime()) {
         datetime_ = new XSDDateTime(lexical_.str());
         interpreted_ = INTERPRETED_OWNED;
