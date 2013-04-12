@@ -18,6 +18,7 @@
 #ifndef CASTOR_STORE_H
 #define CASTOR_STORE_H
 
+#include <vector>
 #include <string>
 #include <exception>
 #include <cassert>
@@ -26,6 +27,7 @@
 #include "model.h"
 #include "store/btree.h"
 #include "store/triplecache.h"
+#include "variable.h"
 
 namespace castor {
 
@@ -170,6 +172,22 @@ public:
     Value::Category category(Value::id_t id) const;
 
     /**
+     * Get a variable from the cache or create a new one if needed.
+     * The variable shall be returned with release() to be reused or cleaned.
+     *
+     * @param solver the solver to (re)initialize the variable with
+     * @return a variable whose domain ranges from 0 to valuesCount()
+     */
+    cp::RDFVar* variable(cp::Solver* solver);
+
+    /**
+     * Release a variable received by variable().
+     *
+     * @param x the variable
+     */
+    void release(cp::RDFVar* x);
+
+    /**
      * @return the number of triples
      */
     unsigned triplesCount() const { return triplesCount_; }
@@ -194,7 +212,6 @@ public:
 
     unsigned statTripleCacheHits()   const { return cache_.statHits();   }
     unsigned statTripleCacheMisses() const { return cache_.statMisses(); }
-
 
     /**
      * Query a range of triples.
@@ -293,6 +310,8 @@ private:
 
 
     TripleCache cache_; //!< triples cache
+
+    std::vector<cp::RDFVar*> varcache_; //!< variables cache
 
     friend class TripleRange;
 };

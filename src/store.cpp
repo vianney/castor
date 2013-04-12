@@ -105,6 +105,8 @@ Store::~Store() {
         delete fullyAggregated_[i];
     delete strings_.index;
     delete values_.index;
+    for(cp::RDFVar* x : varcache_)
+        delete x;
 }
 
 Value Store::lookupValue(Value::id_t id) const {
@@ -265,6 +267,22 @@ Value::Category Store::category(Value::id_t id) const {
     // should not happen
     assert(false);
     return static_cast<Value::Category>(Value::CATEGORIES);
+}
+
+cp::RDFVar* Store::variable(cp::Solver *solver) {
+    cp::RDFVar* x;
+    if(varcache_.empty()) {
+        x = new cp::RDFVar(solver, 0, valuesCount());
+    } else {
+        x = varcache_.back();
+        varcache_.pop_back();
+        x->reset(solver);
+    }
+    return x;
+}
+
+void Store::release(cp::RDFVar *x) {
+    varcache_.push_back(x);
 }
 
 unsigned Store::triplesCount(Triple pattern) {

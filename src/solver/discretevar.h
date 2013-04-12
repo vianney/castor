@@ -59,6 +59,16 @@ public:
      */
     ~DiscreteVariable();
 
+    /**
+     * Reconfigure this variable to use solver.
+     *
+     * This will also clear all registered constraints and revert to the
+     * initial domain.
+     *
+     * @param solver
+     */
+    void reset(Solver* solver);
+
     // Implementation of virtual functions
     void save(Trail& trail) const;
     void restore(Trail& trail);
@@ -291,6 +301,20 @@ template<class T>
 DiscreteVariable<T>::~DiscreteVariable() {
     delete[] domain_;
     delete[] map_;
+}
+
+template<class T>
+void DiscreteVariable<T>::reset(Solver *solver) {
+    solver_ = solver;
+    Trailable::reset(&solver->trail());
+    evBind_.clear();
+    evChange_.clear();
+    evMin_.clear();
+    evMax_.clear();
+    size_ = maxVal_ - minVal_ + 1;
+    min_ = minVal_;
+    max_ = maxVal_;
+    clearMarks();
 }
 
 template<class T>

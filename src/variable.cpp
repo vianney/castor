@@ -23,14 +23,18 @@ namespace castor {
 
 Variable::Variable(Query* query, unsigned id, const char* name) :
     query_(query), id_(id), name_(name),
-    var_(query->solver(), 0, query->store()->valuesCount()), val_(0) {
+    var_(query->store()->variable(query->solver())), val_(0) {
+}
+
+Variable::~Variable() {
+    query_->store()->release(var_);
 }
 
 void Variable::setFromCP() {
-    if(var_.contains(0))
+    if(var_->contains(0))
         valueId(0);
     else
-        valueId(var_.value());
+        valueId(var_->value());
 }
 
 std::ostream& operator<<(std::ostream& out, const Variable& v) {

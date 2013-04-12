@@ -57,7 +57,7 @@ public:
     /**
      * @return the CP variable corrsponding to this variable.
      */
-    cp::RDFVar* cp() { return &var_; }
+    cp::RDFVar* cp() { return var_; }
 
     /**
      * @return the value id bound to this variable or 0 if unbound
@@ -85,6 +85,7 @@ private:
      * @param name name of the variable (empty string for anonymous variables)
      */
     Variable(Query* query, unsigned id, const char* name);
+    ~Variable();
 
     //! Non-copyable
     Variable(const Variable&) = delete;
@@ -96,7 +97,7 @@ private:
     Query*      query_; //!< Parent query
     unsigned    id_;    //!< Id of the variable
     std::string name_;  //!< Name of the variable
-    cp::RDFVar  var_;   //!< CP variable
+    cp::RDFVar* var_;   //!< CP variable
     Value::id_t val_;   //!< value (0 means unbound)
 };
 

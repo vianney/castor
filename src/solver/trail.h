@@ -193,6 +193,19 @@ protected:
     virtual ~Trailable() {}
 
     /**
+     * Reconfigure this object to use trail.
+     *
+     * This will also clear all listeners.
+     *
+     * @param trail the new trail
+     */
+    void reset(Trail* trail) {
+        trail_ = trail;
+        timestamp_ = 0;
+        listeners_.clear();
+    }
+
+    /**
      * Save the variable to the trail if necessary.
      *
      * @note This method shall be called by implementations before any
