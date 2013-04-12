@@ -119,6 +119,8 @@ static int handler(mg_connection* conn) {
     try {
         Query query(store, querystr);
         start_response(conn, "application/xml");
+        if(verbose)
+            cout << "--" << endl << querystr << endl << "--" << endl;
         // FIXME: escape strings
         mg_printf(conn,
                   "<?xml version=\"1.0\"?>\n"
