@@ -251,8 +251,10 @@ int main(int argc, char* argv[]) {
                              nullptr};
 
     mg_context* ctx = mg_start(&callbacks, &store, options);
-    if(ctx == nullptr)
+    if(ctx == nullptr) {
+        perror("castord");
         return 2;
+    }
     if(verbose)
         cout << "Listening on :" << port << "." << endl;
 
