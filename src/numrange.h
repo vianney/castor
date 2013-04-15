@@ -27,7 +27,7 @@ namespace castor {
 
 /**
  * A numerical range with integer precision.
- * The described range is [lb, ub[.
+ * The described range is [lb, ub).
  */
 class NumRange {
 public:
@@ -52,9 +52,9 @@ public:
      */
     NumRange(long lb, long ub) : lb_(lb), ub_(ub) {}
     /**
-     * Construct the range [val,val+1[.
-     * If val is POS_INFINITY, the range is [val,+infinity[.
-     * If val is NEG_INFINITY, the range is ]-infinity,val+1[.
+     * Construct the range [val,val+1).
+     * If val is POS_INFINITY, the range is [val,+infinity).
+     * If val is NEG_INFINITY, the range is (-infinity,val+1).
      * @param val
      */
     explicit NumRange(long val) : lb_(val),
@@ -106,6 +106,8 @@ public:
     long lower() const { return lb_; }
     //! @return the upper bound
     long upper() const { return ub_; }
+    //! @return the inclusive upper bound
+    long upper_inclusive() const { return ub_ == POS_INFINITY ? ub_ : ub_ - 1; }
 
     /**
      * @param o
@@ -142,6 +144,10 @@ public:
     bool operator>(const NumRange& o) const {
         return lb_ > o.ub_ && o.ub_ != POS_INFINITY && lb_ != NEG_INFINITY;
     }
+
+    NumRange operator+(const NumRange& o) const;
+
+    NumRange operator-(const NumRange& o) const;
 
 private:
     long lb_; //!< the lower bound (inclusive)

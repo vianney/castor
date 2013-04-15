@@ -41,6 +41,8 @@ set(CASTOR_SRCS
     constraints/fallback.cpp
     constraints/compare.h
     constraints/compare.cpp
+    constraints/arithmetic.h
+    constraints/arithmetic.cpp
     constraints/distinct.h
     constraints/distinct.cpp
     constraints/bnborder.h

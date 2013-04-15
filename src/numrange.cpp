@@ -39,4 +39,59 @@ std::ostream& operator<<(std::ostream& out, const NumRange& rng) {
     return out;
 }
 
+namespace {
+//! Addition with overflow check
+inline long add(long a, long b) {
+    if(b > 0 && a > NumRange::POS_INFINITY - b)
+        return NumRange::POS_INFINITY;
+    else if(b < 0 && a < NumRange::NEG_INFINITY - b)
+        return NumRange::NEG_INFINITY;
+    else
+        return a + b;
+}
+//! Substraction with overflow check
+inline long substract(long a, long b) {
+    if(b > 0 && a < NumRange::NEG_INFINITY + b)
+        return NumRange::NEG_INFINITY;
+    else if(b < 0 && a > NumRange::POS_INFINITY + b)
+        return NumRange::POS_INFINITY;
+    else
+        return a - b;
+}
+}
+
+NumRange NumRange::operator +(const NumRange& o) const  {
+    assert(!empty() && !o.empty());
+    NumRange result;
+    if(lb_ == NEG_INFINITY || o.lb_ == NEG_INFINITY) {
+        result.lb_ = NEG_INFINITY;
+    } else {
+        result.lb_ = add(lb_, o.lb_);
+    }
+    if(ub_ == POS_INFINITY || o.ub_ == POS_INFINITY) {
+        result.ub_ = POS_INFINITY;
+    } else {
+        result.ub_ = add(ub_, o.ub_);
+        if(result.ub_ < POS_INFINITY)
+            result.ub_ += 1; // we need an exclusive upper bound
+    }
+    return result;
+}
+
+NumRange NumRange::operator -(const NumRange& o) const {
+    assert(!empty() && !o.empty());
+    NumRange result;
+    if(lb_ == NEG_INFINITY || o.ub_ == POS_INFINITY) {
+        result.lb_ = NEG_INFINITY;
+    } else {
+        result.lb_ = substract(lb_, o.ub_);
+    }
+    if(ub_ == POS_INFINITY || o.lb_ == NEG_INFINITY) {
+        result.ub_ = POS_INFINITY;
+    } else {
+        result.ub_ = substract(ub_, o.lb_);
+    }
+    return result;
+}
+
 }

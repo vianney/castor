@@ -73,6 +73,23 @@ public:
     virtual void post(cp::Subtree& sub, cp::TriStateVar* b);
 
     /**
+     * @return whether this expression can be interpreted as an arithmetic
+     *         constraint
+     */
+    virtual bool isArithmetic() { return false; }
+
+    /**
+     * Post this arithmetic expression.
+     *
+     * @pre isArithmetic()
+     * @param sub subtree in which to add the constraints
+     * @param n the numeric value of the expression
+     * @param b guard (if RDF_ERROR: do not propagate)
+     */
+    virtual void postArithmetic(cp::Subtree& sub, cp::NumVar* n,
+                                cp::TriStateVar* b) {}
+
+    /**
      * Evaluate the expression given the current assignment in query. The result
      * is written in the result argument.
      *
@@ -181,6 +198,9 @@ public:
     ValueExpression(Query* query, Value* value);
     ~ValueExpression();
     bool evaluate(Value& result) override;
+    bool isArithmetic() override { return value_->isNumeric(); }
+    void postArithmetic(cp::Subtree &sub, cp::NumVar *n,
+                        cp::TriStateVar *b) override;
 
     /**
      * @return the value
@@ -198,6 +218,9 @@ class VariableExpression : public Expression {
 public:
     VariableExpression(Variable* variable);
     bool evaluate(Value& result) override;
+    bool isArithmetic() override { return true; }
+    void postArithmetic(cp::Subtree &sub, cp::NumVar *n,
+                        cp::TriStateVar *b) override;
 
     /**
      * @return the variable
@@ -414,6 +437,11 @@ public:
      */
     virtual void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
                            cp::TriStateVar* b) = 0;
+    /**
+     * Post the redundant arithmetic constraint.
+     */
+    virtual void postArithmetic(cp::Subtree& sub, cp::NumVar* x, cp::NumVar* y,
+                                cp::TriStateVar *b) = 0;
 };
 
 /**
@@ -431,6 +459,8 @@ public:
                    cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
                    cp::TriStateVar* b) override;
+    void postArithmetic(cp::Subtree &sub, cp::NumVar *x, cp::NumVar *y,
+                        cp::TriStateVar *b) override;
 };
 
 /**
@@ -448,6 +478,8 @@ public:
                    cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
                    cp::TriStateVar* b) override;
+    void postArithmetic(cp::Subtree &sub, cp::NumVar *x, cp::NumVar *y,
+                        cp::TriStateVar *b) override;
 };
 
 /**
@@ -465,6 +497,8 @@ public:
                    cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
                    cp::TriStateVar* b) override;
+    void postArithmetic(cp::Subtree &sub, cp::NumVar *x, cp::NumVar *y,
+                        cp::TriStateVar *b) override;
 };
 
 /**
@@ -482,6 +516,8 @@ public:
                    cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
                    cp::TriStateVar* b) override;
+    void postArithmetic(cp::Subtree &sub, cp::NumVar *x, cp::NumVar *y,
+                        cp::TriStateVar *b) override;
 };
 
 /**
@@ -515,6 +551,11 @@ public:
             BinaryExpression(arg1, arg2) {}
     PlusExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
     bool evaluate(Value& result) override;
+    bool isArithmetic() override {
+        return arg1_->isArithmetic() && arg2_->isArithmetic();
+    }
+    void postArithmetic(cp::Subtree &sub, cp::NumVar *n,
+                        cp::TriStateVar *b) override;
 };
 
 /**
@@ -526,6 +567,11 @@ public:
             BinaryExpression(arg1, arg2) {}
     MinusExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
     bool evaluate(Value& result) override;
+    bool isArithmetic() override {
+        return arg1_->isArithmetic() && arg2_->isArithmetic();
+    }
+    void postArithmetic(cp::Subtree &sub, cp::NumVar *n,
+                        cp::TriStateVar *b) override;
 };
 
 /**

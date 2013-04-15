@@ -21,6 +21,7 @@
 #include "model.h"
 #include "solver/discretevar.h"
 #include "solver/smallvar.h"
+#include "solver/boundsvar.h"
 
 namespace castor {
 
@@ -35,6 +36,7 @@ enum TriState {
 namespace cp {
 typedef DiscreteVariable<Value::id_t> RDFVar;
 typedef SmallEnumVariable<TriState, 3> TriStateVar;
+typedef BoundsVariable<long> NumVar;
 }
 
 /**

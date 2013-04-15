@@ -27,6 +27,7 @@
 #include "constraints/unary.h"
 #include "constraints/bool.h"
 #include "constraints/compare.h"
+#include "constraints/arithmetic.h"
 
 namespace castor {
 
@@ -560,6 +561,20 @@ void EqualityExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
         }
     } else {
         Expression::post(sub, b);
+        if(arg1_->isArithmetic() && arg2_->isArithmetic()) {
+            // Redundant arithmetic equality constraint
+            cp::NumVar* x = new cp::NumVar(query_->solver(),
+                                           NumRange::NEG_INFINITY,
+                                           NumRange::POS_INFINITY);
+            query_->solver()->collect(x);
+            cp::NumVar* y = new cp::NumVar(query_->solver(),
+                                           NumRange::NEG_INFINITY,
+                                           NumRange::POS_INFINITY);
+            query_->solver()->collect(y);
+            arg1_->postArithmetic(sub, x, b);
+            arg2_->postArithmetic(sub, y, b);
+            sub.add(new NumEqConstraint(query_, x, y, b));
+        }
     }
 }
 
@@ -645,6 +660,20 @@ void InequalityExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
         }
     } else {
         Expression::post(sub, b);
+        if(arg1_->isArithmetic() && arg2_->isArithmetic()) {
+            // Redundant arithmetic equality constraint
+            cp::NumVar* x = new cp::NumVar(query_->solver(),
+                                           NumRange::NEG_INFINITY,
+                                           NumRange::POS_INFINITY);
+            query_->solver()->collect(x);
+            cp::NumVar* y = new cp::NumVar(query_->solver(),
+                                           NumRange::NEG_INFINITY,
+                                           NumRange::POS_INFINITY);
+            query_->solver()->collect(y);
+            arg1_->postArithmetic(sub, x, b);
+            arg2_->postArithmetic(sub, y, b);
+            postArithmetic(sub, x, y, b);
+        }
     }
 }
 
@@ -662,6 +691,10 @@ void LTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
     sub.add(new ConstGEConstraint(query_, x2,
                         query_->store()->eqClass(v1).to + 1, b));
 }
+void LTExpression::postArithmetic(cp::Subtree &sub, cp::NumVar *x,
+                                  cp::NumVar *y, cp::TriStateVar *b) {
+    sub.add(new NumLessConstraint(query_, x, y, b));
+}
 
 
 void GTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
@@ -677,6 +710,10 @@ void GTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
                              cp::TriStateVar* b) {
     sub.add(new ConstLEConstraint(query_, x2,
                         query_->store()->eqClass(v1).from - 1, b));
+}
+void GTExpression::postArithmetic(cp::Subtree &sub, cp::NumVar *x,
+                                  cp::NumVar *y, cp::TriStateVar *b) {
+    sub.add(new NumLessConstraint(query_, y, x, b));
 }
 
 
@@ -694,6 +731,10 @@ void LEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
     sub.add(new ConstGEConstraint(query_, x2,
                         query_->store()->eqClass(v1).from, b));
 }
+void LEExpression::postArithmetic(cp::Subtree &sub, cp::NumVar *x,
+                                  cp::NumVar *y, cp::TriStateVar *b) {
+    sub.add(new NumLessConstraint(query_, x, y, b));
+}
 
 
 void GEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
@@ -709,6 +750,50 @@ void GEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
                              cp::TriStateVar* b) {
     sub.add(new ConstLEConstraint(query_, x2,
                         query_->store()->eqClass(v1).to, b));
+}
+void GEExpression::postArithmetic(cp::Subtree &sub, cp::NumVar *x,
+                                  cp::NumVar *y, cp::TriStateVar *b) {
+    sub.add(new NumLessConstraint(query_, y, x, b));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Posting arithmetic constraints
+
+void ValueExpression::postArithmetic(cp::Subtree &sub, cp::NumVar *n,
+                                     cp::TriStateVar *b) {
+    sub.add(new NumConstantConstraint(query_, n, value_->numapprox(), b));
+}
+
+void VariableExpression::postArithmetic(cp::Subtree &sub, cp::NumVar *n,
+                                        cp::TriStateVar *b) {
+    sub.add(new ArithmeticChannelConstraint(query_, variable_->cp(), n, b));
+}
+
+void PlusExpression::postArithmetic(cp::Subtree& sub, cp::NumVar* n,
+                                    cp::TriStateVar* b) {
+    cp::NumVar* x = new cp::NumVar(query_->solver(), NumRange::NEG_INFINITY,
+                                   NumRange::POS_INFINITY);
+    query_->solver()->collect(x);
+    cp::NumVar* y = new cp::NumVar(query_->solver(), NumRange::NEG_INFINITY,
+                                   NumRange::POS_INFINITY);
+    query_->solver()->collect(y);
+    arg1_->postArithmetic(sub, x, b);
+    arg2_->postArithmetic(sub, y, b);
+    sub.add(new SumConstraint(query_, x, y, n));
+}
+
+void MinusExpression::postArithmetic(cp::Subtree& sub, cp::NumVar* n,
+                                     cp::TriStateVar* b) {
+    cp::NumVar* x = new cp::NumVar(query_->solver(), NumRange::NEG_INFINITY,
+                                   NumRange::POS_INFINITY);
+    query_->solver()->collect(x);
+    cp::NumVar* y = new cp::NumVar(query_->solver(), NumRange::NEG_INFINITY,
+                                   NumRange::POS_INFINITY);
+    query_->solver()->collect(y);
+    arg1_->postArithmetic(sub, x, b);
+    arg2_->postArithmetic(sub, y, b);
+    // x - y = n  <=>  x = n + y
+    sub.add(new SumConstraint(query_, n, y, x));
 }
 
 }
