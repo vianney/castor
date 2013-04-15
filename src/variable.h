@@ -20,13 +20,21 @@
 
 #include "model.h"
 #include "solver/discretevar.h"
+#include "solver/smallvar.h"
 
 namespace castor {
 
 class Query;
 
+enum TriState {
+    RDF_TRUE,
+    RDF_FALSE,
+    RDF_ERROR
+};
+
 namespace cp {
 typedef DiscreteVariable<Value::id_t> RDFVar;
+typedef SmallEnumVariable<TriState, 3> TriStateVar;
 }
 
 /**

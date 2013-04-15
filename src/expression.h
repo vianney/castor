@@ -65,10 +65,12 @@ public:
     virtual Expression* optimize() { return this; }
 
     /**
-     * Post this expression as a constraint.
+     * Post this expression as a (reified) constraint.
+     *
      * @param sub subtree in which to add the constraint
+     * @param b the truth value of the expression
      */
-    virtual void post(cp::Subtree& sub);
+    virtual void post(cp::Subtree& sub, cp::TriStateVar* b);
 
     /**
      * Evaluate the expression given the current assignment in query. The result
@@ -80,24 +82,31 @@ public:
     virtual bool evaluate(Value& result) = 0;
 
     /**
+     * Evaluate the expression and compute its effective boolean value (EBV).
+     *
+     * @param buffer value buffer to be used during evaluation
+     * @return the effective boolean value
+     */
+    TriState evaluateEBV(Value& buffer);
+
+    /**
+     * Evaluate the expression and compute its effective boolean value (EBV).
+     *
+     * @return the effective boolean value
+     */
+    TriState evaluateEBV() {
+        Value buffer;
+        return evaluateEBV(buffer);
+    }
+
+    /**
      * Evaluate the expression given the current assignment in query.
      * Returns the effective boolean value (EBV).
      *
      * @return true if the EBV is true, false if the EBV is false or an error
      *         occured
      */
-    bool isTrue() {
-        Value buffer;
-        return evaluateEBV(buffer) == 1;
-    }
-
-    /**
-     * Evaluate the expression and compute its effective boolean value (EBV).
-     *
-     * @param buffer value buffer to be used during evaluation
-     * @return 1 if true, 0 if false, -1 if type error
-     */
-    int evaluateEBV(Value& buffer);
+    bool isTrue() { return evaluateEBV() == RDF_TRUE; }
 
 protected:
     /**
@@ -120,7 +129,7 @@ public:
     UnaryExpression(UnaryExpression&& o);
     ~UnaryExpression();
 
-    Expression* optimize() {
+    Expression* optimize() override {
         arg_ = arg_->optimize();
         return this;
     }
@@ -143,7 +152,7 @@ public:
     BinaryExpression(BinaryExpression&& o);
     ~BinaryExpression();
 
-    Expression* optimize() {
+    Expression* optimize() override {
         arg1_ = arg1_->optimize();
         arg2_ = arg2_->optimize();
         return this;
@@ -171,7 +180,7 @@ class ValueExpression : public Expression {
 public:
     ValueExpression(Query* query, Value* value);
     ~ValueExpression();
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 
     /**
      * @return the value
@@ -188,7 +197,7 @@ private:
 class VariableExpression : public Expression {
 public:
     VariableExpression(Variable* variable);
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 
     /**
      * @return the variable
@@ -205,7 +214,7 @@ private:
 class BoundExpression : public Expression {
 public:
     BoundExpression(Variable* variable);
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 
     /**
      * @return the variable
@@ -221,10 +230,10 @@ private:
  */
 class BangExpression : public UnaryExpression {
 public:
-    BangExpression(Expression* arg) : UnaryExpression(arg) {}
-    BangExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    Expression* optimize();
+    BangExpression(Expression* arg) :
+        UnaryExpression(arg) {}
+    bool evaluate(Value& result) override;
+    void post(cp::Subtree& sub, cp::TriStateVar* b) override;
 };
 
 /**
@@ -234,7 +243,7 @@ class UPlusExpression : public UnaryExpression {
 public:
     UPlusExpression(Expression* arg) : UnaryExpression(arg) {}
     UPlusExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -244,7 +253,7 @@ class UMinusExpression : public UnaryExpression {
 public:
     UMinusExpression(Expression* arg) : UnaryExpression(arg) {}
     UMinusExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -254,7 +263,7 @@ class IsIriExpression : public UnaryExpression {
 public:
     IsIriExpression(Expression* arg) : UnaryExpression(arg) {}
     IsIriExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -264,7 +273,7 @@ class IsBlankExpression : public UnaryExpression {
 public:
     IsBlankExpression(Expression* arg) : UnaryExpression(arg) {}
     IsBlankExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -274,7 +283,7 @@ class IsLiteralExpression : public UnaryExpression {
 public:
     IsLiteralExpression(Expression* arg) : UnaryExpression(arg) {}
     IsLiteralExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -284,7 +293,7 @@ class StrExpression : public UnaryExpression {
 public:
     StrExpression(Expression* arg) : UnaryExpression(arg) {}
     StrExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -294,7 +303,7 @@ class LangExpression : public UnaryExpression {
 public:
     LangExpression(Expression* arg) : UnaryExpression(arg) {}
     LangExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -304,7 +313,7 @@ class DatatypeExpression : public UnaryExpression {
 public:
     DatatypeExpression(Expression* arg) : UnaryExpression(arg) {}
     DatatypeExpression(UnaryExpression&& o) : UnaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -313,9 +322,9 @@ public:
 class OrExpression : public BinaryExpression {
 public:
     OrExpression(Expression* arg1, Expression* arg2) :
-            BinaryExpression(arg1, arg2) {}
-    OrExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+        BinaryExpression(arg1, arg2) {}
+    bool evaluate(Value& result) override;
+    void post(cp::Subtree &sub, cp::TriStateVar *b) override;
 };
 
 /**
@@ -324,31 +333,32 @@ public:
 class AndExpression : public BinaryExpression {
 public:
     AndExpression(Expression* arg1, Expression* arg2) :
-            BinaryExpression(arg1, arg2) {}
-    AndExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    void post(cp::Subtree& sub);
-    bool evaluate(Value& result);
+        BinaryExpression(arg1, arg2) {}
+    bool evaluate(Value& result) override;
+    void post(cp::Subtree& sub, cp::TriStateVar* b) override;
 };
 
 /**
- * Base class for a equality expression
+ * Base class for a comparison expression
  */
 class EqualityExpression : public BinaryExpression {
 public:
     EqualityExpression(Expression* arg1, Expression* arg2) :
-            BinaryExpression(arg1, arg2) {}
+        BinaryExpression(arg1, arg2) {}
     EqualityExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    void post(cp::Subtree& sub);
+    void post(cp::Subtree& sub, cp::TriStateVar* b) override;
 
     /**
      * Post the constraint when both arguments are variables.
      */
-    virtual void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) = 0;
+    virtual void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                          cp::TriStateVar* b) = 0;
     /**
      * Post the constraint when one argument is a variable and the other is
      * constant.
      */
-    virtual void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) = 0;
+    virtual void postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v,
+                           cp::TriStateVar* b) = 0;
 };
 
 /**
@@ -357,49 +367,53 @@ public:
 class EqExpression : public EqualityExpression {
 public:
     EqExpression(Expression* arg1, Expression* arg2) :
-            EqualityExpression(arg1, arg2) {}
+        EqualityExpression(arg1, arg2) {}
     EqExpression(BinaryExpression&& o) : EqualityExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2);
-    void postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v);
+    bool evaluate(Value& result) override;
+    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                  cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v,
+                   cp::TriStateVar* b) override;
 };
 
 /**
  * arg1 != arg2
  */
-class NEqExpression : public EqualityExpression {
+class NEqExpression : public EqExpression {
 public:
     NEqExpression(Expression* arg1, Expression* arg2) :
-            EqualityExpression(arg1, arg2) {}
-    NEqExpression(BinaryExpression&& o) : EqualityExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2);
-    void postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v);
+            EqExpression(arg1, arg2) {}
+    NEqExpression(BinaryExpression&& o) : EqExpression(std::move(o)) {}
+    bool evaluate(Value& result) override;
+    void post(cp::Subtree &sub, cp::TriStateVar *b) override;
 };
 
 /**
- * Base class for a inequality expression
+ * Base class for an inequality expression
  */
 class InequalityExpression : public BinaryExpression {
 public:
-    InequalityExpression(Expression* arg1, Expression* arg2)
-        : BinaryExpression(arg1, arg2) {}
-    InequalityExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    void post(cp::Subtree& sub);
+    InequalityExpression(Expression* arg1, Expression* arg2) :
+        BinaryExpression(arg1, arg2) {}
+    InequalityExpression(BinaryExpression&& o) :
+        BinaryExpression(std::move(o)) {}
+    void post(cp::Subtree& sub, cp::TriStateVar* b) override;
 
-    // Handlers for default post implementation
     /**
      * Post the constraint when both arguments are variables.
      */
-    virtual void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) = 0;
+    virtual void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                          cp::TriStateVar* b) = 0;
     /**
      * Post the constraint when arg1 is a variable and arg2 is constant.
      */
-    virtual void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) = 0;
+    virtual void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                           cp::TriStateVar* b) = 0;
     /**
      * Post the constraint when arg1 is constant and arg2 is a variable.
      */
-    virtual void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) = 0;
+    virtual void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                           cp::TriStateVar* b) = 0;
 };
 
 /**
@@ -410,10 +424,13 @@ public:
     LTExpression(Expression* arg1, Expression* arg2) :
             InequalityExpression(arg1, arg2) {}
     LTExpression(BinaryExpression&& o) : InequalityExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2);
-    void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2);
-    void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2);
+    bool evaluate(Value& result) override;
+    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                  cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                   cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                   cp::TriStateVar* b) override;
 };
 
 /**
@@ -424,10 +441,13 @@ public:
     GTExpression(Expression* arg1, Expression* arg2) :
             InequalityExpression(arg1, arg2) {}
     GTExpression(BinaryExpression&& o) : InequalityExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2);
-    void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2);
-    void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2);
+    bool evaluate(Value& result) override;
+    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                  cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                   cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                   cp::TriStateVar* b) override;
 };
 
 /**
@@ -438,10 +458,13 @@ public:
     LEExpression(Expression* arg1, Expression* arg2) :
             InequalityExpression(arg1, arg2) {}
     LEExpression(BinaryExpression&& o) : InequalityExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2);
-    void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2);
-    void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2);
+    bool evaluate(Value& result) override;
+    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                  cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                   cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                   cp::TriStateVar* b) override;
 };
 
 /**
@@ -452,10 +475,13 @@ public:
     GEExpression(Expression* arg1, Expression* arg2) :
             InequalityExpression(arg1, arg2) {}
     GEExpression(BinaryExpression&& o) : InequalityExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2);
-    void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2);
-    void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2);
+    bool evaluate(Value& result) override;
+    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                  cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                   cp::TriStateVar* b) override;
+    void postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                   cp::TriStateVar* b) override;
 };
 
 /**
@@ -466,7 +492,7 @@ public:
     StarExpression(Expression* arg1, Expression* arg2) :
             BinaryExpression(arg1, arg2) {}
     StarExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -477,7 +503,7 @@ public:
     SlashExpression(Expression* arg1, Expression* arg2) :
             BinaryExpression(arg1, arg2) {}
     SlashExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -488,7 +514,7 @@ public:
     PlusExpression(Expression* arg1, Expression* arg2) :
             BinaryExpression(arg1, arg2) {}
     PlusExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -499,7 +525,7 @@ public:
     MinusExpression(Expression* arg1, Expression* arg2) :
             BinaryExpression(arg1, arg2) {}
     MinusExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -508,24 +534,12 @@ public:
 class SameTermExpression : public EqualityExpression {
 public:
     SameTermExpression(Expression* arg1, Expression* arg2) :
-            EqualityExpression(arg1, arg2) {}
-    SameTermExpression(BinaryExpression&& o) : EqualityExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2);
-    void postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v);
-};
-
-/**
- * !(SAMETERM(arg1, arg2))
- */
-class DiffTermExpression : public EqualityExpression {
-public:
-    DiffTermExpression(Expression* arg1, Expression* arg2) :
-            EqualityExpression(arg1, arg2) {}
-    DiffTermExpression(BinaryExpression&& o) : EqualityExpression(std::move(o)) {}
-    bool evaluate(Value& result);
-    void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2);
-    void postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v);
+        EqualityExpression(arg1, arg2) {}
+    bool evaluate(Value& result) override;
+    void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2,
+                  cp::TriStateVar *b) override;
+    void postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2,
+                   cp::TriStateVar *b) override;
 };
 
 /**
@@ -536,7 +550,7 @@ public:
     LangMatchesExpression(Expression* arg1, Expression* arg2) :
             BinaryExpression(arg1, arg2) {}
     LangMatchesExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 };
 
 /**
@@ -546,9 +560,9 @@ class RegExExpression : public Expression {
 public:
     RegExExpression(Expression* text, Expression* pattern, Expression* flags);
     ~RegExExpression();
-    bool evaluate(Value& result);
+    bool evaluate(Value& result) override;
 
-    Expression* optimize() {
+    Expression* optimize() override {
         text_ = text_->optimize();
         pattern_ = pattern_->optimize();
         if(flags_ != nullptr)

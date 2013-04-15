@@ -157,6 +157,8 @@ public:
  */
 class Trailable {
 public:
+    virtual ~Trailable() {}
+
     /**
      * Save the current state to the trail.
      *
@@ -189,8 +191,6 @@ protected:
     //! Non-copyable
     Trailable(const Trailable&) = delete;
     Trailable& operator=(const Trailable&) = delete;
-
-    virtual ~Trailable() {}
 
     /**
      * Reconfigure this object to use trail.

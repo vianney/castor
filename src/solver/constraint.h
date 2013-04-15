@@ -20,6 +20,12 @@
 
 #include "reversible.h"
 
+/**
+ * Helper macro for use in propagators.
+ * Run domain operation instr and return false if the domain becomes empty.
+ */
+#define domcheck(instr) if(!(instr)) return false
+
 namespace castor {
 namespace cp {
 

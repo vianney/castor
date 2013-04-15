@@ -24,12 +24,84 @@
 namespace castor {
 
 /**
- * Always-false constraint
+ * Constant constraint: x = v.
+ *
+ * @param D domain type
+ * @param T value type
  */
-class FalseConstraint : public cp::Constraint {
+template<class D, class T>
+class ConstantConstraint : public cp::Constraint {
 public:
-    FalseConstraint(Query* query) : Constraint(query->solver(), PRIOR_HIGH) {}
-    bool post() { return false; }
+    ConstantConstraint(Query* query, D* x, T v) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v) {}
+    bool post() { return x_->bind(v_); }
+
+private:
+    D* x_;
+    T v_;
+};
+
+/**
+ * b = RDF_True
+ */
+class TrueConstraint : public ConstantConstraint<cp::TriStateVar, TriState> {
+public:
+    TrueConstraint(Query* query, cp::TriStateVar* b) :
+        ConstantConstraint(query, b, RDF_TRUE) {}
+};
+
+/**
+ * b = RDF_FALSE
+ */
+class FalseConstraint : public ConstantConstraint<cp::TriStateVar, TriState> {
+public:
+    FalseConstraint(Query* query, cp::TriStateVar* b) :
+        ConstantConstraint(query, b, RDF_FALSE) {}
+};
+
+/**
+ * b = RDF_ERROR
+ */
+class ErrorConstraint : public ConstantConstraint<cp::TriStateVar, TriState> {
+public:
+    ErrorConstraint(Query* query, cp::TriStateVar* b) :
+        ConstantConstraint(query, b, RDF_ERROR) {}
+};
+
+/**
+ * Constant constraint: x != v.
+ *
+ * @param D domain type
+ * @param T value type
+ */
+template<class D, class T>
+class NotConstantConstraint : public cp::Constraint {
+public:
+    NotConstantConstraint(Query* query, D* x, T v) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v) {}
+    bool post() { return x_->remove(v_); }
+
+private:
+    D* x_;
+    T v_;
+};
+
+/**
+ * b != RDF_TRUE
+ */
+class NotTrueConstraint : public NotConstantConstraint<cp::TriStateVar, TriState> {
+public:
+    NotTrueConstraint(Query* query, cp::TriStateVar* b) :
+        NotConstantConstraint(query, b, RDF_TRUE) {}
+};
+
+/**
+ * b != RDF_FALSE
+ */
+class NotFalseConstraint : public NotConstantConstraint<cp::TriStateVar, TriState> {
+public:
+    NotFalseConstraint(Query* query, cp::TriStateVar* b) :
+        NotConstantConstraint(query, b, RDF_FALSE) {}
 };
 
 /**
@@ -46,66 +118,41 @@ private:
 };
 
 /**
- * Restrict domain to a specified range
+ * Restrict domain to a specified range if b is RDF_TRUE or RDF_FALSE, or
+ * outside the range if b is RDF_ERROR.
  */
 class InRangeConstraint : public cp::Constraint {
 public:
-    InRangeConstraint(Query* query, cp::RDFVar* x, ValueRange rng) :
-        Constraint(query->solver(), PRIOR_HIGH), x_(x), rng_(rng) {}
-    bool post() {
-        return x_->updateMin(rng_.from) && x_->updateMax(rng_.to);
-    }
-
-private:
-    cp::RDFVar* x_;
-    ValueRange rng_;
-};
-
-/**
- * Restrict domain to a set of ranges
- */
-class InRangesConstraint : public cp::Constraint {
-public:
-    InRangesConstraint(Query* query, cp::RDFVar* x,
-                       std::initializer_list<ValueRange> ranges) :
-        Constraint(query->solver(), PRIOR_HIGH), x_(x), ranges_(ranges) {}
-    bool post() {
-        x_->clearMarks();
-        for(ValueRange rng : ranges_) {
-            for(Value::id_t id : rng)
-                x_->mark(id);
+    InRangeConstraint(Query* query, cp::RDFVar* x, ValueRange rng,
+                      cp::TriStateVar* b) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), rng_(rng), b_(b) {
+        if(!rng.empty()) {
+            x->registerMin(this);
+            x->registerMax(this);
+            b->registerChange(this);
         }
-        return x_->restrictToMarks();
     }
-
-private:
-    cp::RDFVar* x_;
-    std::initializer_list<ValueRange> ranges_;
-};
-
-/**
- * Restrict domain to values that are comparable in SPARQL filters
- * (i.e., simple literals, typed strings, booleans, numbers and dates)
- */
-class ComparableConstraint : public InRangeConstraint {
-public:
-    ComparableConstraint(Query* query, cp::RDFVar* x) :
-        InRangeConstraint(query, x,
-                          query->store()->range(Value::CAT_SIMPLE_LITERAL,
-                                                Value::CAT_DATETIME)) {}
-};
-
-/**
- * Remove a specified range from a domain
- */
-class NotInRangeConstraint : public cp::Constraint {
-public:
-    NotInRangeConstraint(Query* query, cp::RDFVar* x, ValueRange rng) :
-        Constraint(query->solver(), PRIOR_HIGH), x_(x), rng_(rng) {}
-    bool post() {
-        for(Value::id_t id : rng_) {
-            if(!x_->remove(id))
-                return false;
+    bool post() override {
+        if(rng_.empty())
+            return b_->bind(RDF_ERROR);
+        else
+            return propagate();
+    }
+    bool propagate() override {
+        if(x_->min() >= rng_.from && x_->max() <= rng_.to) {
+            domcheck(b_->remove(RDF_ERROR));
+            done_ = true;
+        } else if(x_->max() < rng_.from || x_->min() > rng_.to) {
+            domcheck(b_->bind(RDF_ERROR));
+            done_ = true;
+        } else if(!b_->contains(RDF_ERROR)) {
+            domcheck(x_->updateMin(rng_.from));
+            domcheck(x_->updateMax(rng_.to));
+            done_ = true;
+        } else if(b_->bound() && b_->value() == RDF_ERROR) {
+            for(Value::id_t id : rng_)
+                domcheck(x_->remove(id));
+            done_ = true;
         }
         return true;
     }
@@ -113,34 +160,77 @@ public:
 private:
     cp::RDFVar* x_;
     ValueRange rng_;
+    cp::TriStateVar* b_;
 };
 
 /**
- * x >= v
+ * x >= v <=> b (do nothing on error)
  */
 class ConstGEConstraint : public cp::Constraint {
 public:
-    ConstGEConstraint(Query* query, cp::RDFVar* x, Value::id_t v) :
-        Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v) {}
-    bool post() { return x_->updateMin(v_); }
+    ConstGEConstraint(Query* query, cp::RDFVar* x, Value::id_t v,
+                      cp::TriStateVar* b) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v), b_(b) {
+        x_->registerMin(this);
+        x_->registerMax(this);
+        b_->registerChange(this);
+    }
+    bool propagate() override {
+        if(x_->min() >= v_) {
+            domcheck(b_->remove(RDF_FALSE));
+            done_ = true;
+        } else if(x_->max() < v_) {
+            domcheck(b_->remove(RDF_TRUE));
+            done_ = true;
+        } else if(b_->bound() && b_->value() == RDF_TRUE) {
+            domcheck(x_->updateMin(v_));
+            done_ = true;
+        } else if(b_->bound() && b_->value() == RDF_FALSE) {
+            domcheck(x_->updateMax(v_ - 1));
+            done_ = true;
+        }
+        return true;
+    }
 
 private:
     cp::RDFVar* x_;
     Value::id_t v_;
+    cp::TriStateVar* b_;
 };
 
 /**
- * x <= v
+ * x <= v <=> b (do nothing on error)
  */
 class ConstLEConstraint : public cp::Constraint {
 public:
-    ConstLEConstraint(Query* query, cp::RDFVar* x, Value::id_t v) :
-        Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v) {}
-    bool post() { return x_->updateMax(v_); }
+    ConstLEConstraint(Query* query, cp::RDFVar* x, Value::id_t v,
+                      cp::TriStateVar* b) :
+        Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v), b_(b) {
+        x_->registerMin(this);
+        x_->registerMax(this);
+        b_->registerChange(this);
+    }
+    bool propagate() override {
+        if(x_->max() <= v_) {
+            domcheck(b_->remove(RDF_FALSE));
+            done_ = true;
+        } else if(x_->min() > v_) {
+            domcheck(b_->remove(RDF_TRUE));
+            done_ = true;
+        } else if(b_->bound() && b_->value() == RDF_TRUE) {
+            domcheck(x_->updateMax(v_));
+            done_ = true;
+        } else if(b_->bound() && b_->value() == RDF_FALSE) {
+            domcheck(x_->updateMin(v_ + 1));
+            done_ = true;
+        }
+        return true;
+    }
 
 private:
     cp::RDFVar* x_;
     Value::id_t v_;
+    cp::TriStateVar* b_;
 };
 
 }

@@ -25,16 +25,17 @@
 namespace castor {
 
 /**
- * Generic filter constraint
+ * Generic filter constraint: b = EBV(expr).
  */
 class FilterConstraint : public cp::Constraint {
 public:
-    FilterConstraint(Query* query, Expression* expr);
+    FilterConstraint(Query* query, Expression* expr, cp::TriStateVar* b);
     bool propagate();
 
 private:
     Store*      store_; //!< The store containing the values
     Expression* expr_;  //!< The expression
+    cp::TriStateVar* b_; //!< The truth value of the expression
 };
 
 }

@@ -59,6 +59,14 @@ public:
     Trail& trail() { return trail_; }
 
     /**
+     * Take ownership of a variable.
+     * The variable will be deleted in the destructor of the solver.
+     *
+     * @param x variable to collect
+     */
+    void collect(Trailable* x) { collectVars_.push_back(x); }
+
+    /**
      * Adds a static constraint.
      * The solver takes ownership of the constraint.
      *
@@ -168,6 +176,11 @@ private:
      * Trail.
      */
     Trail trail_;
+
+    /**
+     * Variables to delete in the destructor.
+     */
+    std::vector<Trailable*> collectVars_;
 
     /**
      * Current active subtree.

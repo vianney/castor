@@ -68,11 +68,11 @@ public:
     /**
      * @return the lower bound
      */
-    T min() const { return minVal_ + ffs(domain_) - 1; }
+    T min() const { return static_cast<T>(minVal_ + ffs(domain_) - 1); }
     /**
      * @return the upper bound
      */
-    T max() const { return minVal_ + fls(domain_); }
+    T max() const { return static_cast<T>(minVal_ + fls(domain_)); }
     // FIXME: why not -1??
 
     /**
@@ -231,6 +231,33 @@ std::ostream& operator<<(std::ostream& out, const SmallVariable<T>& x);
 
 
 /**
+ * Special case: a variable from an enumeration.
+ * @param E the enumeration type
+ * @param N the number of items in the enumeration
+ */
+template<class E, int N>
+class SmallEnumVariable : public SmallVariable<E> {
+public:
+    /**
+     * Construct a variable.
+     *
+     * @param solver attached solver
+     */
+    SmallEnumVariable(Solver* solver) :
+        SmallVariable<E>(solver, static_cast<E>(0), static_cast<E>(N-1)) {}
+
+    /**
+     * Construct a constant.
+     *
+     * @param solver attached solver
+     * @param value constant value
+     */
+    SmallEnumVariable(Solver* solver, E value) :
+        SmallVariable<E>(solver, value, value) {}
+};
+
+
+/**
  * Special case: boolean variable.
  */
 class BooleanVariable : public SmallVariable<int> {
@@ -241,6 +268,14 @@ public:
      * @param solver attached solver
      */
     BooleanVariable(Solver* solver) : SmallVariable(solver, 0, 1) {}
+    /**
+     * Construct a boolean constant.
+     *
+     * @param solver attached solver
+     * @param value constant value
+     */
+    BooleanVariable(Solver *solver, bool value) :
+        SmallVariable(solver, value ? 1 : 0, value ? 1 : 0) {}
 
     bool contains(bool v) const { return SmallVariable::contains(v ? 1 : 0); }
     bool value   ()       const { return SmallVariable::min     ();          }

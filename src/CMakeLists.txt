@@ -33,6 +33,8 @@ set(CASTOR_SRCS
     store/triplecache.h
     store/triplecache.cpp
     constraints/unary.h
+    constraints/bool.h
+    constraints/bool.cpp
     constraints/triple.h
     constraints/triple.cpp
     constraints/fallback.h

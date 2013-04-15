@@ -25,6 +25,7 @@
 #include "query.h"
 #include "constraints/fallback.h"
 #include "constraints/unary.h"
+#include "constraints/bool.h"
 #include "constraints/compare.h"
 
 namespace castor {
@@ -73,6 +74,7 @@ VariableExpression::VariableExpression(Variable* variable) :
         Expression(variable->query()), variable_(variable) {
     vars_ += variable;
 }
+
 BoundExpression::BoundExpression(Variable* variable) :
         Expression(variable->query()), variable_(variable) {
     vars_ += variable;
@@ -89,8 +91,7 @@ RegExExpression::RegExExpression(Expression* text, Expression* pattern,
 RegExExpression::~RegExExpression() {
     delete text_;
     delete pattern_;
-    if(flags_ != nullptr)
-        delete flags_;
+    delete flags_;
 }
 
 //CastExpression::CastExpression(Value::Type target, Expression* arg) :
@@ -104,43 +105,29 @@ RegExExpression::~RegExExpression() {
 ////////////////////////////////////////////////////////////////////////////////
 // Optimzing expressions
 
-Expression* BangExpression::optimize() {
-    UnaryExpression::optimize();
-    if(SameTermExpression* e = dynamic_cast<SameTermExpression*>(arg_)) {
-        Expression* result = new DiffTermExpression(std::move(*e));
-        delete this;
-        return result;
-    }
-    if(DiffTermExpression* e = dynamic_cast<DiffTermExpression*>(arg_)) {
-        Expression* result = new SameTermExpression(std::move(*e));
-        delete this;
-        return result;
-    }
-    return this;
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // Evaluation functions
 
-int Expression::evaluateEBV(Value& buffer) {
+TriState Expression::evaluateEBV(Value& buffer) {
     if(!evaluate(buffer))
-        return -1;
+        return RDF_ERROR;
     buffer.ensureInterpreted(*query_->store());
     if(buffer.isBoolean()) {
-        return buffer.boolean() ? 1 : 0;
+        return buffer.boolean() ? RDF_TRUE : RDF_FALSE;
     } else if(buffer.isInteger()) {
-        return buffer.integer() ? 1 : 0;
+        return buffer.integer() ? RDF_TRUE : RDF_FALSE;
     } else if(buffer.isFloating()) {
-        return std::isnan(buffer.floating()) || buffer.floating() == .0 ? 0 : 1;
+        return std::isnan(buffer.floating()) || buffer.floating() == .0 ?
+                    RDF_FALSE : RDF_TRUE;
     } else if(buffer.isDecimal()) {
-        return buffer.decimal().isZero() ? 0 : 1;
+        return buffer.decimal().isZero() ? RDF_FALSE : RDF_TRUE;
     } else if(buffer.isPlain() || buffer.isXSDString()) {
         // TODO: we only need lexical to be direct
         buffer.ensureDirectStrings(*query_->store());
-        return buffer.lexical().length() == 0 ? 0 : 1;
+        return buffer.lexical().length() == 0 ? RDF_FALSE : RDF_TRUE;
     } else {
-        return -1;
+        return RDF_ERROR;
     }
 }
 
@@ -158,10 +145,10 @@ bool VariableExpression::evaluate(Value& result) {
 }
 
 bool BangExpression::evaluate(Value& result) {
-    int ebv = arg_->evaluateEBV(result);
-    if(ebv == -1)
+    TriState ebv = arg_->evaluateEBV(result);
+    if(ebv == RDF_ERROR)
         return false;
-    result.fillBoolean(!ebv);
+    result.fillBoolean(ebv == RDF_TRUE ? false : true);
     return true;
 }
 
@@ -244,11 +231,11 @@ bool DatatypeExpression::evaluate(Value& result) {
 }
 
 bool OrExpression::evaluate(Value& result) {
-    int left = arg1_->evaluateEBV(result);
-    int right = arg2_->evaluateEBV(result);
-    if(left == 1 || right == 1)
+    TriState left = arg1_->evaluateEBV(result);
+    TriState right = arg2_->evaluateEBV(result);
+    if(left == RDF_TRUE || right == RDF_TRUE)
         result.fillBoolean(true);
-    else if(left == 0 && right == 0)
+    else if(left == RDF_FALSE && right == RDF_FALSE)
         result.fillBoolean(false);
     else
         return false;
@@ -256,11 +243,11 @@ bool OrExpression::evaluate(Value& result) {
 }
 
 bool AndExpression::evaluate(Value& result) {
-    int left = arg1_->evaluateEBV(result);
-    int right = arg2_->evaluateEBV(result);
-    if(left == 0 || right == 0)
+    TriState left = arg1_->evaluateEBV(result);
+    TriState right = arg2_->evaluateEBV(result);
+    if(left == RDF_FALSE || right == RDF_FALSE)
         result.fillBoolean(false);
-    else if(left == 1 && right == 1)
+    else if(left == RDF_TRUE && right == RDF_TRUE)
         result.fillBoolean(true);
     else
         return false;
@@ -453,16 +440,6 @@ bool SameTermExpression::evaluate(Value& result) {
     return true;
 }
 
-bool DiffTermExpression::evaluate(Value& result) {
-    Value right;
-    if(!arg1_->evaluate(result) || !arg2_->evaluate(right))
-        return false;
-    result.ensureLexical();
-    right.ensureLexical();
-    result.fillBoolean(result != right);
-    return true;
-}
-
 bool LangMatchesExpression::evaluate(Value& result) {
     Value right;
     if(!arg1_->evaluate(result) || !result.isSimple() ||
@@ -523,177 +500,215 @@ bool RegExExpression::evaluate(Value& result) {
 ////////////////////////////////////////////////////////////////////////////////
 // Posting constraints
 
-void Expression::post(cp::Subtree& sub) {
-    sub.add(new FilterConstraint(query_, this));
+void Expression::post(cp::Subtree& sub, cp::TriStateVar* b) {
+    sub.add(new FilterConstraint(query_, this, b));
 }
 
-void AndExpression::post(cp::Subtree& sub) {
-    arg1_->post(sub);
-    arg2_->post(sub);
+void BangExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
+    cp::TriStateVar* x = new cp::TriStateVar(query_->solver());
+    query_->solver()->collect(x);
+    arg_->post(sub, x);
+    sub.add(new NotConstraint(query_, x, b));
 }
 
-void EqualityExpression::post(cp::Subtree& sub) {
+void OrExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
+    cp::TriStateVar* b1 = new cp::TriStateVar(query_->solver());
+    cp::TriStateVar* b2 = new cp::TriStateVar(query_->solver());
+    query_->solver()->collect(b1);
+    query_->solver()->collect(b2);
+    arg1_->post(sub, b1);
+    arg2_->post(sub, b2);
+    sub.add(new OrConstraint(query_, b1, b2, b));
+}
+
+void AndExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
+    cp::TriStateVar* b1 = new cp::TriStateVar(query_->solver());
+    cp::TriStateVar* b2 = new cp::TriStateVar(query_->solver());
+    query_->solver()->collect(b1);
+    query_->solver()->collect(b2);
+    arg1_->post(sub, b1);
+    arg2_->post(sub, b2);
+    sub.add(new AndConstraint(query_, b1, b2, b));
+}
+
+void EqualityExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
     VariableExpression* var1 = dynamic_cast<VariableExpression*>(arg1_);
     VariableExpression* var2 = dynamic_cast<VariableExpression*>(arg2_);
     if(var1 && var2) {
         cp::RDFVar* x1 = var1->variable()->cp();
         cp::RDFVar* x2 = var2->variable()->cp();
-        postVars(sub, x1, x2);
+        postVars(sub, x1, x2, b);
     } else if(var1 && arg2_->isConstant()) {
         Value val;
         if(arg2_->evaluate(val)) {
             cp::RDFVar* x = var1->variable()->cp();
             query_->store()->resolve(val);
-            postConst(sub, x, val);
+            val.ensureInterpreted(*query_->store());
+            postConst(sub, x, val, b);
         } else {
-            sub.add(new FalseConstraint(query_));
+            sub.add(new ErrorConstraint(query_, b));
         }
     } else if(var2 && arg1_->isConstant()) {
         Value val;
         if(arg1_->evaluate(val)) {
             cp::RDFVar* x = var2->variable()->cp();
             query_->store()->resolve(val);
-            postConst(sub, x, val);
+            val.ensureInterpreted(*query_->store());
+            postConst(sub, x, val, b);
         } else {
-            sub.add(new FalseConstraint(query_));
+            sub.add(new ErrorConstraint(query_, b));
         }
     } else {
-        Expression::post(sub);
-    }
-}
-void EqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarEqConstraint(query_, x1, x2));
-}
-void EqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
-    sub.add(new InRangeConstraint(query_, x, query_->store()->eqClass(v)));
-}
-void NEqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    /* In class CUSTOM, either two values are equal (and thus return false) or
-     * the comparison produces a type error (making the constraint false).
-     */
-    Value::id_t upper = query_->store()->range(Value::CAT_OTHER).from - 1;
-    sub.add(new ConstLEConstraint(query_, x1, upper));
-    sub.add(new ConstLEConstraint(query_, x2, upper));
-    sub.add(new VarDiffConstraint(query_, x1, x2));
-}
-void NEqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
-    if(v.isLiteral() && v.isComparable()) {
-        sub.add(new InRangesConstraint(query_, x,
-            { query_->store()->range(Value::CAT_BLANK, Value::CAT_URI),
-              query_->store()->range(v.category()) }));
-    } else {
-        sub.add(new InRangeConstraint(query_, x,
-                        query_->store()->range(Value::CAT_BLANK,
-                                               Value::CAT_URI)));
-    }
-    sub.add(new NotInRangeConstraint(query_, x, query_->store()->eqClass(v)));
-}
-void SameTermExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarSameTermConstraint(query_, x1, x2));
-}
-void SameTermExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
-    if(v.id() == 0) {
-        sub.add(new FalseConstraint(query_));
-    } else {
-        ValueRange rng = {v.id(), v.id()};
-        sub.add(new InRangeConstraint(query_, x, rng));
-    }
-}
-void DiffTermExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarDiffTermConstraint(query_, x1, x2));
-}
-void DiffTermExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v) {
-    if(v.id() != 0) {
-        ValueRange rng = {v.id(), v.id()};
-        sub.add(new NotInRangeConstraint(query_, x, rng));
+        Expression::post(sub, b);
     }
 }
 
-void InequalityExpression::post(cp::Subtree& sub) {
+void EqExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                            cp::TriStateVar* b) {
+    sub.add(new VarEqConstraint(query_, x1, x2, b));
+}
+void EqExpression::postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v,
+                             cp::TriStateVar* b) {
+    ValueRange rng = query_->store()->eqClass(v);
+    if(rng.empty()) {
+        // No value equivalent to v2 exists in the store
+        Value::Category cat = v.category();
+        if(cat <= Value::CAT_URI) {
+            sub.add(new FalseConstraint(query_, b)); // Always comparable
+        } else if(cat > Value::CAT_DATETIME) {
+            sub.add(new ErrorConstraint(query_, b)); // Always type error
+        } else {
+            sub.add(new NotTrueConstraint(query_, b));
+            sub.add(new InRangeConstraint(query_, x,
+                                          query_->store()->range(cat), b));
+        }
+    } else {
+        cp::RDFVar* x2 = new cp::RDFVar(query_->solver(), rng.from, rng.from);
+        query_->solver()->collect(x2);
+        sub.add(new VarEqConstraint(query_, x, x2, b));
+    }
+}
+
+void NEqExpression::post(cp::Subtree &sub, cp::TriStateVar *b) {
+    cp::TriStateVar* b2 = new cp::TriStateVar(query_->solver());
+    query_->solver()->collect(b2);
+    EqExpression::post(sub, b2);
+    sub.add(new NotConstraint(query_, b2, b));
+}
+
+void SameTermExpression::postVars(cp::Subtree &sub, cp::RDFVar *x1,
+                                  cp::RDFVar *x2, cp::TriStateVar *b) {
+    sub.add(new VarSameTermConstraint(query_, x1, x2, b));
+}
+void SameTermExpression::postConst(cp::Subtree &sub, cp::RDFVar *x, Value &v,
+                                   cp::TriStateVar *b) {
+    if(v.validId()) {
+        cp::RDFVar* x2 = new cp::RDFVar(query_->solver(), v.id(), v.id());
+        query_->solver()->collect(x2);
+        sub.add(new VarSameTermConstraint(query_, x, x2, b));
+    } else {
+        sub.add(new FalseConstraint(query_, b));
+    }
+}
+
+void InequalityExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
     VariableExpression* var1 = dynamic_cast<VariableExpression*>(arg1_);
     VariableExpression* var2 = dynamic_cast<VariableExpression*>(arg2_);
     if(var1 && var2) {
         cp::RDFVar* x1 = var1->variable()->cp();
         cp::RDFVar* x2 = var2->variable()->cp();
-        sub.add(new ComparableConstraint(query_, x1));
-        sub.add(new ComparableConstraint(query_, x2));
-        sub.add(new SameClassConstraint(query_, x1, x2));
-        postVars(sub, x1, x2);
+        postVars(sub, x1, x2, b);
     } else if(var1 && arg2_->isConstant()) {
         Value val;
-        if(arg2_->evaluate(val) && val.isComparable()) {
+        if(arg2_->evaluate(val)) {
             cp::RDFVar* x = var1->variable()->cp();
             query_->store()->resolve(val);
+            val.ensureInterpreted(*query_->store());
             sub.add(new InRangeConstraint(query_, x,
-                        query_->store()->range(val.category())));
-            postConst(sub, x, val);
+                        query_->store()->range(val.category()), b));
+            postConst(sub, x, val, b);
         } else {
-            sub.add(new FalseConstraint(query_));
+            sub.add(new ErrorConstraint(query_, b));
         }
     } else if(var2 && arg1_->isConstant()) {
         Value val;
-        if(arg1_->evaluate(val) && val.isComparable()) {
+        if(arg1_->evaluate(val)) {
             cp::RDFVar* x = var2->variable()->cp();
             query_->store()->resolve(val);
+            val.ensureInterpreted(*query_->store());
             sub.add(new InRangeConstraint(query_, x,
-                        query_->store()->range(val.category())));
-            postConst(sub, val, x);
+                                          query_->store()->range(val.category()),
+                                          b));
+            postConst(sub, val, x, b);
         } else {
-            sub.add(new FalseConstraint(query_));
+            sub.add(new ErrorConstraint(query_, b));
         }
     } else {
-        Expression::post(sub);
+        Expression::post(sub, b);
     }
 }
-void LTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarLessConstraint(query_, x1, x2, false));
+
+void LTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                            cp::TriStateVar* b) {
+    sub.add(new VarLessConstraint(query_, x1, x2, b, false));
 }
-void LTExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
+void LTExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                             cp::TriStateVar* b) {
     sub.add(new ConstLEConstraint(query_, x1,
-                        query_->store()->eqClass(v2).from - 1));
+                        query_->store()->eqClass(v2).from - 1, b));
 }
-void LTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
+void LTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                             cp::TriStateVar* b) {
     sub.add(new ConstGEConstraint(query_, x2,
-                        query_->store()->eqClass(v1).to + 1));
+                        query_->store()->eqClass(v1).to + 1, b));
 }
 
 
-void GTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarLessConstraint(query_, x2, x1, false));
+void GTExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                            cp::TriStateVar* b) {
+    sub.add(new VarLessConstraint(query_, x2, x1, b, false));
 }
-void GTExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
+void GTExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                             cp::TriStateVar* b) {
     sub.add(new ConstGEConstraint(query_, x1,
-                        query_->store()->eqClass(v2).to + 1));
+                        query_->store()->eqClass(v2).to + 1, b));
 }
-void GTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
+void GTExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                             cp::TriStateVar* b) {
     sub.add(new ConstLEConstraint(query_, x2,
-                        query_->store()->eqClass(v1).from - 1));
+                        query_->store()->eqClass(v1).from - 1, b));
 }
 
 
-void LEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarLessConstraint(query_, x1, x2, true));
+void LEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                            cp::TriStateVar* b) {
+    sub.add(new VarLessConstraint(query_, x1, x2, b, true));
 }
-void LEExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
+void LEExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                             cp::TriStateVar* b) {
     sub.add(new ConstLEConstraint(query_, x1,
-                        query_->store()->eqClass(v2).to));
+                        query_->store()->eqClass(v2).to, b));
 }
-void LEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
+void LEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                             cp::TriStateVar* b) {
     sub.add(new ConstGEConstraint(query_, x2,
-                        query_->store()->eqClass(v1).from));
+                        query_->store()->eqClass(v1).from, b));
 }
 
 
-void GEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2) {
-    sub.add(new VarLessConstraint(query_, x2, x1, true));
+void GEExpression::postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
+                            cp::TriStateVar* b) {
+    sub.add(new VarLessConstraint(query_, x2, x1, b, true));
 }
-void GEExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2) {
+void GEExpression::postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
+                             cp::TriStateVar* b) {
     sub.add(new ConstGEConstraint(query_, x1,
-                        query_->store()->eqClass(v2).from));
+                        query_->store()->eqClass(v2).from, b));
 }
-void GEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2) {
+void GEExpression::postConst(cp::Subtree& sub, Value& v1, cp::RDFVar* x2,
+                             cp::TriStateVar* b) {
     sub.add(new ConstLEConstraint(query_, x2,
-                        query_->store()->eqClass(v1).to));
+                        query_->store()->eqClass(v1).to, b));
 }
 
 }

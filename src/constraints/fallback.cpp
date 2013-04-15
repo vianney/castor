@@ -21,11 +21,13 @@
 
 namespace castor {
 
-FilterConstraint::FilterConstraint(Query* query, Expression* expr) :
+FilterConstraint::FilterConstraint(Query* query, Expression* expr,
+                                   cp::TriStateVar *b) :
         Constraint(query->solver(), PRIOR_MEDIUM),
-        store_(query->store()), expr_(expr) {
+        store_(query->store()), expr_(expr), b_(b) {
     for(Variable* var : expr->variables())
         var->cp()->registerBind(this);
+    b_->registerBind(this);
 }
 
 bool FilterConstraint::propagate() {
@@ -40,23 +42,26 @@ bool FilterConstraint::propagate() {
         else
             unbound = var;
     }
-    done_ = true;
-    if(!unbound) {
-        // all variables are bound -> check
-        return expr_->isTrue();
-    } else {
+    if(unbound == nullptr) {
+        // all variables are bound -> set truth value
+        domcheck(b_->bind(expr_->evaluateEBV()));
+        done_ = true;
+    } else if(b_->bound()) {
         // all variables, except one, are bound -> forward checking
+        TriState ebv = b_->value();
         cp::RDFVar* x = unbound->cp();
         x->clearMarks();
         unsigned n = x->size();
         const Value::id_t* dom = x->domain();
         for(unsigned i = 0; i < n; i++) {
             unbound->valueId(dom[i]);
-            if(expr_->isTrue())
+            if(expr_->evaluateEBV() == ebv)
                 x->mark(dom[i]);
         }
-        return x->restrictToMarks();
+        domcheck(x->restrictToMarks());
+        done_ = true;
     }
+    return true;
 }
 
 }

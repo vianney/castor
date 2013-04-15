@@ -24,92 +24,61 @@
 namespace castor {
 
 /**
- * Variables must take values of the same classes.
- */
-class SameClassConstraint : public cp::Constraint {
-public:
-    SameClassConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
-    bool propagate();
-
-private:
-    Store* store_;
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-};
-
-/**
- * Variable difference constraint x1 != x2
- */
-class VarDiffConstraint : public cp::Constraint {
-public:
-    VarDiffConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
-    bool propagate();
-
-private:
-    Store* store_;
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-};
-
-/**
- * Variable equality constraint x1 = x2
+ * Equality constraint: x1 = x2 <=> b.
+ * If x1 != x2, b is RDF_ERROR if both x1 and x2 are literals of different
+ * categories (or of categories Value::CAT_PLAIN_LANG or Value::CAT_OTHER).
+ * Otherwise, b is RDF_FALSE.
  */
 class VarEqConstraint : public cp::Constraint, cp::TrailListener {
 public:
-    VarEqConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restored(cp::Trailable* obj);
-    bool post();
-    bool propagate();
+    VarEqConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2,
+                    cp::TriStateVar* b);
+    void restored(cp::Trailable* obj) override;
+    bool post() override;
+    bool propagate() override;
 
 private:
     Store* store_;
     cp::RDFVar* x1_;
     cp::RDFVar* x2_;
+    cp::TriStateVar* b_;
     unsigned s1_, s2_; //!< previous size of the domain
 };
 
 /**
- * Variable inequality constraint x1 {<,<=} x2
+ * Inequality constraint: x1 {<,<=} x2 <=> b.
+ * If x1 and x2 are not comparable, b is RDF_ERROR.
  */
 class VarLessConstraint : public cp::Constraint {
 public:
     VarLessConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2,
-                      bool equality);
-    bool propagate();
+                      cp::TriStateVar* b, bool equality);
+    bool propagate() override;
 
 private:
     Store* store_;
     cp::RDFVar* x1_;
     cp::RDFVar* x2_;
-    bool equality; //!< true for <=, false for <
+    cp::TriStateVar* b_;
+    bool equality_; //!< true for <=, false for <
 };
 
 /**
- * Variable difference in sameTerm sense
- */
-class VarDiffTermConstraint : public cp::Constraint {
-public:
-    VarDiffTermConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
-    bool propagate();
-
-private:
-    cp::RDFVar* x1_;
-    cp::RDFVar* x2_;
-};
-
-/**
- * Variable equality in sameTerm sense
+ * Equality in sameTerm sense: sameTerm(x1, x2) <=> b.
+ * No type error may occur, so b is never RDF_ERROR.
  */
 class VarSameTermConstraint : public cp::Constraint, cp::TrailListener {
 public:
-    VarSameTermConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2);
-    void restored(cp::Trailable* obj);
-    bool post();
-    bool propagate();
+    VarSameTermConstraint(Query* query, cp::RDFVar* x1, cp::RDFVar* x2,
+                          cp::TriStateVar* b);
+    void restored(cp::Trailable* obj) override;
+    bool post() override;
+    bool propagate() override;
 
 private:
     cp::RDFVar* x1_;
     cp::RDFVar* x2_;
+    cp::TriStateVar* b_;
     unsigned s1_, s2_; //!< previous size of the domain
 };
 

@@ -133,8 +133,11 @@ Pattern* FilterPattern::optimize() {
 void FilterPattern::init() {
     subpattern_->init();
 #ifndef CASTOR_NOFILTERS
-    if(BasicPattern* subpat = dynamic_cast<BasicPattern*>(subpattern_))
-        condition_->post(subpat->sub_);
+    if(BasicPattern* subpat = dynamic_cast<BasicPattern*>(subpattern_)) {
+        cp::TriStateVar* b = new cp::TriStateVar(query_->solver(), RDF_TRUE);
+        query_->solver()->collect(b);
+        condition_->post(subpat->sub_, b);
+    }
 #endif
 }
 

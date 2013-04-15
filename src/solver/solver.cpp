@@ -37,6 +37,8 @@ Solver::Solver() {
 Solver::~Solver() {
     for(Constraint* c : constraints_)
         delete c;
+    for(Trailable* x : collectVars_)
+        delete x;
 }
 
 void Solver::add(Constraint* c) {
