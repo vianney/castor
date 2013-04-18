@@ -350,14 +350,14 @@ Store::TripleRange::TripleRange(Store* store, Triple from, Triple to,
                (from[1] != to[1]) << 1 |
                (from[2] != to[2]) << 2) {
         case 0: // (s,p,o)
-        case 4: // (s,p,*)
-        case 6: // (s,*,*)
-        case 7: // (*,*,*)
-            order = TripleOrder::SPO;
-            break;
         case 1: // (*,p,o)
         case 5: // (*,p,*)
+        case 7: // (*,*,*)
             order = TripleOrder::POS;
+            break;
+        case 4: // (s,p,*)
+        case 6: // (s,*,*)
+            order = TripleOrder::SPO;
             break;
         case 2: // (s,*,o)
         case 3: // (*,*,o)
