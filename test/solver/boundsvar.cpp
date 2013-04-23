@@ -69,14 +69,14 @@ protected:
     typedef BoundsDecisionVariable<unsigned> Var;
     MockSolver solver;
     Var x, y;
-    MockConstraint xBind, xMin, xMax, yBind, yMin, yMax;
+    MockConstraint xBind, xBounds, yBind, yBounds;
 
     //! Upper bound on the values in any domain, will never appear in any of them.
     static const unsigned MAXVAL = 20;
 
     SolverBoundsVarTest() : x(&solver, 0, 9), y(&solver, 5, 9),
-        xBind(&solver), xMin(&solver), xMax(&solver),
-        yBind(&solver), yMin(&solver), yMax(&solver) {}
+        xBind(&solver), xBounds(&solver),
+        yBind(&solver), yBounds(&solver) {}
 
     virtual void SetUp() {
         EXPECT_INITIAL_STATE;
@@ -87,11 +87,9 @@ protected:
      */
     void registerConstraints() {
         x.registerBind(&xBind);
-        x.registerMin(&xMin);
-        x.registerMax(&xMax);
+        x.registerBounds(&xBounds);
         y.registerBind(&yBind);
-        y.registerMin(&yMin);
-        y.registerMax(&yMax);
+        y.registerBounds(&yBounds);
     }
 };
 
@@ -128,11 +126,9 @@ TEST_F(SolverBoundsVarTest, Restore) {
 TEST_F(SolverBoundsVarTest, Label) {
     registerConstraints();
     EXPECT_CALL(xBind,   propagate());
-    EXPECT_CALL(xMin,    propagate()).Times(AtMost(1));
-    EXPECT_CALL(xMax,    propagate()).Times(AtMost(1));
+    EXPECT_CALL(xBounds, propagate()).Times(AtMost(1));
     EXPECT_CALL(yBind,   propagate());
-    EXPECT_CALL(yMin,    propagate()).Times(AtMost(1));
-    EXPECT_CALL(yMax,    propagate()).Times(AtMost(1));
+    EXPECT_CALL(yBounds, propagate()).Times(AtMost(1));
 
     x.label();
     EXPECT_TRUE(x.bound());
@@ -182,11 +178,9 @@ TEST_F(SolverBoundsVarTest, UnLabel) {
 TEST_F(SolverBoundsVarTest, Bind) {
     registerConstraints();
     EXPECT_CALL(xBind, propagate());
-    EXPECT_CALL(xMin, propagate());
-    EXPECT_CALL(xMax, propagate());
+    EXPECT_CALL(xBounds, propagate());
     EXPECT_CALL(yBind, propagate());
-    EXPECT_CALL(yMin, propagate());
-    EXPECT_CALL(yMax, propagate());
+    EXPECT_CALL(yBounds, propagate());
 
     EXPECT_TRUE(x.bind(5));
     EXPECT_DOMAIN(x, 5u, 5u);
@@ -207,11 +201,9 @@ TEST_F(SolverBoundsVarTest, Bind) {
 TEST_F(SolverBoundsVarTest, BindMin) {
     registerConstraints();
     EXPECT_CALL(xBind,   propagate());
-    EXPECT_CALL(xMin,    propagate()).Times(0);
-    EXPECT_CALL(xMax,    propagate());
+    EXPECT_CALL(xBounds, propagate());
     EXPECT_CALL(yBind,   propagate());
-    EXPECT_CALL(yMin,    propagate()).Times(0);
-    EXPECT_CALL(yMax,    propagate());
+    EXPECT_CALL(yBounds, propagate());
 
     EXPECT_TRUE(x.bind(0));
     EXPECT_DOMAIN(x, 0u, 0u);
@@ -233,11 +225,9 @@ TEST_F(SolverBoundsVarTest, BindMin) {
 TEST_F(SolverBoundsVarTest, BindMax) {
     registerConstraints();
     EXPECT_CALL(xBind,   propagate());
-    EXPECT_CALL(xMin,    propagate());
-    EXPECT_CALL(xMax,    propagate()).Times(0);
+    EXPECT_CALL(xBounds, propagate());
     EXPECT_CALL(yBind,   propagate());
-    EXPECT_CALL(yMin,    propagate());
-    EXPECT_CALL(yMax,    propagate()).Times(0);
+    EXPECT_CALL(yBounds, propagate());
 
     EXPECT_TRUE(x.bind(9));
     EXPECT_DOMAIN(x, 9u, 9u);
@@ -266,11 +256,9 @@ TEST_F(SolverBoundsVarTest, BindFail) {
 TEST_F(SolverBoundsVarTest, UpdateMin) {
     registerConstraints();
     EXPECT_CALL(xBind,   propagate()).Times(0);
-    EXPECT_CALL(xMin,    propagate());
-    EXPECT_CALL(xMax,    propagate()).Times(0);
+    EXPECT_CALL(xBounds, propagate());
     EXPECT_CALL(yBind,   propagate()).Times(0);
-    EXPECT_CALL(yMin,    propagate());
-    EXPECT_CALL(yMax,    propagate()).Times(0);
+    EXPECT_CALL(yBounds, propagate());
 
     EXPECT_TRUE(x.updateMin(0));
     EXPECT_INITIAL_STATE;
@@ -298,11 +286,9 @@ TEST_F(SolverBoundsVarTest, UpdateMin) {
 TEST_F(SolverBoundsVarTest, UpdateMinBind) {
     registerConstraints();
     EXPECT_CALL(xBind,   propagate());
-    EXPECT_CALL(xMin,    propagate());
-    EXPECT_CALL(xMax,    propagate()).Times(0);
+    EXPECT_CALL(xBounds, propagate());
     EXPECT_CALL(yBind,   propagate());
-    EXPECT_CALL(yMin,    propagate());
-    EXPECT_CALL(yMax,    propagate()).Times(0);
+    EXPECT_CALL(yBounds, propagate());
 
     EXPECT_TRUE(x.updateMin(9));
     EXPECT_DOMAIN(x, 9u, 9u);
@@ -317,11 +303,9 @@ TEST_F(SolverBoundsVarTest, UpdateMinBind) {
 TEST_F(SolverBoundsVarTest, UpdateMax) {
     registerConstraints();
     EXPECT_CALL(xBind,   propagate()).Times(0);
-    EXPECT_CALL(xMin,    propagate()).Times(0);
-    EXPECT_CALL(xMax,    propagate());
+    EXPECT_CALL(xBounds, propagate());
     EXPECT_CALL(yBind,   propagate()).Times(0);
-    EXPECT_CALL(yMin,    propagate()).Times(0);
-    EXPECT_CALL(yMax,    propagate());
+    EXPECT_CALL(yBounds, propagate());
 
     EXPECT_TRUE(x.updateMax(15));
     EXPECT_INITIAL_STATE;
@@ -347,11 +331,9 @@ TEST_F(SolverBoundsVarTest, UpdateMax) {
 TEST_F(SolverBoundsVarTest, UpdateMaxBind) {
     registerConstraints();
     EXPECT_CALL(xBind,   propagate());
-    EXPECT_CALL(xMin,    propagate()).Times(0);
-    EXPECT_CALL(xMax,    propagate());
+    EXPECT_CALL(xBounds, propagate());
     EXPECT_CALL(yBind,   propagate());
-    EXPECT_CALL(yMin,    propagate()).Times(0);
-    EXPECT_CALL(yMax,    propagate());
+    EXPECT_CALL(yBounds, propagate());
 
     EXPECT_TRUE(x.updateMax(0));
     EXPECT_DOMAIN(x, 0u, 0u);

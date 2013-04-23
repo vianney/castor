@@ -196,10 +196,8 @@ VarLessConstraint::VarLessConstraint(Query* query, cp::RDFVar* x1,
                                      bool equality) :
         Constraint(query->solver(), PRIOR_HIGH),
         store_(query->store()), x1_(x1), x2_(x2), b_(b), equality_(equality) {
-    x1->registerMin(this);
-    x1->registerMax(this);
-    x2->registerMin(this);
-    x2->registerMax(this);
+    x1->registerBounds(this);
+    x2->registerBounds(this);
     b_->registerChange(this);
 }
 

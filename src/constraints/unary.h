@@ -127,8 +127,7 @@ public:
                       cp::TriStateVar* b) :
         Constraint(query->solver(), PRIOR_HIGH), x_(x), rng_(rng), b_(b) {
         if(!rng.empty()) {
-            x->registerMin(this);
-            x->registerMax(this);
+            x->registerBounds(this);
             b->registerChange(this);
         }
     }
@@ -171,8 +170,7 @@ public:
     ConstGEConstraint(Query* query, cp::RDFVar* x, Value::id_t v,
                       cp::TriStateVar* b) :
         Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v), b_(b) {
-        x_->registerMin(this);
-        x_->registerMax(this);
+        x_->registerBounds(this);
         b_->registerChange(this);
     }
     bool propagate() override {
@@ -206,8 +204,7 @@ public:
     ConstLEConstraint(Query* query, cp::RDFVar* x, Value::id_t v,
                       cp::TriStateVar* b) :
         Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v), b_(b) {
-        x_->registerMin(this);
-        x_->registerMax(this);
+        x_->registerBounds(this);
         b_->registerChange(this);
     }
     bool propagate() override {

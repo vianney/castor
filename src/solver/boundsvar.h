@@ -106,20 +106,12 @@ public:
     void registerBind(Constraint* c) { evBind_.push_back(c); }
 
     /**
-     * Register constraint c to the update min event of this variable.
+     * Register constraint c to the update min or max event of this variable.
      * A constraint must not register twice for the same variable.
      *
      * @param c the constraint
      */
-    void registerMin(Constraint* c) { evMin_.push_back(c); }
-
-    /**
-     * Register constraint c to the update max event of this variable.
-     * A constraint must not register twice for the same variable.
-     *
-     * @param c the constraint
-     */
-    void registerMax(Constraint* c) { evMax_.push_back(c); }
+    void registerBounds(Constraint* c) { evBounds_.push_back(c); }
 
 protected:
 
@@ -134,13 +126,9 @@ private:
      */
     std::vector<Constraint*> evBind_;
     /**
-     * List of constraints registered to the update min event
+     * List of constraints registered to the update min/max event
      */
-    std::vector<Constraint*> evMin_;
-    /**
-     * List of constraints registered to the update max event
-     */
-    std::vector<Constraint*> evMax_;
+    std::vector<Constraint*> evBounds_;
 };
 
 /**
@@ -209,8 +197,7 @@ public:
     T    min     ()    const { return BoundsVariable<T>::min(); }
     T    max     ()    const { return BoundsVariable<T>::max(); }
     void registerBind(Constraint* c) { BoundsVariable<T>::registerBind(c); }
-    void registerMin (Constraint* c) { BoundsVariable<T>::registerMin (c); }
-    void registerMax (Constraint* c) { BoundsVariable<T>::registerMax (c); }
+    void registerBounds(Constraint* c) { BoundsVariable<T>::registerBounds(c); }
 
 private:
     /**
@@ -251,14 +238,9 @@ bool BoundsVariable<T>::bind(T v) {
     if(min_ == max_)
         return true;
     modifying();
-    if(v != min_) {
-        min_ = v;
-        solver_->enqueue(evMin_);
-    }
-    if(v != max_) {
-        max_ = v;
-        solver_->enqueue(evMax_);
-    }
+    min_ = v;
+    max_ = v;
+    solver_->enqueue(evBounds_);
     solver_->enqueue(evBind_);
     return true;
 }
@@ -272,7 +254,7 @@ bool BoundsVariable<T>::updateMin(T v) {
     } else if(v > min_) {
         modifying();
         min_ = v;
-        solver_->enqueue(evMin_);
+        solver_->enqueue(evBounds_);
         return true;
     } else {
         return true;
@@ -288,7 +270,7 @@ bool BoundsVariable<T>::updateMax(T v) {
     } else if(v < max_) {
         modifying();
         max_ = v;
-        solver_->enqueue(evMax_);
+        solver_->enqueue(evBounds_);
         return true;
     } else {
         return true;

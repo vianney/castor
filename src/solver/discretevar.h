@@ -197,20 +197,12 @@ public:
     void registerChange(Constraint* c) { evChange_.push_back(c); }
 
     /**
-     * Register constraint c to the update min event of this variable.
+     * Register constraint c to the update min or max event of this variable.
      * A constraint must not register twice for the same variable.
      *
      * @param c the constraint
      */
-    void registerMin(Constraint* c) { evMin_.push_back(c); }
-
-    /**
-     * Register constraint c to the update max event of this variable.
-     * A constraint must not register twice for the same variable.
-     *
-     * @param c the constraint
-     */
-    void registerMax(Constraint* c) { evMax_.push_back(c); }
+    void registerBounds(Constraint* c) { evBounds_.push_back(c); }
 
 private:
     Solver* solver_; //!< attached solver
@@ -263,13 +255,9 @@ private:
      */
     std::vector<Constraint*> evChange_;
     /**
-     * List of constraints registered to the update min event
+     * List of constraints registered to the update min/max event
      */
-    std::vector<Constraint*> evMin_;
-    /**
-     * List of constraints registered to the update max event
-     */
-    std::vector<Constraint*> evMax_;
+    std::vector<Constraint*> evBounds_;
 };
 
 template<class T>
@@ -309,8 +297,7 @@ void DiscreteVariable<T>::reset(Solver *solver) {
     Trailable::reset(&solver->trail());
     evBind_.clear();
     evChange_.clear();
-    evMin_.clear();
-    evMax_.clear();
+    evBounds_.clear();
     size_ = maxVal_ - minVal_ + 1;
     min_ = minVal_;
     max_ = maxVal_;
@@ -388,14 +375,9 @@ bool DiscreteVariable<T>::bind(T v) {
         map_[v-minVal_] = 0;
     }
     size_ = 1;
-    if(v != min_) {
-        min_ = v;
-        solver_->enqueue(evMin_);
-    }
-    if(v != max_) {
-        max_ = v;
-        solver_->enqueue(evMax_);
-    }
+    min_ = v;
+    max_ = v;
+    solver_->enqueue(evBounds_);
     solver_->enqueue(evChange_);
     solver_->enqueue(evBind_);
     assert(min_ == max_ && min_ == value());
@@ -431,11 +413,11 @@ bool DiscreteVariable<T>::remove(T v) {
         }
         if(v == min_) {
             min_++; // not perfect bound
-            solver_->enqueue(evMin_);
+            solver_->enqueue(evBounds_);
         }
         if(v == max_) {
             max_--; // not perfect bound
-            solver_->enqueue(evMax_);
+            solver_->enqueue(evBounds_);
         }
         solver_->enqueue(evChange_);
         assert(size_ > 1 || (min_ == max_ && min_ == value()));
@@ -446,6 +428,8 @@ bool DiscreteVariable<T>::remove(T v) {
 
 template<class T>
 bool DiscreteVariable<T>::restrictToMarks() {
+    if(marked_ == 0)
+        return false;
     unsigned m = marked_;
     T mmin = markedmin_;
     T mmax = markedmax_;
@@ -453,15 +437,10 @@ bool DiscreteVariable<T>::restrictToMarks() {
     if(m != size_) {
         modifying();
         size_ = m;
-        if(m == 0)
-            return false;
-        if(min_ != mmin) {
+        if(min_ != mmin || max_ != mmax) {
             min_ = mmin;
-            solver_->enqueue(evMin_);
-        }
-        if(max_ != mmax) {
             max_ = mmax;
-            solver_->enqueue(evMax_);
+            solver_->enqueue(evBounds_);
         }
         solver_->enqueue(evChange_);
         if(m == 1)
@@ -483,7 +462,7 @@ bool DiscreteVariable<T>::updateMin(T v) {
         modifying();
         min_ = v;
         solver_->enqueue(evChange_);
-        solver_->enqueue(evMin_);
+        solver_->enqueue(evBounds_);
         assert(size_ > 1 || (min_ == max_ && min_ == value()));
         assert(min_ < max_ || (size_ == 1 && min_ == value()));
         return true;
@@ -503,7 +482,7 @@ bool DiscreteVariable<T>::updateMax(T v) {
         modifying();
         max_ = v;
         solver_->enqueue(evChange_);
-        solver_->enqueue(evMax_);
+        solver_->enqueue(evBounds_);
         assert(size_ > 1 || (min_ == max_ && min_ == value()));
         assert(min_ < max_ || (size_ == 1 && min_ == value()));
         return true;

@@ -175,20 +175,12 @@ public:
     void registerChange(Constraint* c) { evChange_.push_back(c); }
 
     /**
-     * Register constraint c to the update min event of this variable.
+     * Register constraint c to the update min or max event of this variable.
      * A constraint must not register twice for the same variable.
      *
      * @param c the constraint
      */
-    void registerMin(Constraint* c) { evMin_.push_back(c); }
-
-    /**
-     * Register constraint c to the update max event of this variable.
-     * A constraint must not register twice for the same variable.
-     *
-     * @param c the constraint
-     */
-    void registerMax(Constraint* c) { evMax_.push_back(c); }
+    void registerBounds(Constraint* c) { evBounds_.push_back(c); }
 
 private:
     Solver* solver_; //!< attached solver
@@ -217,13 +209,9 @@ private:
      */
     std::vector<Constraint*> evChange_;
     /**
-     * List of constraints registered to the update min event
+     * List of constraints registered to the update min/max event
      */
-    std::vector<Constraint*> evMin_;
-    /**
-     * List of constraints registered to the update max event
-     */
-    std::vector<Constraint*> evMax_;
+    std::vector<Constraint*> evBounds_;
 };
 
 template<class T>
@@ -311,15 +299,11 @@ bool SmallVariable<T>::bind(T v) {
     clearMarks();
     if(!contains(v))
         return false;
-    T m = min(), M = max();
-    if(m == M)
+    if(bound())
         return true;
     modifying();
     domain_ = 1 << (v - minVal_);
-    if(v != m)
-        solver_->enqueue(evMin_);
-    if(v != M)
-        solver_->enqueue(evMax_);
+    solver_->enqueue(evBounds_);
     solver_->enqueue(evChange_);
     solver_->enqueue(evBind_);
     return true;
@@ -335,10 +319,8 @@ bool SmallVariable<T>::remove(T v) {
     domain_ &= ~(1 << (v - minVal_));
     if(domain_ == 0)
         return false;
-    if(v == m)
-        solver_->enqueue(evMin_);
-    if(v == M)
-        solver_->enqueue(evMax_);
+    if(v == m || v == M)
+        solver_->enqueue(evBounds_);
     if(bound())
         solver_->enqueue(evBind_);
     solver_->enqueue(evChange_);
@@ -358,10 +340,8 @@ bool SmallVariable<T>::restrictToMarks() {
     domain_ = marked;
     if(bound() && m != M)
         solver_->enqueue(evBind_);
-    if(m != min())
-        solver_->enqueue(evMin_);
-    if(M != max())
-        solver_->enqueue(evMax_);
+    if(m != min() || M != max())
+        solver_->enqueue(evBounds_);
     solver_->enqueue(evChange_);
     return true;
 }
@@ -380,7 +360,7 @@ bool SmallVariable<T>::updateMin(T v) {
         return false;
     if(domain_ != old) {
         solver_->enqueue(evChange_);
-        solver_->enqueue(evMin_);
+        solver_->enqueue(evBounds_);
         if(bound())
             solver_->enqueue(evBind_);
     }
@@ -401,7 +381,7 @@ bool SmallVariable<T>::updateMax(T v) {
         return false;
     if(domain_ != old) {
         solver_->enqueue(evChange_);
-        solver_->enqueue(evMax_);
+        solver_->enqueue(evBounds_);
         if(bound())
             solver_->enqueue(evBind_);
     }
