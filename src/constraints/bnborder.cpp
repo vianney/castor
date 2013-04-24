@@ -77,15 +77,12 @@ bool BnBOrderConstraint::propagate() {
             cp::RDFVar* x = varexpr->variable()->cp();
             assert(bval->id() > 0);
             if(desc) {
-                if(!x->updateMin(bval->id()))
-                    return false;
+                domcheck(x->updateMin(bval->id()));
             } else {
-                if(!x->updateMax(bval->id()))
-                    return false;
+                domcheck(x->updateMax(bval->id()));
             }
             if(i == query_->orders().size() - 1) {
-                if(!x->remove(bval->id()))
-                    return false;
+                domcheck(x->remove(bval->id()));
             }
             if(!x->bound() ||
                     (!desc && x->value() < bval->id()) ||

@@ -54,8 +54,7 @@ bool FCTripleConstraint::propagate() {
     Triple t;
     while(q.next(&t))
         triple_[unbound]->mark(t[unbound]);
-    if(!triple_[unbound]->restrictToMarks())
-        return false;
+    domcheck(triple_[unbound]->restrictToMarks());
     done_ = true;
     return true;
 }
@@ -102,8 +101,8 @@ bool ExtraTripleConstraint::propagate() {
             triple_[b]->mark(t[b]);
         }
     }
-    if(!(triple_[a]->restrictToMarks() && triple_[b]->restrictToMarks()))
-        return false;
+    domcheck(triple_[a]->restrictToMarks());
+    domcheck(triple_[b]->restrictToMarks());
     done_ = true;
     return true;
 }
@@ -146,8 +145,7 @@ bool STRTripleConstraint::propagate() {
     }
     int bound = 0;
     for(int j = 0; j < triple_.COMPONENTS; j++) {
-        if(!triple_[j]->restrictToMarks())
-            return false;
+        domcheck(triple_[j]->restrictToMarks());
         if(triple_[j]->bound())
             ++bound;
     }

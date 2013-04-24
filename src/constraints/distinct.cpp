@@ -96,8 +96,7 @@ bool DistinctConstraint::propagate() {
         std::pair<SolSet::iterator,SolSet::iterator> range
                 = indexes_[unbound]->equal_range(sol);
         for(SolSet::iterator it = range.first; it != range.second; ++it) {
-            if(!x->remove((*it)[unbound]))
-                return false;
+            domcheck(x->remove((*it)[unbound]));
         }
         return true;
     }
