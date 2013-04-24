@@ -50,7 +50,7 @@ set(LIBS
     ${PCRECPP_LIBRARIES}
 )
 
-set(CMAKE_CXX_FLAGS "-std=c++0x -Wall")
+set(CMAKE_CXX_FLAGS "-std=c++11 -Wall")
 
 add_subdirectory(thirdparty)
 add_subdirectory(src)
