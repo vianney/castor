@@ -196,6 +196,25 @@ void JoinPattern::initialize() {
     cvars_ += right_->certainVars();
 }
 
+Pattern* JoinPattern::optimize() {
+    left_ = left_->optimize();
+    right_ = right_->optimize();
+    // Join(BGP, BGP) -> BGP
+    BasicPattern* bleft;
+    BasicPattern* bright;
+    if((bleft = dynamic_cast<BasicPattern*>(left_)) &&
+       (bright = dynamic_cast<BasicPattern*>(right_))) {
+        BasicPattern* pat = new BasicPattern(query_);
+        for(TriplePattern t : *bleft)
+            pat->add(t);
+        for(TriplePattern t : *bright)
+            pat->add(t);
+        delete this;
+        return pat;
+    }
+    return this;
+}
+
 bool JoinPattern::next() {
     while(left_->next())
         if(right_->next())

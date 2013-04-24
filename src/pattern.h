@@ -159,6 +159,9 @@ public:
         out << ws(indent) << "BasicPattern(" << triples_.size() << " triples)";
     }
 
+    std::vector<TriplePattern>::const_iterator begin() const { return triples_.cbegin(); }
+    std::vector<TriplePattern>::const_iterator end() const { return triples_.cend(); }
+
 private:
     std::vector<TriplePattern> triples_;
     std::vector<RDFVarTriple>  cptriples_;
@@ -246,6 +249,7 @@ public:
     JoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
         initialize();
     }
+    Pattern* optimize() override;
     bool next() override;
     void discard() override;
 
