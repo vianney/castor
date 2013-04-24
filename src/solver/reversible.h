@@ -33,8 +33,8 @@ public:
     Reversible(Trail& trail, const T& val) : Trailable(trail), value_(val) {}
 
     // Implementation
-    void save   (Trail& trail) const { trail.push(value_); }
-    void restore(Trail& trail)       { value_ = trail.pop<T>(); }
+    void save   (Trail& trail) const override { trail.push(value_); }
+    void restore(Trail& trail)       override { value_ = trail.pop<T>(); }
 
     /**
      * Getter
@@ -80,8 +80,8 @@ public:
     ~ReversibleSet();
 
     // Implementation
-    void save   (Trail& trail) const { trail.push(size_); }
-    void restore(Trail& trail)       { size_ = trail.pop<unsigned>(); }
+    void save   (Trail& trail) const override { trail.push(size_); }
+    void restore(Trail& trail)       override { size_ = trail.pop<unsigned>(); }
 
     /**
      * Get the values array. Beware that this is a pointer directly to the

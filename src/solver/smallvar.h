@@ -53,8 +53,8 @@ public:
     SmallVariable(Solver* solver, T minVal, T maxVal);
 
     // Implementation of virtual functions
-    void save(Trail& trail) const;
-    void restore(Trail& trail);
+    void save(Trail& trail) const override;
+    void restore(Trail& trail) override;
 
     /**
      * @param v a value

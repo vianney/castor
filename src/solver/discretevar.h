@@ -70,10 +70,10 @@ public:
     void reset(Solver* solver);
 
     // Implementation of virtual functions
-    void save(Trail& trail) const;
-    void restore(Trail& trail);
-    void label();
-    void unlabel();
+    void save(Trail& trail) const override;
+    void restore(Trail& trail) override;
+    void label() override;
+    void unlabel() override;
 
     /**
      * @pre bound() == true

@@ -43,7 +43,7 @@ public:
      */
     void reset();
 
-    bool propagate();
+    bool propagate() override;
 
 private:
     Query* query_;

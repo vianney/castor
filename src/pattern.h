@@ -126,10 +126,10 @@ std::ostream& operator<<(std::ostream& out, const Pattern& p);
 class FalsePattern : public Pattern {
 public:
     FalsePattern(Query* query) : Pattern(query) {}
-    void init() {}
-    bool next() { return false; }
-    void discard() {}
-    void print(std::ostream& out, int indent) const {
+    void init() override {}
+    bool next() override { return false; }
+    void discard() override {}
+    void print(std::ostream& out, int indent) const override {
         out << ws(indent) << "FalsePattern";
     }
 };
@@ -151,11 +151,11 @@ public:
      */
     void add(const TriplePattern& triple);
 
-    void init();
-    bool next();
-    void discard();
+    void init() override;
+    bool next() override;
+    void discard() override;
 
-    void print(std::ostream& out, int indent) const {
+    void print(std::ostream& out, int indent) const override {
         out << ws(indent) << "BasicPattern(" << triples_.size() << " triples)";
     }
 
@@ -185,12 +185,12 @@ public:
      */
     Expression* condition() { return condition_; }
 
-    Pattern* optimize();
-    void init();
-    bool next();
-    void discard();
+    Pattern* optimize() override;
+    void init() override;
+    bool next() override;
+    void discard() override;
 
-    void print(std::ostream& out, int indent) const {
+    void print(std::ostream& out, int indent) const override {
         out << ws(indent) << "FilterPattern("
             << vars_.size() << " variables)" << std::endl;
         subpattern_->print(out, indent+1);
@@ -221,10 +221,10 @@ public:
      */
     Pattern* right() { return right_; }
 
-    Pattern* optimize();
-    void init();
+    Pattern* optimize() override;
+    void init() override;
 
-    void print(std::ostream& out, int indent) const {
+    void print(std::ostream& out, int indent) const override {
         out << ws(indent) << typeid(*this).name() << std::endl;
         left_->print(out, indent+1); out << std::endl;
         right_->print(out, indent+1);
@@ -246,8 +246,8 @@ public:
     JoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
         initialize();
     }
-    bool next();
-    void discard();
+    bool next() override;
+    void discard() override;
 
 protected:
     void initialize();
@@ -264,8 +264,8 @@ public:
     LeftJoinPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
         initialize();
     }
-    bool next();
-    void discard();
+    bool next() override;
+    void discard() override;
 
 protected:
     void initialize();
@@ -285,8 +285,8 @@ public:
     DiffPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
         initialize();
     }
-    bool next();
-    void discard();
+    bool next() override;
+    void discard() override;
 
 protected:
     void initialize();
@@ -303,8 +303,8 @@ public:
     UnionPattern(CompoundPattern&& o) : CompoundPattern(std::move(o)) {
         initialize();
     }
-    bool next();
-    void discard();
+    bool next() override;
+    void discard() override;
 
 protected:
     void initialize();

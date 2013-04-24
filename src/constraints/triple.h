@@ -31,7 +31,7 @@ namespace castor {
 class FCTripleConstraint : public cp::Constraint {
 public:
     FCTripleConstraint(Query* query, RDFVarTriple triple);
-    bool propagate();
+    bool propagate() override;
 
 private:
     Store* store_; //!< The store containing the triples
@@ -48,7 +48,7 @@ private:
 class ExtraTripleConstraint : public cp::Constraint {
 public:
     ExtraTripleConstraint(Query* query, RDFVarTriple triple);
-    bool propagate();
+    bool propagate() override;
 
 private:
     Store* store_; //!< The store containing the triples
@@ -61,7 +61,7 @@ private:
 class STRTripleConstraint : public cp::Constraint {
 public:
     STRTripleConstraint(Query* query, RDFVarTriple triple);
-    bool propagate();
+    bool propagate() override;
 
 private:
     Store* store_; //!< The store containing the triples

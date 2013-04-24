@@ -49,8 +49,8 @@ public:
     BoundsVariable(Solver* solver, T min, T max);
 
     // Implementation of virtual functions
-    void save(Trail& trail) const;
-    void restore(Trail& trail);
+    void save(Trail& trail) const override;
+    void restore(Trail& trail) override;
 
     /**
      * @param v a value
@@ -159,16 +159,16 @@ public:
     T value() const { return this->min_; }
 
     // Implementation of virtual functions
-    void label();
-    void unlabel();
+    void label() override;
+    void unlabel() override;
 
     // Overrides to update size_
-    void restore(Trail& trail) {
+    void restore(Trail& trail) override {
         BoundsVariable<T>::restore(trail);
         updateSize();
     }
 
-    bool bind(T v) {
+    bool bind(T v) override {
         if(size_ == 1 && this->min_ == v)
             return true;
         if(!BoundsVariable<T>::bind(v))
@@ -177,14 +177,14 @@ public:
         return true;
     }
 
-    bool updateMin(T v) {
+    bool updateMin(T v) override {
         if(!BoundsVariable<T>::updateMin(v))
             return false;
         updateSize();
         return true;
     }
 
-    bool updateMax(T v) {
+    bool updateMax(T v) override {
         if(!BoundsVariable<T>::updateMax(v))
             return false;
         updateSize();
@@ -192,12 +192,12 @@ public:
     }
 
     // Passthrough methods
-    void save(Trail& trail) const { BoundsVariable<T>::save(trail); }
-    bool contains(T v) const { return BoundsVariable<T>::contains(v); }
-    T    min     ()    const { return BoundsVariable<T>::min(); }
-    T    max     ()    const { return BoundsVariable<T>::max(); }
-    void registerBind(Constraint* c) { BoundsVariable<T>::registerBind(c); }
-    void registerBounds(Constraint* c) { BoundsVariable<T>::registerBounds(c); }
+    void save(Trail& trail) const override { BoundsVariable<T>::save(trail); }
+    bool contains(T v) const override { return BoundsVariable<T>::contains(v); }
+    T    min     ()    const override { return BoundsVariable<T>::min(); }
+    T    max     ()    const override { return BoundsVariable<T>::max(); }
+    void registerBind(Constraint* c) override { BoundsVariable<T>::registerBind(c); }
+    void registerBounds(Constraint* c) override { BoundsVariable<T>::registerBounds(c); }
 
 private:
     /**

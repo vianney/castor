@@ -34,7 +34,7 @@ class ConstantConstraint : public cp::Constraint {
 public:
     ConstantConstraint(Query* query, D* x, T v) :
         Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v) {}
-    bool post() { return x_->bind(v_); }
+    bool post() override { return x_->bind(v_); }
 
 private:
     D* x_;
@@ -79,7 +79,7 @@ class NotConstantConstraint : public cp::Constraint {
 public:
     NotConstantConstraint(Query* query, D* x, T v) :
         Constraint(query->solver(), PRIOR_HIGH), x_(x), v_(v) {}
-    bool post() { return x_->remove(v_); }
+    bool post() override { return x_->remove(v_); }
 
 private:
     D* x_;
@@ -111,7 +111,7 @@ class BoundConstraint : public cp::Constraint {
 public:
     BoundConstraint(Query* query, cp::RDFVar* x) :
         Constraint(query->solver(), PRIOR_HIGH), x_(x) {}
-    bool post() { return x_->remove(0); }
+    bool post() override { return x_->remove(0); }
 
 private:
     cp::RDFVar* x_;

@@ -30,7 +30,7 @@ namespace castor {
 class FilterConstraint : public cp::Constraint {
 public:
     FilterConstraint(Query* query, Expression* expr, cp::TriStateVar* b);
-    bool propagate();
+    bool propagate() override;
 
 private:
     Store*      store_; //!< The store containing the values
