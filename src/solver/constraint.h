@@ -55,9 +55,13 @@ public:
          * as many values as possible have been removed.
          */
         PRIOR_LOW,
+        /**
+         * Lowest priority.
+         */
+        PRIOR_LOWEST,
 
         PRIOR_FIRST = PRIOR_HIGH,
-        PRIOR_LAST = PRIOR_LOW
+        PRIOR_LAST = PRIOR_LOWEST
     };
     static const int PRIOR_COUNT = PRIOR_LAST - PRIOR_FIRST + 1;
 

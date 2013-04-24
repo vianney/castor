@@ -23,7 +23,7 @@ namespace castor {
 
 FilterConstraint::FilterConstraint(Query* query, Expression* expr,
                                    cp::TriStateVar *b) :
-        Constraint(query->solver(), PRIOR_MEDIUM),
+        Constraint(query->solver(), PRIOR_LOWEST),
         store_(query->store()), expr_(expr), b_(b) {
     for(Variable* var : expr->variables())
         var->cp()->registerBind(this);
