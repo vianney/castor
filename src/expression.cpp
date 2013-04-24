@@ -561,6 +561,7 @@ void EqualityExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
         }
     } else {
         Expression::post(sub, b);
+#ifdef CASTOR_ARITHMETIC_CSTR
         if(arg1_->isArithmetic() && arg2_->isArithmetic()) {
             // Redundant arithmetic equality constraint
             cp::NumVar* x = new cp::NumVar(query_->solver(),
@@ -575,6 +576,7 @@ void EqualityExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
             arg2_->postArithmetic(sub, y, b);
             sub.add(new NumEqConstraint(query_, x, y, b));
         }
+#endif
     }
 }
 
@@ -660,6 +662,7 @@ void InequalityExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
         }
     } else {
         Expression::post(sub, b);
+#ifdef CASTOR_ARITHMETIC_CSTR
         if(arg1_->isArithmetic() && arg2_->isArithmetic()) {
             // Redundant arithmetic equality constraint
             cp::NumVar* x = new cp::NumVar(query_->solver(),
@@ -674,6 +677,7 @@ void InequalityExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
             arg2_->postArithmetic(sub, y, b);
             postArithmetic(sub, x, y, b);
         }
+#endif
     }
 }
 

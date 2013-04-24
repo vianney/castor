@@ -22,6 +22,7 @@
 #cmakedefine CASTOR_NOFILTERS
 #cmakedefine CASTOR_CSTR_TIMING
 #cmakedefine CASTOR_TRIPLE_STR
+#cmakedefine CASTOR_ARITHMETIC_CSTR
 
 #ifdef CASTOR_UNITTESTS
 #define MOCKABLE virtual

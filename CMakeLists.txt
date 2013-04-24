@@ -34,6 +34,10 @@ option(CASTOR_TRIPLE_STR
        "Use STR propagator for triple constraints"
        OFF)
 
+option(CASTOR_ARITHMETIC_CSTR
+       "Use redundant arithmetic constraints"
+       ON)
+
 find_package(Raptor2 REQUIRED)
 find_package(Rasqal REQUIRED)
 find_package(Pcrecpp REQUIRED)
