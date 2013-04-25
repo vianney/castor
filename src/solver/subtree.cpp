@@ -130,10 +130,24 @@ bool Subtree::search() {
         if(!x || x->bound()) {
             // find unbound variable with smallest domain
             x = nullptr;
-            unsigned sx;
+            double sx;
             for(DecisionVariable* y : vars_) {
-                unsigned sy = y->size();
-                if(sy > 1 && (!x || sy < sx)) {
+                if(y->bound())
+                    continue;
+#if CASTOR_SEARCH == CASTOR_SEARCH_dom
+                double sy = y->size();
+#elif CASTOR_SEARCH == CASTOR_SEARCH_deg
+                double sy = -static_cast<double>(y->degree());
+#elif CASTOR_SEARCH == CASTOR_SEARCH_ddeg
+                double sy = -static_cast<double>(y->dyndegree());
+#elif CASTOR_SEARCH == CASTOR_SEARCH_domdeg
+                double sy = static_cast<double>(y->size()) / y->degree();
+#elif CASTOR_SEARCH == CASTOR_SEARCH_domddeg
+                double sy = static_cast<double>(y->size()) / y->dyndegree();
+#else
+                static_assert(false, "Please select a valid search heuristic.");
+#endif
+                if(!x || sy < sx) {
                     x = y;
                     sx = sy;
                 }

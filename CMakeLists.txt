@@ -14,7 +14,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-cmake_minimum_required(VERSION 2.6)
+cmake_minimum_required(VERSION 2.8.0 FATAL_ERROR)
 project(Castor)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/")
 
@@ -37,6 +37,10 @@ option(CASTOR_TRIPLE_STR
 option(CASTOR_ARITHMETIC_CSTR
        "Use redundant arithmetic constraints"
        ON)
+
+set(CASTOR_SEARCH "dom" CACHE STRING "Search heuristic")
+set_property(CACHE CASTOR_SEARCH PROPERTY STRINGS
+             "dom" "deg" "ddeg" "domdeg" "domddeg")
 
 find_package(Raptor2 REQUIRED)
 find_package(Rasqal REQUIRED)

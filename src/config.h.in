@@ -24,6 +24,14 @@
 #cmakedefine CASTOR_TRIPLE_STR
 #cmakedefine CASTOR_ARITHMETIC_CSTR
 
+#define CASTOR_SEARCH_dom       0
+#define CASTOR_SEARCH_deg       1
+#define CASTOR_SEARCH_ddeg      2
+#define CASTOR_SEARCH_domdeg    3
+#define CASTOR_SEARCH_domddeg   4
+
+#define CASTOR_SEARCH CASTOR_SEARCH_@CASTOR_SEARCH@
+
 #ifdef CASTOR_UNITTESTS
 #define MOCKABLE virtual
 #else
