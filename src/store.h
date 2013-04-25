@@ -76,9 +76,10 @@ public:
      * Open a store.
      *
      * @param fileName location of the store
+     * @param cacheCapacity initial capacity of the triple cache
      * @throws CastorException on error
      */
-    Store(const char* fileName);
+    Store(const char* fileName, unsigned cacheCapacity=100);
     ~Store();
 
     //! Non-copyable

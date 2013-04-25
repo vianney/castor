@@ -48,7 +48,7 @@ String StringMapper::lookupString(String::id_t id) const {
 const unsigned char Store::MAGIC[] = {0xd0, 0xd4, 0xc5, 0xd8,
                                       'C', 'a', 's', 't', 'o', 'r'};
 
-Store::Store(const char* fileName) : db_(fileName) {
+Store::Store(const char* fileName, unsigned cacheCapacity) : db_(fileName) {
     Cursor cur = db_.page(0);
 
     // check magic number and version format
@@ -93,7 +93,7 @@ Store::Store(const char* fileName) : db_(fileName) {
     values_.count = values_.categories[Value::CATEGORIES] - 1;
 
     // initialize triples cache
-    cache_.initialize(&db_, values_.begin - 1);
+    cache_.initialize(&db_, values_.begin - 1, cacheCapacity);
 }
 
 Store::~Store() {

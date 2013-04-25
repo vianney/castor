@@ -40,6 +40,7 @@ namespace {
 static const char* DEFAULT_PORT = "8000";
 static const char* PATH = "/sparql";
 static const char* HOMEPATH = "/";
+static const unsigned DEFAULT_CACHE = 100;
 
 static constexpr size_t MAX_QUERY_LEN = 32768;
 static constexpr size_t MAX_POST_LEN = MAX_QUERY_LEN * 2;
@@ -213,6 +214,7 @@ static void usage() {
     cout << endl << "Options:" << endl;
     cout << "  -d DB         Dataset to load" << endl;
     cout << "  -p PORT       Port to listen on (default: " << DEFAULT_PORT << ")" << endl;
+    cout << "  -c CAPACITY   Triple cache capacity (default: " << DEFAULT_CACHE << ")" << endl;
     cout << "  -x            Use application/xml content type for results." << endl;
     cout << "  -v            Be verbose" << endl;
     exit(1);
@@ -225,11 +227,13 @@ int main(int argc, char* argv[]) {
     int c;
     char* dbpath = nullptr;
     const char* port = DEFAULT_PORT;
+    unsigned cache = DEFAULT_CACHE;
     verbose = false;
-    while((c = getopt(argc, argv, "d:p:xv")) != -1) {
+    while((c = getopt(argc, argv, "d:p:c:xv")) != -1) {
         switch(c) {
         case 'd': dbpath = optarg;                   break;
         case 'p': port = optarg;                     break;
+        case 'c': cache = atoi(optarg);              break;
         case 'x': mimetype = "application/xml";      break;
         case 'v': verbose = true;                    break;
         default: usage();
@@ -241,7 +245,7 @@ int main(int argc, char* argv[]) {
         usage();
     if(verbose)
         cout << "Loading " << dbpath << "." << endl;
-    Store store(dbpath);
+    Store store(dbpath, cache);
 
     // Start HTTP server
     mg_callbacks callbacks;
