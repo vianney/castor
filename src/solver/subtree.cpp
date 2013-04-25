@@ -144,14 +144,14 @@ bool Subtree::search() {
         }
         // Make a checkpoint and assign a value to the selected variable
         checkpoint(x);
-        x->label();
-        assert(x->bound());
-        if(!solver_->propagate()) {
+        if(!x->label() || !solver_->propagate()) {
             x = backtrack();
             if(!x) {
                 discard();
                 return false;
             }
+        } else {
+            assert(x->bound());
         }
     }
 }
@@ -177,7 +177,8 @@ DecisionVariable* Subtree::backtrack() {
     solver_->clearQueue();
     if(chkp->x) {
         // remove old (failed) choice
-        chkp->x->unlabel();
+        if(!chkp->x->unlabel())
+            return backtrack();
         if(solver_->tsCurrent_ < solver_->tsLastConstraint_ &&
            !solver_->postStatic())
             return backtrack();

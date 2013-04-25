@@ -44,18 +44,19 @@ public:
      * labeling phase of the search. Appropriate events should be triggered.
      *
      * @pre !bound()
-     * @post bound()
+     * @post if return value is true => bound()
+     * @return false if the domain is empty, true otherwise
      */
-    virtual void label() = 0;
+    virtual bool label() = 0;
 
     /**
      * Remove from the domain the value that would be assigned to this variable
      * by label(). It is called after backtracking.
      *
      * @pre !bound()
-     * @post size() := size() - 1
+     * @return false if the domain is empty, true otherwise
      */
-    virtual void unlabel() = 0;
+    virtual bool unlabel() = 0;
 
 protected:
     /**

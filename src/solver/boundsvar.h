@@ -159,8 +159,8 @@ public:
     T value() const { return this->min_; }
 
     // Implementation of virtual functions
-    void label() override;
-    void unlabel() override;
+    bool label() override;
+    bool unlabel() override;
 
     // Overrides to update size_
     void restore(Trail& trail) override {
@@ -286,15 +286,15 @@ BoundsDecisionVariable<T>::BoundsDecisionVariable(Solver* solver, T min, T max) 
 }
 
 template<class T>
-void BoundsDecisionVariable<T>::label() {
+bool BoundsDecisionVariable<T>::label() {
     assert(this->min_ < this->max_ && size_ > 1);
-    bind(this->min_);
+    return bind(this->min_);
 }
 
 template<class T>
-void BoundsDecisionVariable<T>::unlabel() {
+bool BoundsDecisionVariable<T>::unlabel() {
     assert(this->min_ < this->max_ && size_ > 1);
-    updateMin(this->min_ + 1);
+    return updateMin(this->min_ + 1);
 }
 
 }

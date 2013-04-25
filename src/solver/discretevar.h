@@ -72,8 +72,8 @@ public:
     // Implementation of virtual functions
     void save(Trail& trail) const override;
     void restore(Trail& trail) override;
-    void label() override;
-    void unlabel() override;
+    bool label() override;
+    bool unlabel() override;
 
     /**
      * @pre bound() == true
@@ -319,17 +319,25 @@ void DiscreteVariable<T>::restore(Trail &trail) {
 }
 
 template<class T>
-void DiscreteVariable<T>::label() {
+bool DiscreteVariable<T>::label() {
     assert(size_ > 1);
-    bool ret = bind(domain_[0]);
-    assert(ret);
+    while(size_ > 0 && !contains(domain_[0])) {
+        if(!remove(domain_[0]))
+            return false;
+    }
+    assert(size_ >= 1);
+    return bind(domain_[0]);
 }
 
 template<class T>
-void DiscreteVariable<T>::unlabel() {
+bool DiscreteVariable<T>::unlabel() {
     assert(size_ > 1);
-    bool ret = remove(domain_[0]);
-    assert(ret);
+    while(size_ > 0 && !contains(domain_[0])) {
+        if(!remove(domain_[0]))
+            return false;
+    }
+    assert(size_ >= 1);
+    return remove(domain_[0]);
 }
 
 template<class T>
