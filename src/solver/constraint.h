@@ -92,6 +92,11 @@ public:
     Priority priority() { return priority_; }
 
     /**
+     * @return whether this constraint is currently entailed
+     */
+    bool done() const { return done_; }
+
+    /**
      * Initial propagation callback. It should perform the initial propagation
      * and return true if all went well or false if the propagation failed.
      */

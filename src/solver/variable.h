@@ -35,6 +35,17 @@ public:
     unsigned size() const { return size_; }
 
     /**
+     * @return the degree, i.e., the number of registered constraints
+     */
+    unsigned degree() const { return degree_; }
+
+    /**
+     * @return the dynamic degree, i.e., the number of non-entailed registered
+     *         constraints
+     */
+    virtual unsigned dyndegree() const = 0;
+
+    /**
      * @return whether this variable is bound
      */
     bool bound() const { return size_ == 1; }
@@ -64,12 +75,18 @@ protected:
      * a virtual base class, subclasses of DecisionVariable would have to
      * initialize Trailable by themselves anyway.
      */
-    DecisionVariable() : Trailable(nullptr) {}
+    DecisionVariable() : Trailable(nullptr), degree_(0) {}
 
     /**
      * Current size of the domain. Must be updated by the subclass.
      */
     unsigned size_;
+
+    /**
+     * Number of constraints registered to this variable.
+     * Must be updated by the subclass.
+     */
+    unsigned degree_;
 };
 
 }

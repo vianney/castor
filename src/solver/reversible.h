@@ -41,7 +41,7 @@ public:
      *
      * @return the current value
      */
-    operator T() { return value_; }
+    operator T() const { return value_; }
 
     /**
      * Setter

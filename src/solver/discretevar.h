@@ -74,6 +74,7 @@ public:
     void restore(Trail& trail) override;
     bool label() override;
     bool unlabel() override;
+    unsigned dyndegree() const override;
 
     /**
      * @pre bound() == true
@@ -186,7 +187,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerBind(Constraint* c) { evBind_.push_back(c); }
+    void registerBind(Constraint* c) { evBind_.push_back(c); ++degree_; }
 
     /**
      * Register constraint c to the change event of this variable. A constraint
@@ -194,7 +195,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerChange(Constraint* c) { evChange_.push_back(c); }
+    void registerChange(Constraint* c) { evChange_.push_back(c); ++degree_; }
 
     /**
      * Register constraint c to the update min or max event of this variable.
@@ -202,7 +203,7 @@ public:
      *
      * @param c the constraint
      */
-    void registerBounds(Constraint* c) { evBounds_.push_back(c); }
+    void registerBounds(Constraint* c) { evBounds_.push_back(c); ++degree_; }
 
 private:
     Solver* solver_; //!< attached solver
@@ -298,6 +299,7 @@ void DiscreteVariable<T>::reset(Solver *solver) {
     evBind_.clear();
     evChange_.clear();
     evBounds_.clear();
+    degree_ = 0;
     size_ = maxVal_ - minVal_ + 1;
     min_ = minVal_;
     max_ = maxVal_;
@@ -338,6 +340,24 @@ bool DiscreteVariable<T>::unlabel() {
     }
     assert(size_ >= 1);
     return remove(domain_[0]);
+}
+
+template<class T>
+unsigned DiscreteVariable<T>::dyndegree() const {
+    unsigned deg = 0;
+    for(Constraint* c : evBind_) {
+        if(c->done())
+            ++deg;
+    }
+    for(Constraint* c : evChange_) {
+        if(c->done())
+            ++deg;
+    }
+    for(Constraint* c : evBounds_) {
+        if(c->done())
+            ++deg;
+    }
+    return deg;
 }
 
 template<class T>

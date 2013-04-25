@@ -114,12 +114,10 @@ public:
     void registerBounds(Constraint* c) { evBounds_.push_back(c); }
 
 protected:
+    Solver* solver_; //!< attached solver
 
     T min_; //!< lower bound
     T max_; //!< upper bound
-
-private:
-    Solver* solver_; //!< attached solver
 
     /**
      * List of constraints registered to the bind event.
@@ -161,6 +159,7 @@ public:
     // Implementation of virtual functions
     bool label() override;
     bool unlabel() override;
+    unsigned dyndegree() const override;
 
     // Overrides to update size_
     void restore(Trail& trail) override {
@@ -196,8 +195,8 @@ public:
     bool contains(T v) const override { return BoundsVariable<T>::contains(v); }
     T    min     ()    const override { return BoundsVariable<T>::min(); }
     T    max     ()    const override { return BoundsVariable<T>::max(); }
-    void registerBind(Constraint* c) override { BoundsVariable<T>::registerBind(c); }
-    void registerBounds(Constraint* c) override { BoundsVariable<T>::registerBounds(c); }
+    void registerBind(Constraint* c) override { BoundsVariable<T>::registerBind(c); ++degree_; }
+    void registerBounds(Constraint* c) override { BoundsVariable<T>::registerBounds(c); ++degree_; }
 
 private:
     /**
@@ -215,9 +214,9 @@ private:
 template<class T>
 BoundsVariable<T>::BoundsVariable(Solver* solver, T min, T max) :
     Trailable(solver->trail()),
+    solver_(solver),
     min_(min),
-    max_(max),
-    solver_(solver) {}
+    max_(max) {}
 
 template<class T>
 void BoundsVariable<T>::save(Trail& trail) const {
@@ -295,6 +294,20 @@ template<class T>
 bool BoundsDecisionVariable<T>::unlabel() {
     assert(this->min_ < this->max_ && size_ > 1);
     return updateMin(this->min_ + 1);
+}
+
+template<class T>
+unsigned BoundsDecisionVariable<T>::dyndegree() const {
+    unsigned deg = 0;
+    for(Constraint* c : this->evBind_) {
+        if(c->done())
+            ++deg;
+    }
+    for(Constraint* c : this->evBounds_) {
+        if(c->done())
+            ++deg;
+    }
+    return deg;
 }
 
 }
