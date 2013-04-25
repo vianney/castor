@@ -98,6 +98,7 @@ bool DistinctConstraint::propagate() {
         for(SolSet::iterator it = range.first; it != range.second; ++it) {
             domcheck(x->remove((*it)[unbound]));
         }
+        done_ = true;
         return true;
     }
 }

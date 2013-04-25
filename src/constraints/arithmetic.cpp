@@ -91,6 +91,8 @@ bool ArithmeticChannelConstraint::propagate() {
         max_ = store_->lookupValue(it.id() - 1);
         domcheck(n_->updateMax(max_.numapprox().lower()));
     }
+    if(n_->bound())
+        done_ = true;
     return true;
 }
 
@@ -110,8 +112,11 @@ bool NumEqConstraint::propagate() {
         domcheck(x_->updateMax(y_->max()));
         domcheck(y_->updateMin(x_->min()));
         domcheck(y_->updateMax(x_->max()));
+        if(x_->bound())
+            done_ = true;
     } else if(x_->max() < y_->min() || y_->max() < x_->min()) {
         domcheck(b_->remove(RDF_TRUE));
+        done_ = true;
     }
     return true;
 }
@@ -130,8 +135,11 @@ bool NumLessConstraint::propagate() {
     if(!b_->contains(RDF_FALSE)) {
         domcheck(x_->updateMax(y_->max()));
         domcheck(y_->updateMin(x_->min()));
+        if(x_->max() <= y_->min())
+            done_ = true;
     } else if(x_->max() < y_->min()) {
         domcheck(b_->remove(RDF_TRUE));
+        done_ = true;
     }
     return true;
 }
@@ -163,6 +171,8 @@ bool SumConstraint::propagate() {
     r = range(x_) + range(y_);
     domcheck(z_->updateMin(r.lower()));
     domcheck(z_->updateMax(r.upper_inclusive()));
+    if(x_->bound() + y_->bound() + z_->bound() >= 2)
+        done_ = true;
     return true;
 }
 

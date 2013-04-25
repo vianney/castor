@@ -56,6 +56,7 @@ bool VarEqConstraint::propagate() {
         } else {
             domcheck(b_->bind(RDF_ERROR));
         }
+        done_ = true;
     } else if(b_->bound() && b_->value() == RDF_TRUE) {
         unsigned n1 = x1->size();
         unsigned n2 = x2->size();
@@ -127,6 +128,8 @@ bool VarEqConstraint::propagate() {
         }
         s1_ = x1_->size();
         s2_ = x2_->size();
+        if(x1_->bound() || x2_->bound())
+            done_ = true; // TODO: also done if only eqClass remaining
     } else if(!b_->contains(RDF_TRUE)) {
         if(!b_->contains(RDF_ERROR)) { // b_ is RDF_FALSE
             /* Custom literals and plain literals with language tags cannot be
@@ -240,6 +243,7 @@ bool VarLessConstraint::propagate() {
                 catMin1 <= Value::CAT_DATETIME)
             domcheck(b_->remove(RDF_ERROR));
     }
+    // TODO: propagate to b_
     // For the remaining propagation, we need to know b_
     if(!b_->bound())
         return true;
@@ -353,6 +357,8 @@ bool VarSameTermConstraint::propagate() {
         }
         s1_ = x1_->size();
         s2_ = x2_->size();
+        if(x1_->bound())
+            done_ = true;
     } else if(!b_->contains(RDF_TRUE)) { // b_ is RDF_FALSE
         if(x1_->bound()) {
             domcheck(x2_->remove(x1_->value()));

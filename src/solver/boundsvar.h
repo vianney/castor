@@ -68,6 +68,11 @@ public:
     T max() const { return max_; }
 
     /**
+     * @return whether this variable is bound
+     */
+    bool bound() const { return min_ == max_; }
+
+    /**
      * Bind a value to a variable.
      *
      * @note Should only be called during constraint propagation.
