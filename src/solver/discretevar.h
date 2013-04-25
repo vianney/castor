@@ -321,13 +321,15 @@ void DiscreteVariable<T>::restore(Trail &trail) {
 template<class T>
 void DiscreteVariable<T>::label() {
     assert(size_ > 1);
-    bind(domain_[0]);
+    bool ret = bind(domain_[0]);
+    assert(ret);
 }
 
 template<class T>
 void DiscreteVariable<T>::unlabel() {
     assert(size_ > 1);
-    remove(domain_[0]);
+    bool ret = remove(domain_[0]);
+    assert(ret);
 }
 
 template<class T>

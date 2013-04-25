@@ -145,6 +145,7 @@ bool Subtree::search() {
         // Make a checkpoint and assign a value to the selected variable
         checkpoint(x);
         x->label();
+        assert(x->bound());
         if(!solver_->propagate()) {
             x = backtrack();
             if(!x) {
@@ -156,7 +157,9 @@ bool Subtree::search() {
 }
 
 void Subtree::checkpoint(DecisionVariable* x) {
-    Checkpoint* chkp = &trail_[++trailIndex_];
+    ++trailIndex_;
+    assert(trailIndex_ < static_cast<int>(vars_.size() + 1));
+    Checkpoint* chkp = &trail_[trailIndex_];
     chkp->trailpoint = solver_->trail().checkpoint();
     chkp->timestamp = solver_->tsCurrent_;
     chkp->x = x;
