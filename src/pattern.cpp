@@ -65,11 +65,13 @@ void BasicPattern::init() {
         sub_.add(new BoundConstraint(query_, x->cp()));
     }
     for(RDFVarTriple& t : cptriples_) {
-#ifdef CASTOR_TRIPLE_STR
+#if CASTOR_TRIPLEPROPAG == CASTOR_TRIPLEPROPAG_dc
         sub_.add(new STRTripleConstraint(query_, t));
 #else
         sub_.add(new FCTripleConstraint(query_, t));
+#if CASTOR_TRIPLEPROPAG == CASTOR_TRIPLEPROPAG_fcplus
         sub_.add(new ExtraTripleConstraint(query_, t));
+#endif
 #endif
     }
 }

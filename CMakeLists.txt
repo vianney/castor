@@ -30,13 +30,13 @@ option(CASTOR_CSTR_TIMING
        "Perform time measurements during propagation (may affect performances)"
        OFF)
 
-option(CASTOR_TRIPLE_STR
-       "Use STR propagator for triple constraints"
-       OFF)
-
 option(CASTOR_ARITHMETIC_CSTR
        "Use redundant arithmetic constraints"
        ON)
+
+set(CASTOR_TRIPLEPROPAG "fcplus" CACHE STRING "Triple constraint propagation")
+set_property(CACHE CASTOR_TRIPLEPROPAG PROPERTY STRINGS
+             "fc" "fcplus" "dc")
 
 set(CASTOR_SEARCH "dom" CACHE STRING "Search heuristic")
 set_property(CACHE CASTOR_SEARCH PROPERTY STRINGS
