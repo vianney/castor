@@ -20,8 +20,9 @@
 
 #cmakedefine CASTOR_UNITTESTS
 #cmakedefine CASTOR_NOFILTERS
-#cmakedefine CASTOR_CSTR_TIMING
+#cmakedefine CASTOR_SPECIALIZED_CSTR
 #cmakedefine CASTOR_ARITHMETIC_CSTR
+#cmakedefine CASTOR_CSTR_TIMING
 
 #define CASTOR_SEARCH_dom       0
 #define CASTOR_SEARCH_deg       1

@@ -26,13 +26,17 @@ option(CASTOR_NOFILTERS
        "Do not post filters as constraints, always perform post-processing"
        OFF)
 
-option(CASTOR_CSTR_TIMING
-       "Perform time measurements during propagation (may affect performances)"
-       OFF)
+option(CASTOR_SPECIALIZED_CSTR
+       "Post specialized filter constraints where possible"
+       ON)
 
 option(CASTOR_ARITHMETIC_CSTR
        "Use redundant arithmetic constraints"
        ON)
+
+option(CASTOR_CSTR_TIMING
+       "Perform time measurements during propagation (may affect performances)"
+       OFF)
 
 set(CASTOR_TRIPLEPROPAG "fcplus" CACHE STRING "Triple constraint propagation")
 set_property(CACHE CASTOR_TRIPLEPROPAG PROPERTY STRINGS

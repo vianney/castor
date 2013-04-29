@@ -505,6 +505,8 @@ void Expression::post(cp::Subtree& sub, cp::TriStateVar* b) {
     sub.add(new FilterConstraint(query_, this, b));
 }
 
+#ifdef CASTOR_SPECIALIZED_CSTR
+
 void BangExpression::post(cp::Subtree& sub, cp::TriStateVar* b) {
     cp::TriStateVar* x = new cp::TriStateVar(query_->solver());
     query_->solver()->collect(x);
@@ -759,6 +761,8 @@ void GEExpression::postArithmetic(cp::Subtree &sub, cp::NumVar *x,
                                   cp::NumVar *y, cp::TriStateVar *b) {
     sub.add(new NumLessConstraint(query_, y, x, b));
 }
+
+#endif // CASTOR_SPECIALIZED_CSTR
 
 ////////////////////////////////////////////////////////////////////////////////
 // Posting arithmetic constraints

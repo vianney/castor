@@ -256,7 +256,9 @@ public:
     BangExpression(Expression* arg) :
         UnaryExpression(arg) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void post(cp::Subtree& sub, cp::TriStateVar* b) override;
+#endif
 };
 
 /**
@@ -347,7 +349,9 @@ public:
     OrExpression(Expression* arg1, Expression* arg2) :
         BinaryExpression(arg1, arg2) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void post(cp::Subtree &sub, cp::TriStateVar *b) override;
+#endif
 };
 
 /**
@@ -358,7 +362,9 @@ public:
     AndExpression(Expression* arg1, Expression* arg2) :
         BinaryExpression(arg1, arg2) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void post(cp::Subtree& sub, cp::TriStateVar* b) override;
+#endif
 };
 
 /**
@@ -369,6 +375,7 @@ public:
     EqualityExpression(Expression* arg1, Expression* arg2) :
         BinaryExpression(arg1, arg2) {}
     EqualityExpression(BinaryExpression&& o) : BinaryExpression(std::move(o)) {}
+#ifdef CASTOR_SPECIALIZED_CSTR
     void post(cp::Subtree& sub, cp::TriStateVar* b) override;
 
     /**
@@ -382,6 +389,7 @@ public:
      */
     virtual void postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v,
                            cp::TriStateVar* b) = 0;
+#endif
 };
 
 /**
@@ -393,10 +401,12 @@ public:
         EqualityExpression(arg1, arg2) {}
     EqExpression(BinaryExpression&& o) : EqualityExpression(std::move(o)) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
                   cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, cp::RDFVar* x, Value& v,
                    cp::TriStateVar* b) override;
+#endif
 };
 
 /**
@@ -408,7 +418,9 @@ public:
             EqExpression(arg1, arg2) {}
     NEqExpression(BinaryExpression&& o) : EqExpression(std::move(o)) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void post(cp::Subtree &sub, cp::TriStateVar *b) override;
+#endif
 };
 
 /**
@@ -420,6 +432,7 @@ public:
         BinaryExpression(arg1, arg2) {}
     InequalityExpression(BinaryExpression&& o) :
         BinaryExpression(std::move(o)) {}
+#ifdef CASTOR_SPECIALIZED_CSTR
     void post(cp::Subtree& sub, cp::TriStateVar* b) override;
 
     /**
@@ -442,6 +455,7 @@ public:
      */
     virtual void postArithmetic(cp::Subtree& sub, cp::NumVar* x, cp::NumVar* y,
                                 cp::TriStateVar *b) = 0;
+#endif
 };
 
 /**
@@ -453,6 +467,7 @@ public:
             InequalityExpression(arg1, arg2) {}
     LTExpression(BinaryExpression&& o) : InequalityExpression(std::move(o)) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
                   cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
@@ -461,6 +476,7 @@ public:
                    cp::TriStateVar* b) override;
     void postArithmetic(cp::Subtree &sub, cp::NumVar *x, cp::NumVar *y,
                         cp::TriStateVar *b) override;
+#endif
 };
 
 /**
@@ -472,6 +488,7 @@ public:
             InequalityExpression(arg1, arg2) {}
     GTExpression(BinaryExpression&& o) : InequalityExpression(std::move(o)) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
                   cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
@@ -480,6 +497,7 @@ public:
                    cp::TriStateVar* b) override;
     void postArithmetic(cp::Subtree &sub, cp::NumVar *x, cp::NumVar *y,
                         cp::TriStateVar *b) override;
+#endif
 };
 
 /**
@@ -491,6 +509,7 @@ public:
             InequalityExpression(arg1, arg2) {}
     LEExpression(BinaryExpression&& o) : InequalityExpression(std::move(o)) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
                   cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
@@ -499,6 +518,7 @@ public:
                    cp::TriStateVar* b) override;
     void postArithmetic(cp::Subtree &sub, cp::NumVar *x, cp::NumVar *y,
                         cp::TriStateVar *b) override;
+#endif
 };
 
 /**
@@ -510,6 +530,7 @@ public:
             InequalityExpression(arg1, arg2) {}
     GEExpression(BinaryExpression&& o) : InequalityExpression(std::move(o)) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void postVars(cp::Subtree& sub, cp::RDFVar* x1, cp::RDFVar* x2,
                   cp::TriStateVar* b) override;
     void postConst(cp::Subtree& sub, cp::RDFVar* x1, Value& v2,
@@ -518,6 +539,7 @@ public:
                    cp::TriStateVar* b) override;
     void postArithmetic(cp::Subtree &sub, cp::NumVar *x, cp::NumVar *y,
                         cp::TriStateVar *b) override;
+#endif
 };
 
 /**
@@ -582,10 +604,12 @@ public:
     SameTermExpression(Expression* arg1, Expression* arg2) :
         EqualityExpression(arg1, arg2) {}
     bool evaluate(Value& result) override;
+#ifdef CASTOR_SPECIALIZED_CSTR
     void postVars(cp::Subtree &sub, cp::RDFVar *x1, cp::RDFVar *x2,
                   cp::TriStateVar *b) override;
     void postConst(cp::Subtree &sub, cp::RDFVar *x1, Value &v2,
                    cp::TriStateVar *b) override;
+#endif
 };
 
 /**
