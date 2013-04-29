@@ -38,7 +38,7 @@ set(CASTOR_TRIPLEPROPAG "fcplus" CACHE STRING "Triple constraint propagation")
 set_property(CACHE CASTOR_TRIPLEPROPAG PROPERTY STRINGS
              "fc" "fcplus" "dc")
 
-set(CASTOR_SEARCH "dom" CACHE STRING "Search heuristic")
+set(CASTOR_SEARCH "domdeg" CACHE STRING "Search heuristic")
 set_property(CACHE CASTOR_SEARCH PROPERTY STRINGS
              "dom" "deg" "ddeg" "domdeg" "domddeg")
 
