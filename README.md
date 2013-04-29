@@ -8,7 +8,19 @@ constraint programming (CP) solver. It implements most of the SPARQL 1.0
 specification. Currently, queries are performed on read-only datasets created
 from RDF graphs in a pre-processing step.
 
+The ideas implemented here are described in the following publications:
+
+* le Clément V., Deville Y., and Solnon C.,
+  [*An Efficient Light Solver for Querying the Semantic Web*][1],
+  International Conference on Principles and Practice of
+  Constraint Programming (CP), 2011.
+* le Clément V., Deville Y., Solnon C., and Champin P.-A.,
+  [*Castor: a Constraint-based SPARQL Engine with Active Filter Processing*][2],
+  Extended Semantic Web Conference (ESWC), 2012.
+
 [SPARQL]: http://www.w3.org/TR/2008/REC-rdf-sparql-query-20080115/
+[1]: http://becool.info.ucl.ac.be/biblio/efficient-light-solver-querying-semantic-web
+[2]: http://becool.info.ucl.ac.be/biblio/castor-constraint-based-sparql-engine-active-filter-processing
 
 
 Prerequisites
