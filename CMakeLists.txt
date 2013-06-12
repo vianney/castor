@@ -44,7 +44,7 @@ set_property(CACHE CASTOR_TRIPLEPROPAG PROPERTY STRINGS
 
 set(CASTOR_SEARCH "domdeg" CACHE STRING "Search heuristic")
 set_property(CACHE CASTOR_SEARCH PROPERTY STRINGS
-             "dom" "deg" "ddeg" "domdeg" "domddeg")
+             "dom" "deg" "ddeg" "domdeg" "domddeg" "random")
 
 find_package(Raptor2 REQUIRED)
 find_package(Rasqal REQUIRED)

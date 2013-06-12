@@ -23,6 +23,11 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+#if CASTOR_SEARCH == CASTOR_SEARCH_random
+#include <cstdlib>
+#include <ctime>
+#endif
+
 using namespace std;
 using namespace castor;
 
@@ -46,6 +51,10 @@ int main(int argc, char* argv[]) {
     char* dbpath = argv[1];
     char* rqpath = argv[2];
     char* solpath = argc > 3 ? argv[3] : nullptr;
+
+#if CASTOR_SEARCH == CASTOR_SEARCH_random
+    srand(time(nullptr));
+#endif
 
     ifstream f(rqpath, ios::ate);
     unsigned queryLen = f.tellg();

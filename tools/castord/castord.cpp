@@ -26,6 +26,11 @@
 #include <cstdio>
 #include <csignal>
 
+#if CASTOR_SEARCH == CASTOR_SEARCH_random
+#include <cstdlib>
+#include <ctime>
+#endif
+
 #include "store.h"
 #include "query.h"
 
@@ -239,6 +244,10 @@ int main(int argc, char* argv[]) {
         default: usage();
         }
     }
+
+#if CASTOR_SEARCH == CASTOR_SEARCH_random
+    srand(time(nullptr));
+#endif
 
     // Load database
     if(dbpath == nullptr)

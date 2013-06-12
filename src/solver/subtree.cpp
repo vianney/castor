@@ -144,6 +144,8 @@ bool Subtree::search() {
                 double sy = static_cast<double>(y->size()) / y->degree();
 #elif CASTOR_SEARCH == CASTOR_SEARCH_domddeg
                 double sy = static_cast<double>(y->size()) / y->dyndegree();
+#elif CASTOR_SEARCH == CASTOR_SEARCH_random
+                double sy = std::rand();
 #else
                 static_assert(false, "Please select a valid search heuristic.");
 #endif
