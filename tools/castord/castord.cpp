@@ -77,6 +77,28 @@ static int send_error(mg_connection* conn, unsigned status, const char* msg) {
     return 1;
 }
 
+static void escape_xml(mg_connection* conn, const char* str) {
+    while(*str) {
+        switch(*str) {
+        case '<':
+            mg_write(conn, "&lt;", 4);
+            break;
+        case '>':
+            mg_write(conn, "&gt;", 4);
+            break;
+        case '&':
+            mg_write(conn, "&amp;", 5);
+            break;
+        case '"':
+            mg_write(conn, "&quot;", 6);
+            break;
+        default:
+            mg_write(conn, str, 1);
+        }
+        str++;
+    }
+}
+
 static int handler(mg_connection* conn) {
     const mg_request_info* req = mg_get_request_info(conn);
     Store* store = reinterpret_cast<Store*>(req->user_data);
@@ -127,14 +149,14 @@ static int handler(mg_connection* conn) {
         start_response(conn, mimetype);
         if(verbose)
             cout << "--" << endl << querystr << endl << "--" << endl;
-        // FIXME: escape strings
         mg_printf(conn,
                   "<?xml version=\"1.0\"?>\n"
                   "<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n"
                   "  <head>\n");
         for(unsigned i = 0; i < query.requested(); ++i) {
-            mg_printf(conn, "    <variable name=\"%s\"/>\n",
-                      query.variable(i)->name().c_str());
+            mg_printf(conn, "    <variable name=\"");
+            escape_xml(conn, query.variable(i)->name().c_str());
+            mg_printf(conn, "\"/>\n");
         }
         mg_printf(conn, "  </head>\n");
         if(query.requested() == 0) {
@@ -151,34 +173,40 @@ static int handler(mg_connection* conn) {
                     Variable* var = query.variable(i);
                     Value::id_t id = var->valueId();
                     if(id != 0) {
-                        mg_printf(conn, "      <binding name=\"%s\">",
-                                  var->name().c_str());
+                        mg_printf(conn, "      <binding name=\"");
+                        escape_xml(conn, var->name().c_str());
+                        mg_printf(conn, "\">");
                         Value val = store->lookupValue(id);
                         val.ensureDirectStrings(*store);
                         switch(val.category()) {
                         case Value::CAT_BLANK:
-                            mg_printf(conn, "<bnode>%s</bnode>",
-                                      val.lexical().str());
+                            mg_printf(conn, "<bnode>");
+                            escape_xml(conn, val.lexical().str());
+                            mg_printf(conn, "</bnode>");
                             break;
                         case Value::CAT_URI:
-                            mg_printf(conn, "<uri>%s</uri>",
-                                      val.lexical().str());
+                            mg_printf(conn, "<uri>");
+                            escape_xml(conn, val.lexical().str());
+                            mg_printf(conn, "</uri>");
                             break;
                         case Value::CAT_SIMPLE_LITERAL:
-                            mg_printf(conn, "<literal>%s</literal>",
-                                      val.lexical().str());
+                            mg_printf(conn, "<literal>");
+                            escape_xml(conn, val.lexical().str());
+                            mg_printf(conn, "</literal>");
                             break;
                         case Value::CAT_PLAIN_LANG:
-                            mg_printf(conn,
-                                      "<literal xml:lang=\"%s\">%s</literal>",
-                                      val.language().str(),
-                                      val.lexical().str());
+                            mg_printf(conn, "<literal xml:lang=\"");
+                            escape_xml(conn, val.language().str());
+                            mg_printf(conn, "\">");
+                            escape_xml(conn, val.lexical().str());
+                            mg_printf(conn, "</literal>");
                             break;
                         default:
-                            mg_printf(conn,
-                                      "<literal datatype=\"%s\">%s</literal>",
-                                      val.datatypeLex().str(),
-                                      val.lexical().str());
+                            mg_printf(conn, "<literal datatype=\"");
+                            escape_xml(conn, val.datatypeLex().str());
+                            mg_printf(conn, "\">");
+                            escape_xml(conn, val.lexical().str());
+                            mg_printf(conn, "</literal>");
                         }
                         mg_printf(conn, "</binding>\n");
                     }
