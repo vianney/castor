@@ -124,7 +124,7 @@ static int handler(mg_connection* conn) {
 
     try {
         Query query(store, querystr);
-        start_response(conn, "application/xml");
+        start_response(conn, mimetype);
         if(verbose)
             cout << "--" << endl << querystr << endl << "--" << endl;
         // FIXME: escape strings
