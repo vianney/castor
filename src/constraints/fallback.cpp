@@ -52,11 +52,10 @@ bool FilterConstraint::propagate() {
         cp::RDFVar* x = unbound->cp();
         x->clearMarks();
         unsigned n = x->size();
-        const Value::id_t* dom = x->domain();
         for(unsigned i = 0; i < n; i++) {
-            unbound->valueId(dom[i]);
+            unbound->valueId((*x)[i]);
             if(expr_->evaluateEBV() == ebv)
-                x->mark(dom[i]);
+                x->mark((*x)[i]);
         }
         domcheck(x->restrictToMarks());
         done_ = true;

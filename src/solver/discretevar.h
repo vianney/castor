@@ -83,14 +83,15 @@ public:
     T value() const { return domain_[0]; }
 
     /**
-     * Get the domain array. Beware that this is a pointer directly to the
-     * internal structure, so you should not mess with it. Removing a value
-     * from the domain only affects values after itself in the array. Marking
-     * a value only affects values before itself.
+     * Get the i-th value of the domain array.
      *
-     * @return pointer to the domain array
+     * Removing a value from the domain only affects values after itself in the
+     * array. Marking a value only affects values before itself.
+     *
+     * @param i index of the value (0 <= i <= maxVal_ - minVal_)
+     * @return the i-th value of the domain
      */
-    const T* domain() const { return domain_; }
+    T operator[](unsigned i) const { return domain_[i]; }
 
     /**
      * @param v a value

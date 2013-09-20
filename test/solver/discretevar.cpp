@@ -65,7 +65,7 @@ using ::testing::Between;
             EXPECT_FALSE(x.contains(v)) << "with value " << v; \
     } \
     for(unsigned i = 0; i < dom.size(); i++) { \
-        unsigned v = x.domain()[i]; \
+        unsigned v = x[i]; \
         bool found = false; \
         for(unsigned v2 : dom) { \
             if(v2 == v) { \
@@ -79,7 +79,7 @@ using ::testing::Between;
     for(unsigned v : dom) { \
         bool found = false; \
         for(unsigned i = 0; i < dom.size(); i++) { \
-            if(x.domain()[i] == v) { \
+            if(x[i] == v) { \
                 found = true; \
                 break; \
             } \
@@ -232,7 +232,7 @@ TEST_F(SolverDiscreteVarTest, UnLabel) {
 TEST_F(SolverDiscreteVarTest, MarkSanity) {
     x.clearMarks();
     EXPECT_INITIAL_STATE;
-    x.mark(x.domain()[0]);
+    x.mark(x[0]);
     EXPECT_INITIAL_STATE;
     x.mark(4);
     EXPECT_INITIAL_STATE;
@@ -245,7 +245,7 @@ TEST_F(SolverDiscreteVarTest, MarkSanity) {
 
     y.clearMarks();
     EXPECT_INITIAL_STATE;
-    y.mark(y.domain()[0]);
+    y.mark(y[0]);
     EXPECT_INITIAL_STATE;
     y.mark(8);
     EXPECT_INITIAL_STATE;

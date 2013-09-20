@@ -67,9 +67,8 @@ bool VarEqConstraint::propagate() {
          * the union of both domains.
          */
         if(removed > 0 && removed < n1 && removed < n2) {
-            const Value::id_t* dom = x1->domain();
             for(unsigned i = n1; i < oldn1; i++) {
-                ValueRange eqClass = store_->eqClass(dom[i]);
+                ValueRange eqClass = store_->eqClass((*x1)[i]);
                 bool prune = true;
                 for(Value::id_t id : eqClass) {
                     if(x1->contains(id)) {
@@ -82,9 +81,8 @@ bool VarEqConstraint::propagate() {
                         domcheck(x2->remove(id));
                 }
             }
-            dom = x2->domain();
             for(unsigned i = n2; i < oldn2; i++) {
-                ValueRange eqClass = store_->eqClass(dom[i]);
+                ValueRange eqClass = store_->eqClass((*x2)[i]);
                 bool prune = true;
                 for(Value::id_t id : eqClass) {
                     if(x2->contains(id)) {
@@ -104,9 +102,8 @@ bool VarEqConstraint::propagate() {
                 n1 = n2;
             }
             x2->clearMarks();
-            const Value::id_t* dom = x1->domain();
             for(unsigned i = 0; i < n1; i++) {
-                Value::id_t v = dom[i];
+                Value::id_t v = (*x1)[i];
                 ValueRange eqClass = store_->eqClass(v);
                 bool prune = true;
                 for(Value::id_t id : eqClass) {
@@ -329,12 +326,10 @@ bool VarSameTermConstraint::propagate() {
          * union of both domains.
          */
         if(removed > 0 && removed < n1 && removed < n2) {
-            const Value::id_t* dom = x1->domain();
             for(unsigned i = n1; i < oldn1; i++)
-                domcheck(x2->remove(dom[i]));
-            dom = x2->domain();
+                domcheck(x2->remove((*x1)[i]));
             for(unsigned i = n2; i < oldn2; i++)
-                domcheck(x1->remove(dom[i]));
+                domcheck(x1->remove((*x2)[i]));
         } else {
             if(n2 < n1) {
                 x1 = x2;
@@ -342,9 +337,8 @@ bool VarSameTermConstraint::propagate() {
                 n1 = n2;
             }
             x2->clearMarks();
-            const Value::id_t* dom = x1->domain();
             for(unsigned i = 0; i < n1; i++) {
-                Value::id_t v = dom[i];
+                Value::id_t v = (*x1)[i];
                 if(x2->contains(v)) {
                     x2->mark(v);
                 } else {
