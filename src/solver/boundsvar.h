@@ -172,7 +172,9 @@ public:
         updateSize();
     }
 
-    bool bind(T v) override {
+    bool bound() const { return BoundsVariable<T>::bound(); }
+
+    bool bind(T v) {
         if(size_ == 1 && this->min_ == v)
             return true;
         if(!BoundsVariable<T>::bind(v))
@@ -181,14 +183,14 @@ public:
         return true;
     }
 
-    bool updateMin(T v) override {
+    bool updateMin(T v) {
         if(!BoundsVariable<T>::updateMin(v))
             return false;
         updateSize();
         return true;
     }
 
-    bool updateMax(T v) override {
+    bool updateMax(T v) {
         if(!BoundsVariable<T>::updateMax(v))
             return false;
         updateSize();
@@ -196,12 +198,12 @@ public:
     }
 
     // Passthrough methods
-    void save(Trail& trail) const override { BoundsVariable<T>::save(trail); }
-    bool contains(T v) const override { return BoundsVariable<T>::contains(v); }
-    T    min     ()    const override { return BoundsVariable<T>::min(); }
-    T    max     ()    const override { return BoundsVariable<T>::max(); }
-    void registerBind(Constraint* c) override { BoundsVariable<T>::registerBind(c); ++degree_; }
-    void registerBounds(Constraint* c) override { BoundsVariable<T>::registerBounds(c); ++degree_; }
+    void save(Trail& trail) const { BoundsVariable<T>::save(trail); }
+    bool contains(T v) const { return BoundsVariable<T>::contains(v); }
+    T    min     ()    const { return BoundsVariable<T>::min(); }
+    T    max     ()    const { return BoundsVariable<T>::max(); }
+    void registerBind(Constraint* c) { BoundsVariable<T>::registerBind(c); ++degree_; }
+    void registerBounds(Constraint* c) { BoundsVariable<T>::registerBounds(c); ++degree_; }
 
 private:
     /**
